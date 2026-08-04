@@ -1,0 +1,1071 @@
+/*
+ * Shared UI: the app shell (sidebar, topbar, mobile sheet), the demo dock,
+ * and every component under `components/`.
+ *
+ * All positional properties are LOGICAL (inset-inline-start, padding-inline,
+ * border-inline-start, margin-inline-end) so the entire layout mirrors under
+ * dir="rtl" with no second stylesheet. The only physical values left are the
+ * block axis, which does not mirror.
+ */
+
+/* ------------------------------------------------------------------ layout */
+
+.rh-app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.rh-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.rh-content {
+  flex: 1;
+  padding: clamp(18px, 2.4vw, 30px) var(--gutter) 96px;
+  max-width: 1240px;
+  width: 100%;
+  margin-inline: auto;
+}
+
+/* ----------------------------------------------------------------- sidebar */
+
+.rh-sidebar {
+  width: var(--sidebar-w);
+  flex: 0 0 var(--sidebar-w);
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  inset-block-start: 0;
+  height: 100vh;
+}
+
+.rh-sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 18px var(--gutter);
+  border-block-end: 1px solid var(--border);
+}
+
+.rh-sidebar__mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.rh-sidebar__name {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.rh-sidebar__sub {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-sidebar__nav {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.rh-navitem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 13.5px;
+  font-weight: 700;
+  width: 100%;
+  text-align: start;
+}
+
+.rh-navitem:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.rh-navitem[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.rh-navitem__badge {
+  margin-inline-start: auto;
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.rh-sidebar__foot {
+  padding: 14px var(--gutter) 18px;
+  border-block-start: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  line-height: 1.5;
+}
+
+.rh-sidebar__chip {
+  display: inline-block;
+  margin-block-start: 8px;
+  padding: 4px 8px;
+  border-radius: 7px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  font-size: 10.5px;
+  color: var(--fg-muted);
+}
+
+/* ------------------------------------------------------------------ topbar */
+
+.rh-topbar {
+  height: var(--topbar-h);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-inline: var(--gutter);
+  background: var(--surface-header);
+  backdrop-filter: blur(12px);
+  border-block-end: 1px solid var(--border);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-header);
+}
+
+.rh-topbar__search {
+  flex: 1;
+  max-width: 460px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.rh-topbar__search svg {
+  position: absolute;
+  inset-inline-start: 11px;
+  color: var(--fg-subtle);
+  pointer-events: none;
+}
+
+.rh-topbar__input {
+  width: 100%;
+  padding: 9px 12px;
+  padding-inline-start: 34px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rh-topbar__spacer {
+  flex: 1;
+}
+
+.rh-userchip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 11px 5px 5px;
+  padding-inline: 5px 11px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.rh-iconbtn {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--fg-muted);
+  display: grid;
+  place-items: center;
+}
+
+.rh-iconbtn:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+/* --------------------------------------------------------- search results */
+
+.rh-searchpop {
+  position: absolute;
+  inset-block-start: calc(100% + 8px);
+  inset-inline-start: 0;
+  width: min(440px, 92vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  padding: 8px;
+  z-index: var(--z-sheet);
+  animation: rh-drop 0.16s ease;
+}
+
+.rh-searchpop__group {
+  padding: 8px 10px 4px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.rh-searchpop__row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 700;
+  text-align: start;
+}
+
+.rh-searchpop__row:hover {
+  background: var(--surface-2);
+}
+
+.rh-searchpop__meta {
+  margin-inline-start: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-searchpop__empty {
+  padding: 18px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-align: center;
+}
+
+/* ------------------------------------------------------------ mobile sheet */
+
+.rh-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-sheet);
+  backdrop-filter: blur(2px);
+  z-index: var(--z-sheet);
+  animation: rh-scrim 0.18s ease;
+  border: 0;
+  padding: 0;
+}
+
+.rh-sheet {
+  position: fixed;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: min(292px, 84vw);
+  background: var(--surface);
+  border-inline-end: 1px solid var(--border);
+  z-index: calc(var(--z-sheet) + 1);
+  display: flex;
+  flex-direction: column;
+  animation: rh-sheet 0.24s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* --------------------------------------------------------------- demo dock */
+
+.rh-dock {
+  position: fixed;
+  inset-block-end: 16px;
+  inset-inline-end: 16px;
+  z-index: var(--z-dock);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  width: 232px;
+  animation: rh-pop 0.22s ease;
+}
+
+/*
+ * House layout rule 1: the dock must never cover a primary action. When any
+ * overlay owns the screen it moves to the opposite inline corner rather than
+ * sitting on top of the thing the reader came for.
+ */
+.rh-dock--shifted {
+  inset-inline-end: auto;
+  inset-inline-start: 16px;
+}
+
+.rh-dock__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.rh-dock__collapse {
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  color: var(--fg-subtle);
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.rh-dock__collapse:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.rh-dock__row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rh-dock__label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+  min-width: 52px;
+}
+
+.rh-dock__mini {
+  position: fixed;
+  inset-block-end: 16px;
+  inset-inline-end: 16px;
+  z-index: var(--z-dock);
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: var(--shadow-md);
+  color: var(--fg-muted);
+  padding: 9px 13px;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.rh-select {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+/* -------------------------------------------------------------- segmented */
+
+.rh-seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 10px;
+  background: var(--surface-3);
+  border: 1px solid var(--border);
+  gap: 2px;
+}
+
+.rh-seg__btn {
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 5px 11px;
+  border-radius: 7px;
+  transition:
+    background 0.14s ease,
+    color 0.14s ease;
+}
+
+.rh-seg__btn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+.rh-seg--full {
+  display: flex;
+  flex: 1;
+}
+
+.rh-seg--full .rh-seg__btn {
+  flex: 1;
+  text-align: center;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+.rh-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 13.5px;
+  font-weight: 700;
+  padding: 10px 16px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  white-space: nowrap;
+}
+
+.rh-button--ghost {
+  background: var(--surface);
+  border-color: var(--border-strong);
+  color: var(--fg);
+}
+
+.rh-button--ghost:hover:not(:disabled) {
+  background: var(--surface-2);
+}
+
+.rh-button--pos {
+  background: var(--pos);
+  color: #fff;
+}
+
+.rh-button--danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.rh-button--sm {
+  padding: 7px 12px;
+  font-size: 12.5px;
+  border-radius: 9px;
+}
+
+.rh-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ------------------------------------------------------------------- chips */
+
+.rh-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.rh-chip--pos {
+  background: var(--pos-soft);
+  color: var(--pos);
+  border-color: transparent;
+}
+.rh-chip--warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+  border-color: transparent;
+}
+.rh-chip--danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+  border-color: transparent;
+}
+.rh-chip--info {
+  background: var(--info-soft);
+  color: var(--info);
+  border-color: transparent;
+}
+.rh-chip--accent {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-color: transparent;
+}
+
+.rh-chipbtn {
+  cursor: pointer;
+}
+
+.rh-chipbtn[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-fg);
+  border-color: transparent;
+}
+
+/* ------------------------------------------------------------------- cards */
+
+.rh-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  box-shadow: var(--shadow);
+}
+
+.rh-panel__head {
+  padding: 15px 17px 12px;
+  border-block-end: 1px solid var(--border);
+}
+
+.rh-panel__title {
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+
+.rh-panel__sub {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 3px;
+}
+
+.rh-panel__body {
+  padding: 15px 17px;
+}
+
+/* ------------------------------------------------------------------ tiles */
+
+.rh-tile {
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  position: relative;
+  flex: none;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.rh-tile__ini {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--fg);
+}
+
+.rh-tile__file {
+  position: absolute;
+  inset-block-end: 4px;
+  inset-inline-start: 5px;
+  font-size: 8.5px;
+  font-weight: 600;
+  color: var(--on-tint);
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 1px 4px;
+  max-width: calc(100% - 10px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/*
+ * House layout rule 2: a floating badge over a tile sits in the corner
+ * OPPOSITE the tile's own filename chip, never on top of it.
+ */
+.rh-tile__badge {
+  position: absolute;
+  inset-block-start: 4px;
+  inset-inline-end: 5px;
+}
+
+.rh-avatar {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex: none;
+  border: 1px solid var(--border);
+}
+
+.rh-avatar--lg {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  font-size: 15px;
+}
+
+/* --------------------------------------------------------------- KPI strip */
+
+.rh-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 13px;
+}
+
+.rh-kpi {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 15px 16px;
+  box-shadow: var(--shadow);
+}
+
+.rh-kpi__label {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.045em;
+}
+
+.rh-kpi__value {
+  font-size: clamp(22px, 2.6vw, 28px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  margin-block-start: 6px;
+  line-height: 1.1;
+}
+
+.rh-kpi__hint {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 5px;
+}
+
+/* --------------------------------------------------------------- timeline */
+
+.rh-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/*
+ * House layout rule 4: the marker column is a RESERVED gutter, declared once
+ * here as a grid track. The dot is placed inside its own column rather than
+ * absolutely positioned over the text, so it can never overlap the body copy
+ * at any width or in either writing direction.
+ */
+.rh-tl-row {
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  gap: 11px;
+  padding-block: 11px;
+  position: relative;
+}
+
+.rh-tl-row::before {
+  content: "";
+  position: absolute;
+  inset-block: 0;
+  /* Centre of the 30px gutter. */
+  inset-inline-start: 14px;
+  width: 1px;
+  background: var(--border);
+}
+
+.rh-tl-row:first-child::before {
+  inset-block-start: 18px;
+}
+
+.rh-tl-row:last-child::before {
+  inset-block-end: calc(100% - 18px);
+}
+
+.rh-tl-dot {
+  width: 29px;
+  height: 29px;
+  border-radius: 9px;
+  display: grid;
+  place-items: center;
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+
+.rh-tl-body {
+  min-width: 0;
+}
+
+.rh-tl-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 7px;
+  margin-block-end: 3px;
+}
+
+.rh-tl-type {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-tl-when {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-tl-text {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fg-muted);
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------------ fields */
+
+.rh-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.rh-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+
+.rh-input,
+.rh-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--fg);
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.rh-textarea {
+  min-height: 84px;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------------ modal */
+
+.rh-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--scrim-modal);
+  backdrop-filter: blur(3px);
+  z-index: var(--z-modal);
+  display: grid;
+  place-items: center;
+  padding: var(--gutter);
+  animation: rh-scrim 0.18s ease;
+}
+
+.rh-modal {
+  width: min(440px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 17px;
+  box-shadow: var(--shadow-modal);
+  padding: 20px;
+  animation: rh-pop 0.22s cubic-bezier(0.2, 0.7, 0.3, 1);
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.rh-modal__title {
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0 0 4px;
+}
+
+.rh-modal__actions {
+  display: flex;
+  gap: 9px;
+  margin-block-start: 18px;
+}
+
+.rh-modal__actions .rh-button {
+  flex: 1;
+}
+
+/* ---------------------------------------------------------------- popover */
+
+.rh-popover {
+  position: absolute;
+  inset-block-start: calc(100% + 7px);
+  inset-inline-end: 0;
+  min-width: 208px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 6px;
+  z-index: var(--z-sheet);
+  animation: rh-drop 0.15s ease;
+}
+
+.rh-popover__title {
+  padding: 7px 9px 5px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.rh-popover__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 8px 9px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: start;
+}
+
+.rh-popover__item:hover {
+  background: var(--surface-2);
+}
+
+/* ------------------------------------------------------------------ toasts */
+
+.rh-toasts {
+  position: fixed;
+  inset-block-end: 22px;
+  inset-inline: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  z-index: var(--z-toast);
+  pointer-events: none;
+}
+
+.rh-toast {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  background: var(--fg);
+  color: var(--bg);
+  border-radius: 999px;
+  padding: 10px 17px;
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: var(--shadow-toast);
+  animation: rh-pop 0.2s ease;
+  max-width: min(520px, 92vw);
+}
+
+.rh-toast--pos {
+  background: var(--pos);
+  color: #fff;
+}
+.rh-toast--danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.rh-toast__x {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  opacity: 0.7;
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.rh-toast__x:hover {
+  opacity: 1;
+}
+
+/* ------------------------------------------------------------ empty states */
+
+.rh-empty {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.rh-empty__icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 14px;
+  background: var(--surface-3);
+  color: var(--fg-subtle);
+  display: grid;
+  place-items: center;
+  margin: 0 auto 12px;
+}
+
+.rh-empty__title {
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+}
+
+.rh-empty__body {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 5px;
+  max-width: 380px;
+  margin-inline: auto;
+  line-height: 1.55;
+}
+
+/* ------------------------------------------------------------ honest lines */
+
+.rh-honest {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  line-height: 1.55;
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--surface-2);
+  border: 1px dashed var(--border-strong);
+}
+
+/* -------------------------------------------------------- screen headings */
+
+.rh-head {
+  margin-block-end: 18px;
+}
+
+.rh-head__title {
+  font-size: clamp(21px, 3vw, 27px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  margin: 0;
+  line-height: 1.15;
+}
+
+.rh-head__sub {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 5px;
+}
+
+.rh-backlink {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  color: var(--fg-subtle);
+  font-size: 12.5px;
+  font-weight: 700;
+  padding: 0;
+  margin-block-end: 11px;
+}
+
+.rh-backlink:hover {
+  color: var(--accent);
+}
+
+/* The chevron points the way "back" goes, which flips with the writing mode. */
+[dir="rtl"] .rh-backlink svg {
+  transform: scaleX(-1);
+}
+
+/* --------------------------------------------------------------- responsive */
+
+@media (max-width: 899.98px) {
+  .rh-sidebar {
+    display: none;
+  }
+  .rh-content {
+    padding-block-end: 120px;
+  }
+  .rh-dock {
+    width: calc(100vw - 32px);
+    max-width: 300px;
+  }
+}
+
+/* A flex child that shares the row equally — used by paired dialog buttons. */
+.rh-flex1 {
+  flex: 1;
+}
+
+/* ------------------------------------------------- dock: the demo clock */
+
+/*
+ * The clock readout and the "+15 min" chip. Both are mono because they are the
+ * only two controls in the dock whose value is a number a reader compares
+ * against what is on the screen behind them.
+ */
+.rh-dock__clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.rh-dock__tick {
+  margin-inline-start: auto;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11.5px;
+  font-weight: 800;
+  padding: 5px 10px;
+}

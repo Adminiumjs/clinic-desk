@@ -1,0 +1,1435 @@
+/*
+ * View-specific rules: the public booking site's chrome, the four patient
+ * screens, and the five desk screens.
+ *
+ * Import order in main.tsx puts this last, so these rules always win a tie with
+ * `components.css`.
+ *
+ * EVERY positional property here is a CSS LOGICAL one — inset-inline-start,
+ * padding-inline, border-inline-start, text-align: start/end — so the whole
+ * layout mirrors when the i18n provider stamps dir="rtl" and no second
+ * stylesheet is needed. Amounts and times sit in `.rh-mono`, which isolates
+ * them from the bidi algorithm so their digits cannot be reordered.
+ */
+
+/* ===================================================== the public site */
+
+.rh-site {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+.rh-site__head {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 14px var(--gutter);
+  background: var(--surface-header);
+  backdrop-filter: blur(12px);
+  border-block-end: 1px solid var(--border);
+  position: sticky;
+  inset-block-start: 0;
+  z-index: var(--z-header);
+}
+
+.rh-site__brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--fg);
+  text-align: start;
+}
+
+.rh-site__mark {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: var(--accent-fg);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.rh-site__wordmark {
+  display: block;
+  font-size: 15px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.rh-site__tag {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-site__nav {
+  display: flex;
+  gap: 4px;
+}
+
+.rh-site__link {
+  border: 0;
+  background: transparent;
+  color: var(--fg-muted);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 7px 11px;
+  border-radius: 9px;
+}
+
+.rh-site__link:hover {
+  background: var(--surface-2);
+  color: var(--fg);
+}
+
+.rh-site__link[aria-current="page"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/*
+ * The bottom padding is large on purpose: the demo dock floats in the
+ * inline-end bottom corner, and this is the gap that keeps the last primary
+ * action on any screen clear of it (house layout rule 1).
+ */
+.rh-site__body {
+  flex: 1;
+  padding: clamp(20px, 3vw, 34px) var(--gutter) 240px;
+  width: 100%;
+}
+
+/* Same reservation on the desk side, where "Book them in" is the last row. */
+.rh-content {
+  padding-block-end: 240px;
+}
+
+.rh-site__foot {
+  padding: 18px var(--gutter) 28px;
+  border-block-start: 1px solid var(--border);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-site__where {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+/* The patient side is one centered column that simply narrows. */
+.rh-column {
+  max-width: 940px;
+  margin-inline: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.rh-narrowcol {
+  max-width: 620px;
+}
+
+/* ======================================================= shared bits */
+
+.rh-head--row {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.rh-daynav {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-inline-start: auto;
+}
+
+.rh-note {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  line-height: 1.55;
+  margin-block: 8px 0;
+}
+
+.rh-goodline {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--pos);
+  margin-block-start: 10px;
+}
+
+.rh-badline {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--danger);
+  margin-block-start: 10px;
+  line-height: 1.5;
+}
+
+.rh-payline {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  margin-block: 14px 12px;
+}
+
+.rh-amount {
+  text-align: end;
+}
+
+.rh-full {
+  width: 100%;
+}
+
+/* --- two-column screens: a main column and a rail that drops under it --- */
+
+.rh-twocol {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 16px;
+  align-items: start;
+}
+
+.rh-twocol__main,
+.rh-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.rh-rail {
+  position: sticky;
+  inset-block-start: calc(var(--topbar-h) + 12px);
+}
+
+/* --- forms --- */
+
+.rh-form {
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.rh-form__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
+}
+
+.rh-form__actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+}
+
+.rh-counter {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+  text-align: end;
+  margin-block-start: 5px;
+}
+
+/* --- fact rails, used by the summary, the confirmation and the panel --- */
+
+.rh-facts {
+  display: flex;
+  flex-direction: column;
+}
+
+.rh-fact {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-block: 9px;
+  border-block-end: 1px dashed var(--border);
+  font-size: 13px;
+}
+
+.rh-fact:last-child {
+  border-block-end: 0;
+}
+
+.rh-fact__k {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+  min-width: 92px;
+  flex: none;
+}
+
+.rh-fact__v {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 700;
+  color: var(--fg);
+  min-width: 0;
+  flex-wrap: wrap;
+}
+
+.rh-ref {
+  font-size: 17px;
+  letter-spacing: 0.02em;
+}
+
+/*
+ * The "you have picked a time" bar.
+ *
+ * Deliberately NOT sticky. A bar pinned to the bottom of the viewport would sit
+ * under the demo dock, and house layout rule 1 says the dock must never cover a
+ * primary action — reserving vertical space at the end of both shells is the
+ * honest fix, rather than nudging one of the two out of the way each time.
+ */
+.rh-stickybar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  box-shadow: var(--shadow-lg);
+}
+
+.rh-stickybar__text {
+  font-size: 13px;
+  font-weight: 700;
+  min-width: 0;
+}
+
+.rh-payrow {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.rh-payrow .rh-button {
+  flex: 1;
+  min-width: 180px;
+}
+
+/* ================================================= 1. find a time */
+
+.rh-typegrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 11px;
+}
+
+.rh-typecard {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 13px 14px;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: start;
+  position: relative;
+}
+
+.rh-typecard[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.rh-typecard__dot {
+  width: 22px;
+  height: 4px;
+  border-radius: 999px;
+  margin-block-end: 4px;
+}
+
+.rh-typecard__name {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: var(--fg);
+}
+
+.rh-typecard__blurb {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  line-height: 1.5;
+}
+
+.rh-typecard__meta {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  margin-block-start: 4px;
+}
+
+.rh-whogrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 11px;
+}
+
+.rh-who {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 11px 13px;
+  border-radius: 13px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: start;
+}
+
+.rh-who[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.rh-who__ini {
+  width: 46px;
+  height: 46px;
+  border-radius: 13px;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.rh-who__ini--any {
+  background: var(--surface-3);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+}
+
+.rh-who__name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-who__role {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+/* --- the day strip --- */
+
+.rh-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-block-end: 6px;
+}
+
+.rh-day {
+  flex: none;
+  width: 74px;
+  padding: 9px 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.rh-day[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+/* Weekends are drawn and dimmed rather than removed, so a reader can see the
+ * practice is shut instead of wondering where Saturday went. */
+.rh-day--off {
+  opacity: 0.42;
+  cursor: not-allowed;
+  background: var(--surface-3);
+}
+
+.rh-day__wd {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rh-day__n {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.1;
+}
+
+.rh-day__note {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+/* --- the slot grid --- */
+
+.rh-slots {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(94px, 1fr));
+  gap: 8px;
+  margin-block-start: 12px;
+}
+
+.rh-slot {
+  position: relative;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--fg);
+  font-size: 13px;
+  font-weight: 700;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.rh-slot[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-fg);
+}
+
+.rh-slot--past,
+.rh-slot--taken {
+  opacity: 0.45;
+  background: var(--surface-3);
+  cursor: not-allowed;
+}
+
+.rh-slot--past .rh-mono {
+  text-decoration: line-through;
+}
+
+.rh-slot__x {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-subtle);
+}
+
+/* The tint tells a reader which clinician "Anyone" resolved to. */
+.rh-slot__who {
+  width: 18px;
+  height: 3px;
+  border-radius: 999px;
+}
+
+/* ========================================== 2–3. details + confirmation */
+
+.rh-done {
+  text-align: center;
+  padding-block: 10px 6px;
+}
+
+.rh-done__tick {
+  display: grid;
+  place-items: center;
+  width: 70px;
+  height: 70px;
+  border-radius: 50%;
+  margin: 0 auto 14px;
+  background: var(--pos-soft);
+  color: var(--pos);
+}
+
+.rh-demobox {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 13px;
+  border-radius: 11px;
+  background: var(--info-soft);
+  color: var(--info);
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.5;
+  margin-block: 12px;
+}
+
+.rh-cardform {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.rh-cardform__row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 11px;
+}
+
+.rh-warnbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 13px;
+  border-radius: 11px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  margin-block-start: 14px;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.rh-warnbox strong {
+  display: block;
+  font-size: 13px;
+  margin-block-end: 3px;
+}
+
+.rh-warnbox p {
+  margin: 0;
+  font-weight: 600;
+}
+
+/* =========================================================== 4. my visits */
+
+.rh-visit {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-block-end: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.rh-visit:last-child {
+  border-block-end: 0;
+}
+
+.rh-visit__when {
+  min-width: 96px;
+  flex: none;
+}
+
+.rh-visit__time {
+  display: block;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+}
+
+.rh-visit__date {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-visit__body {
+  flex: 1;
+  min-width: 140px;
+}
+
+.rh-visit__reason {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-visit__meta {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 2px;
+}
+
+.rh-visit__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+.rh-owed {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--warn);
+}
+
+/* ============================================================ 5. day sheet */
+
+.rh-prefill {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 13px;
+  border-radius: 11px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12.5px;
+  font-weight: 700;
+  margin-block-end: 12px;
+}
+
+.rh-prefill__x {
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  display: grid;
+  place-items: center;
+  padding: 2px;
+  border-radius: 6px;
+}
+
+.rh-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-block-end: 12px;
+}
+
+.rh-legend__item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-muted);
+}
+
+.rh-legend__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.rh-legend__role {
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+/*
+ * The grid itself. One reserved clock gutter plus one column per clinician.
+ * Under 900px it scrolls sideways one column at a time; the gutter scrolls with
+ * it rather than sticking, because a frozen gutter over a 34px row grid ends up
+ * covering the very block a reader swiped across to look at.
+ */
+.rh-sheetscroll {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 15px;
+  background: var(--surface);
+}
+
+.rh-sheetgrid {
+  min-width: 720px;
+}
+
+.rh-sheetgrid__head,
+.rh-sheetgrid__body {
+  display: grid;
+  grid-template-columns: 62px repeat(4, minmax(160px, 1fr));
+}
+
+.rh-sheetgrid__head {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 2;
+  background: var(--surface-header);
+  backdrop-filter: blur(8px);
+}
+
+.rh-sheetgrid__corner {
+  border-block-end: 1px solid var(--border);
+}
+
+.rh-colhead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 11px;
+  border-block-end: 2px solid var(--border);
+  border-inline-start: 1px solid var(--border);
+  min-width: 0;
+}
+
+.rh-colhead__name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-colhead__role {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-sheetgrid__body {
+  position: relative;
+}
+
+/* The reserved gutter — house layout rule 4. The now-line's time label lives
+ * in here, so it can never sit on top of an appointment. */
+.rh-times {
+  display: flex;
+  flex-direction: column;
+  border-inline-end: 1px solid var(--border);
+}
+
+.rh-times__t {
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  padding-inline-end: 7px;
+  padding-block-start: 2px;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-col {
+  position: relative;
+  border-inline-start: 1px solid var(--border);
+  min-width: 0;
+}
+
+.rh-colrow {
+  border-block-end: 1px solid var(--border);
+}
+
+.rh-colrow:nth-child(2n) {
+  background: var(--surface-2);
+}
+
+/* Lunch is hatched and unbookable, and says so by looking unlike anything a
+ * visit could be drawn on. */
+.rh-colrow--break {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--hatch),
+    var(--hatch) 5px,
+    transparent 5px,
+    transparent 10px
+  );
+}
+
+.rh-col__empty {
+  position: absolute;
+  inset-block-start: 12px;
+  inset-inline: 0;
+  text-align: center;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  pointer-events: none;
+}
+
+/*
+ * An appointment block, sized to its own length. The 18px inline-start padding
+ * is the reserved gutter for the status dot: the dot is absolutely positioned
+ * inside it and therefore never overlaps the patient's name.
+ */
+.rh-block {
+  position: absolute;
+  inset-inline: 3px;
+  /* Above the now line — house layout rule 4. The line runs the width of the
+   * grid, so letting it paint on top would draw a rule straight through a
+   * patient's name at 09:20 every single day. */
+  z-index: 2;
+  padding: 4px 7px;
+  padding-inline-start: 18px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--accent);
+  text-align: start;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.rh-block__dot {
+  position: absolute;
+  inset-inline-start: 7px;
+  inset-block-start: 8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.rh-block__name {
+  font-size: 11.5px;
+  font-weight: 800;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-block__reason {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--fg-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-block--done,
+.rh-block--ready {
+  opacity: 0.62;
+}
+
+.rh-block--no_show {
+  border-style: dashed;
+  border-inline-start-color: var(--danger);
+}
+
+.rh-block--cancelled {
+  opacity: 0.4;
+}
+
+.rh-block--cancelled .rh-block__name {
+  text-decoration: line-through;
+}
+
+/*
+ * The now line runs across every column and its time sits in the RESERVED
+ * gutter, never over a visit. It paints beneath the blocks, so where the
+ * practice is busy the line stops at the block edge instead of striking through
+ * the name inside it; the gutter marker is what carries the reading.
+ */
+.rh-nowline {
+  position: absolute;
+  inset-inline: 0;
+  height: 0;
+  border-block-start: 2px solid var(--now-line);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.rh-nowline__t {
+  position: absolute;
+  inset-inline-start: 4px;
+  inset-block-start: -8px;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--accent-fg);
+  background: var(--now-line);
+  border-radius: 5px;
+  padding: 1px 4px;
+}
+
+/* ========================================================= 6. waiting room */
+
+.rh-waitlayout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 330px;
+  gap: 16px;
+  align-items: start;
+}
+
+.rh-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+}
+
+.rh-boardcol {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.rh-boardcol__head {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 11.5px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+  margin: 0;
+}
+
+.rh-boardcol__n {
+  margin-inline-start: auto;
+  background: var(--surface-3);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 11px;
+  color: var(--fg-muted);
+}
+
+.rh-boardcol__empty {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin: 0;
+  padding-block: 6px;
+}
+
+.rh-wcard {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rh-wcard__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.rh-wcard__name {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-wcard__time {
+  margin-inline-start: auto;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-subtle);
+}
+
+.rh-wcard__mid {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.rh-linkish {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-muted);
+  text-align: start;
+}
+
+.rh-linkish:hover {
+  color: var(--accent);
+}
+
+.rh-laterow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-block: 11px;
+  border-block-end: 1px solid var(--border);
+}
+
+.rh-laterow:last-child {
+  border-block-end: 0;
+}
+
+.rh-laterow__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-laterow__meta {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 2px;
+}
+
+.rh-laterow__actions {
+  display: flex;
+  gap: 7px;
+  width: 100%;
+}
+
+/* ============================================================ 7. patients */
+
+.rh-plist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.rh-prow {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding: 10px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  text-align: start;
+}
+
+.rh-prow__name {
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--fg);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rh-prow__age {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--fg-muted);
+  min-width: 34px;
+  text-align: end;
+}
+
+.rh-prow__last {
+  margin-inline-start: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+.rh-profile {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-block-end: 18px;
+}
+
+.rh-miniRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding-block: 9px;
+  border: 0;
+  border-block-end: 1px solid var(--border);
+  background: transparent;
+  color: var(--fg);
+  font-size: 12.5px;
+  font-weight: 700;
+  text-align: start;
+}
+
+.rh-miniRow:last-child {
+  border-block-end: 0;
+}
+
+.rh-miniRow__t {
+  margin-inline-start: auto;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ============================================================ 8. accounts */
+
+.rh-table {
+  display: flex;
+  flex-direction: column;
+}
+
+.rh-table__head,
+.rh-table__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.3fr) 88px minmax(0, 1fr) 88px 132px;
+  gap: 10px;
+  align-items: center;
+}
+
+.rh-table__head {
+  padding-block: 6px 9px;
+  border-block-end: 1px solid var(--border);
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--fg-subtle);
+}
+
+.rh-table__row {
+  padding-block: 11px;
+  border-block-end: 1px solid var(--border);
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.rh-table__row:last-child {
+  border-block-end: 0;
+}
+
+.rh-table__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 800;
+}
+
+/* The popover is anchored to its own row, which is what makes it a popover
+ * rather than a dialog wearing the wrong clothes. */
+.rh-table__act {
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.rh-paypop {
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 11px;
+}
+
+.rh-paypop__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.rh-paypop__actions .rh-button {
+  flex: 1;
+}
+
+.rh-feerow {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding-block: 10px;
+  border-block-end: 1px dashed var(--border);
+  font-size: 12.5px;
+}
+
+.rh-feerow:last-child {
+  border-block-end: 0;
+}
+
+.rh-feerow__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  flex: none;
+}
+
+.rh-feerow__name {
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-feerow__len {
+  margin-inline-start: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+}
+
+/* ============================================================= 9. recalls */
+
+.rh-recall {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 12px 13px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--border-strong);
+  background: var(--surface);
+  margin-block-end: 9px;
+}
+
+.rh-recall:last-child {
+  margin-block-end: 0;
+}
+
+/* Overdue rows carry a danger-tinted leading border — logical, so it moves to
+ * the other edge under dir="rtl". */
+.rh-recall--late {
+  border-inline-start-color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 4%, var(--surface));
+}
+
+.rh-recall__name {
+  display: block;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: var(--fg);
+}
+
+.rh-recall__meta {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--fg-subtle);
+  margin-block-start: 2px;
+}
+
+.rh-recall__due {
+  margin-inline-start: auto;
+}
+
+/* ==================================================== the visit panel */
+
+.rh-panelsheet {
+  width: min(480px, 100%);
+}
+
+.rh-panelsheet__head {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-block-end: 14px;
+}
+
+.rh-panelsheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block-start: 18px;
+}
+
+.rh-panelsheet__actions .rh-button {
+  flex: 1;
+  min-width: 132px;
+}
+
+.rh-chain {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.rh-chain__step {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: var(--surface-3);
+  color: var(--fg-subtle);
+}
+
+.rh-chain__step--on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+/* =========================================================== responsive */
+
+@media (max-width: 1080px) {
+  .rh-twocol,
+  .rh-waitlayout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .rh-rail {
+    position: static;
+  }
+}
+
+@media (max-width: 899.98px) {
+  .rh-site__nav {
+    order: 3;
+    width: 100%;
+  }
+  .rh-site__head {
+    flex-wrap: wrap;
+  }
+  .rh-site__body,
+  .rh-content {
+    padding-block-end: 270px;
+  }
+
+  /* One clinician column at a time, snapped, so a swipe lands square. */
+  .rh-sheetscroll {
+    scroll-snap-type: x mandatory;
+  }
+  .rh-sheetgrid {
+    min-width: 0;
+  }
+  .rh-sheetgrid__head,
+  .rh-sheetgrid__body {
+    grid-template-columns: 52px repeat(4, 78vw);
+  }
+  .rh-col {
+    scroll-snap-align: start;
+  }
+
+  .rh-form__row,
+  .rh-cardform__row {
+    grid-template-columns: 1fr;
+  }
+  .rh-table__head {
+    display: none;
+  }
+  .rh-table__row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    row-gap: 4px;
+  }
+  .rh-table__act {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+  .rh-visit__actions {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .rh-stickybar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 9px;
+  }
+  .rh-payrow .rh-button {
+    min-width: 0;
+  }
+}
