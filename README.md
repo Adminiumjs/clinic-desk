@@ -136,6 +136,39 @@ is on the "hasn't arrived" strip → tap **+15 min** twice and watch both change
 | `npm run preview` | Preview a production build locally. |
 | `npm test` | Run the scheduling engine suite. |
 
+## Full implementation (self-host)
+
+There are two ways to run this practice.
+
+**One click — the frontend on its own.** The deploy routes above put the
+appointment desk up by itself, running on the bundled demo day. No database, no
+dashboard — a fully static preview.
+
+**One command — the whole stack.**
+[`docker-compose.yml`](docker-compose.yml) stands up Postgres (seeded with the
+*same* clinicians, patients, appointments, charges and payments), an
+auto-generated Adminium dashboard that runs that real database, and the desk:
+
+```bash
+cp .env.example .env      # then set ADMINIUM_SECRET — e.g. openssl rand -hex 32
+docker compose up
+```
+
+- **Appointment desk** → http://localhost:8080
+- **Adminium dashboard** → http://localhost:4600
+
+On first boot, `clinic-db` applies [`db/schema.sql`](db/schema.sql) then
+[`db/seed.sql`](db/seed.sql), and Adminium imports the practice database
+(`rowan`) as its first source connection, introspects the schema, and generates
+the back office. Finish the ~1-minute first-run wizard at `:4600` — it's
+pre-pointed at the seeded DB. The install spec Adminium reads to configure
+itself is [`manifest.json`](manifest.json).
+
+The seed is the app's own day, not a second fiction: the same Tuesday morning
+pinned to 28 July 2026, the same four clinicians, the same thirty patients, the
+same forty appointments, the same forty-day-old balance. Open the dashboard and
+Betty Ochoa is the row you were just looking at on the waiting board.
+
 ## The split: the desk and the back office
 
 The app you deploy is **the front desk and the day**. The dashboard Adminium
@@ -148,6 +181,12 @@ not a limitation:
 | Checking people in and moving them through | Registering, merging and archiving patients |
 | What is owed, and taking it at the desk | Reporting across the whole history |
 | Who is due to be seen again | Imports, exports and bulk edits |
+
+The manifest scaffolds 9 tables, 6 dashboard pages, 2 access presets
+(`front-desk`, `clinician`) and 7 settings into your connected database. The
+record boundary holds on both sides of the split: there is no column anywhere in
+[`db/schema.sql`](db/schema.sql) for a diagnosis, a code, a medicine or a
+result, and there is no page in the manifest that would show one.
 
 ## Connecting to Adminium
 
@@ -189,7 +228,9 @@ src/
   components/  two shells, demo dock, overlays, primitives
   styles/      tokens.css (canonical design tokens), base.css, components.css,
                screens.css
+db/            schema.sql + seed.sql for the full self-host stack
 public/fonts/  self-hosted Manrope + JetBrains Mono (woff2)
+manifest.json  the Adminium install spec (9 tables, 6 pages, 2 roles)
 ```
 
 ## License
