@@ -13,107 +13,226 @@
     "key": "mft.clinic.desc",
     "fallback": "An appointment desk for a small practice: who is coming and when, checking them in, what they owe and who is due back — backed by your own database."
   },
-  "categories": ["operations"],
-
+  "categories": [
+    "operations"
+  ],
   "compatibility": {
     "minAdminiumVersion": "1.0.0",
-    "engines": ["postgres", "mysql", "sqlite"],
-    "requires": ["realtime"]
+    "engines": [
+      "postgres",
+      "mysql",
+      "sqlite"
+    ],
+    "requires": [
+      "realtime"
+    ]
   },
-
   "requiredSchema": {
     "tables": [
       {
         "ref": "clinicians",
-        "table": "clinicians",
-        "label": { "key": "mft.clinic.tbl.clinicians", "fallback": "Clinicians" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "name", "type": "text", "required": true, "display": "title" },
-          { "name": "initials", "type": "text", "required": true },
-          { "name": "avatar", "type": "image" },
           {
-            "name": "role",
-            "type": "enum",
-            "required": true,
-            "values": ["gp", "physiotherapist", "nurse"]
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
           },
-          { "name": "color", "type": "text", "required": true },
-          { "name": "active", "type": "boolean", "default": true }
+          {
+            "ref": "name",
+            "type": "text"
+          },
+          {
+            "ref": "initials",
+            "type": "text"
+          },
+          {
+            "ref": "avatar",
+            "type": "text",
+            "semantic": "image"
+          },
+          {
+            "ref": "role",
+            "type": "enum",
+            "enum": [
+              "gp",
+              "physiotherapist",
+              "nurse"
+            ]
+          },
+          {
+            "ref": "color",
+            "type": "text"
+          },
+          {
+            "ref": "active",
+            "type": "bool"
+          }
         ]
       },
       {
         "ref": "clinician_hours",
-        "table": "clinician_hours",
-        "label": { "key": "mft.clinic.tbl.clinician_hours", "fallback": "Opening hours" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "clinician_id", "type": "fk", "references": "clinicians", "required": true },
           {
-            "name": "weekday",
-            "type": "enum",
-            "required": true,
-            "values": ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
           },
-          { "name": "opens", "type": "text", "required": true },
-          { "name": "closes", "type": "text", "required": true },
-          { "name": "break_start", "type": "text" },
-          { "name": "break_end", "type": "text" }
+          {
+            "ref": "clinician_id",
+            "type": "fk",
+            "references": "clinicians"
+          },
+          {
+            "ref": "weekday",
+            "type": "enum",
+            "enum": [
+              "mon",
+              "tue",
+              "wed",
+              "thu",
+              "fri",
+              "sat",
+              "sun"
+            ]
+          },
+          {
+            "ref": "opens",
+            "type": "text"
+          },
+          {
+            "ref": "closes",
+            "type": "text"
+          },
+          {
+            "ref": "break_start",
+            "type": "text"
+          },
+          {
+            "ref": "break_end",
+            "type": "text"
+          }
         ]
       },
       {
         "ref": "visit_types",
-        "table": "visit_types",
-        "label": { "key": "mft.clinic.tbl.visit_types", "fallback": "Visit types" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "name", "type": "text", "required": true, "display": "title" },
-          { "name": "minutes", "type": "int", "required": true, "default": 15 },
-          { "name": "fee", "type": "money", "required": true },
-          { "name": "color", "type": "text", "required": true }
+          {
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "name",
+            "type": "text"
+          },
+          {
+            "ref": "minutes",
+            "type": "int"
+          },
+          {
+            "ref": "fee",
+            "type": "money"
+          },
+          {
+            "ref": "color",
+            "type": "text"
+          }
         ]
       },
       {
         "ref": "patients",
-        "table": "patients",
-        "label": { "key": "mft.clinic.tbl.patients", "fallback": "Patients" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "name", "type": "text", "required": true, "display": "title" },
-          { "name": "initials", "type": "text", "required": true },
-          { "name": "born_on", "type": "date", "required": true },
-          { "name": "phone", "type": "text", "required": true },
-          { "name": "email", "type": "email" },
-          { "name": "allergies_note", "type": "text" },
-          { "name": "insurer", "type": "text" },
-          { "name": "policy_ref", "type": "text" },
-          { "name": "created_at", "type": "timestamp", "default": "now", "role": "created" }
+          {
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "name",
+            "type": "text"
+          },
+          {
+            "ref": "initials",
+            "type": "text"
+          },
+          {
+            "ref": "born_on",
+            "type": "date"
+          },
+          {
+            "ref": "phone",
+            "type": "text"
+          },
+          {
+            "ref": "email",
+            "type": "text",
+            "semantic": "email"
+          },
+          {
+            "ref": "allergies_note",
+            "type": "text"
+          },
+          {
+            "ref": "insurer",
+            "type": "text"
+          },
+          {
+            "ref": "policy_ref",
+            "type": "text"
+          },
+          {
+            "ref": "created_at",
+            "type": "timestamptz"
+          }
         ]
       },
       {
         "ref": "appointments",
-        "table": "appointments",
-        "label": { "key": "mft.clinic.tbl.appointments", "fallback": "Appointments" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "ref", "type": "text", "required": true, "unique": true, "display": "title" },
-          { "name": "patient_id", "type": "fk", "references": "patients", "required": true },
-          { "name": "clinician_id", "type": "fk", "references": "clinicians", "required": true },
-          { "name": "visit_type_id", "type": "fk", "references": "visit_types", "required": true },
-          { "name": "starts_at", "type": "timestamp", "required": true },
-          { "name": "minutes", "type": "int", "required": true, "default": 15 },
-          { "name": "reason", "type": "text" },
-          { "name": "desk_note", "type": "text" },
           {
-            "name": "status",
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "ref",
+            "type": "text"
+          },
+          {
+            "ref": "patient_id",
+            "type": "fk",
+            "references": "patients"
+          },
+          {
+            "ref": "clinician_id",
+            "type": "fk",
+            "references": "clinicians"
+          },
+          {
+            "ref": "visit_type_id",
+            "type": "fk",
+            "references": "visit_types"
+          },
+          {
+            "ref": "starts_at",
+            "type": "timestamptz"
+          },
+          {
+            "ref": "minutes",
+            "type": "int"
+          },
+          {
+            "ref": "reason",
+            "type": "text"
+          },
+          {
+            "ref": "desk_note",
+            "type": "text"
+          },
+          {
+            "ref": "status",
             "type": "enum",
-            "required": true,
-            "values": [
+            "enum": [
               "booked",
               "checked_in",
               "roomed",
@@ -122,467 +241,241 @@
               "done",
               "no_show",
               "cancelled"
-            ],
-            "default": "booked"
+            ]
           },
-          { "name": "checked_in_at", "type": "timestamp" },
-          { "name": "cancelled_at", "type": "timestamp" },
-          { "name": "late_cancel", "type": "boolean", "default": false },
-          { "name": "created_at", "type": "timestamp", "default": "now", "role": "created" }
+          {
+            "ref": "checked_in_at",
+            "type": "timestamptz"
+          },
+          {
+            "ref": "cancelled_at",
+            "type": "timestamptz"
+          },
+          {
+            "ref": "late_cancel",
+            "type": "bool"
+          },
+          {
+            "ref": "created_at",
+            "type": "timestamptz"
+          }
         ]
       },
       {
         "ref": "recalls",
-        "table": "recalls",
-        "label": { "key": "mft.clinic.tbl.recalls", "fallback": "Recalls" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "patient_id", "type": "fk", "references": "patients", "required": true },
-          { "name": "from_appointment_id", "type": "fk", "references": "appointments" },
-          { "name": "due_on", "type": "date", "required": true },
-          { "name": "reason", "type": "text" },
-          { "name": "booked", "type": "boolean", "default": false }
+          {
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "patient_id",
+            "type": "fk",
+            "references": "patients"
+          },
+          {
+            "ref": "from_appointment_id",
+            "type": "fk",
+            "references": "appointments"
+          },
+          {
+            "ref": "due_on",
+            "type": "date"
+          },
+          {
+            "ref": "reason",
+            "type": "text"
+          },
+          {
+            "ref": "booked",
+            "type": "bool"
+          }
         ]
       },
       {
         "ref": "charges",
-        "table": "charges",
-        "label": { "key": "mft.clinic.tbl.charges", "fallback": "Charges" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
           {
-            "name": "appointment_id",
-            "type": "fk",
-            "references": "appointments",
-            "required": true,
-            "unique": true
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
           },
-          { "name": "amount", "type": "money", "required": true },
-          { "name": "created_at", "type": "timestamp", "default": "now", "role": "created" }
+          {
+            "ref": "appointment_id",
+            "type": "fk",
+            "references": "appointments"
+          },
+          {
+            "ref": "amount",
+            "type": "money"
+          },
+          {
+            "ref": "created_at",
+            "type": "timestamptz"
+          }
         ]
       },
       {
         "ref": "payments",
-        "table": "payments",
-        "label": { "key": "mft.clinic.tbl.payments", "fallback": "Payments" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "charge_id", "type": "fk", "references": "charges", "required": true },
-          { "name": "amount", "type": "money", "required": true },
           {
-            "name": "method",
-            "type": "enum",
-            "required": true,
-            "values": ["card", "cash", "transfer"],
-            "default": "card"
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
           },
-          { "name": "paid_at", "type": "timestamp", "default": "now", "role": "created" }
+          {
+            "ref": "charge_id",
+            "type": "fk",
+            "references": "charges"
+          },
+          {
+            "ref": "amount",
+            "type": "money"
+          },
+          {
+            "ref": "method",
+            "type": "enum",
+            "enum": [
+              "card",
+              "cash",
+              "transfer"
+            ]
+          },
+          {
+            "ref": "paid_at",
+            "type": "timestamptz"
+          }
         ]
       },
       {
         "ref": "closures",
-        "table": "closures",
-        "label": { "key": "mft.clinic.tbl.closures", "fallback": "Closures" },
-        "primaryKey": ["id"],
         "columns": [
-          { "name": "id", "type": "int", "role": "pk" },
-          { "name": "clinician_id", "type": "fk", "references": "clinicians" },
-          { "name": "on_date", "type": "date", "required": true },
-          { "name": "reason", "type": "text" }
+          {
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "clinician_id",
+            "type": "fk",
+            "references": "clinicians"
+          },
+          {
+            "ref": "on_date",
+            "type": "date"
+          },
+          {
+            "ref": "reason",
+            "type": "text"
+          }
         ]
       }
     ]
   },
-
   "pages": [
     {
-      "key": "clinic-dashboard",
-      "title": { "key": "mft.clinic.page.dashboard", "fallback": "Dashboard" },
-      "path": "/",
-      "type": "page-dashboard",
-      "icon": "layout-dashboard",
-      "nav": { "group": "manifest:clinic", "order": 1 },
-      "blocks": [
-        {
-          "kind": "kpi-stat-card",
-          "key": "seen-today",
-          "label": { "key": "mft.clinic.kpi.seen", "fallback": "Seen today" },
-          "source": "appointments",
-          "metric": "count",
-          "format": "number",
-          "filter": { "status": ["done"], "starts_at": "today" }
-        },
-        {
-          "kind": "kpi-stat-card",
-          "key": "in-the-building",
-          "label": { "key": "mft.clinic.kpi.waiting", "fallback": "In the building" },
-          "source": "appointments",
-          "metric": "count",
-          "format": "number",
-          "filter": {
-            "status": ["checked_in", "roomed", "with_clinician", "ready"],
-            "starts_at": "today"
-          }
-        },
-        {
-          "kind": "kpi-stat-card",
-          "key": "outstanding",
-          "label": { "key": "mft.clinic.kpi.outstanding", "fallback": "Outstanding" },
-          "source": "charges",
-          "metric": "sum",
-          "field": "amount",
-          "format": "money",
-          "minus": { "source": "payments", "field": "amount" }
-        },
-        {
-          "kind": "kpi-stat-card",
-          "key": "no-show-rate",
-          "label": { "key": "mft.clinic.kpi.noshow", "fallback": "No-show rate" },
-          "source": "appointments",
-          "metric": "ratio",
-          "format": "percent",
-          "numerator": { "status": ["no_show"] },
-          "denominator": { "status": ["done", "no_show", "ready"] }
-        },
-        {
-          "kind": "chart-line-area",
-          "key": "visits-per-week",
-          "label": { "key": "mft.clinic.chart.visits", "fallback": "Visits per week" },
-          "source": "appointments",
-          "chart": "line-area",
-          "x": { "field": "starts_at", "bucket": "week" },
-          "y": { "agg": "count" },
-          "format": "number",
-          "filter": { "status": ["done", "ready"] }
-        },
-        {
-          "kind": "mini-table",
-          "key": "owing",
-          "label": { "key": "mft.clinic.block.owing", "fallback": "Still owing" },
-          "source": "charges",
-          "limit": 8,
-          "orderBy": { "field": "created_at", "dir": "asc" },
-          "columns": ["appointment_id", "amount", "created_at"]
-        }
-      ]
-    },
-    {
-      "key": "clinic-day",
-      "title": { "key": "mft.clinic.page.day", "fallback": "Day sheet" },
-      "path": "/day",
-      "type": "page-calendar",
-      "icon": "calendar-days",
-      "source": "appointments",
-      "nav": { "group": "manifest:clinic", "order": 2 },
-      "calendar": {
-        "views": ["day-agenda", "calendar-week"],
-        "default": "day-agenda",
-        "start": "starts_at",
-        "duration": "minutes",
-        "title": "patient_id",
-        "subtitle": "reason",
-        "resource": "clinician_id",
-        "badge": "status",
-        "tint": "visit_type_id"
+      "ref": "clinic-dashboard",
+      "template": "page-dashboard",
+      "title": {
+        "key": "mft.clinic.page.dashboard",
+        "fallback": "Dashboard"
       },
-      "filters": ["clinician_id", "visit_type_id", "status"],
-      "filterControl": "filter-chip-bar",
-      "overlays": [
-        { "source": "closures", "date": "on_date", "resource": "clinician_id", "tone": "muted" }
-      ]
-    },
-    {
-      "key": "clinic-patients",
-      "title": { "key": "mft.clinic.page.patients", "fallback": "Patients" },
-      "path": "/patients",
-      "type": "page-crud",
-      "icon": "users",
-      "source": "patients",
-      "nav": { "group": "manifest:clinic", "order": 3 },
-      "columns": ["name", "born_on", "phone", "allergies_note", "insurer", "created_at"],
-      "search": ["name", "phone", "policy_ref"],
-      "filters": ["insurer"],
-      "detail": {
-        "view": "master-detail",
-        "title": "name",
-        "subtitle": "phone",
-        "fields": ["born_on", "phone", "email", "allergies_note", "insurer", "policy_ref"],
-        "timeline": {
-          "source": "appointments",
-          "foreignKey": "patient_id",
-          "timestamp": "starts_at",
-          "title": "reason",
-          "badge": "status"
-        }
-      },
-      "children": [
-        {
-          "key": "visits",
-          "label": { "key": "mft.clinic.tab.visits", "fallback": "Visits" },
-          "source": "appointments",
-          "foreignKey": "patient_id",
-          "columns": ["ref", "starts_at", "clinician_id", "visit_type_id", "reason", "status"],
-          "orderBy": { "field": "starts_at", "dir": "desc" }
-        },
-        {
-          "key": "recalls",
-          "label": { "key": "mft.clinic.tab.recalls", "fallback": "Due back" },
-          "source": "recalls",
-          "foreignKey": "patient_id",
-          "columns": ["due_on", "reason", "from_appointment_id", "booked"],
-          "orderBy": { "field": "due_on", "dir": "asc" }
-        }
-      ]
-    },
-    {
-      "key": "clinic-queue",
-      "title": { "key": "mft.clinic.page.queue", "fallback": "Waiting room" },
-      "path": "/waiting",
-      "type": "page-queue-inbox",
-      "icon": "armchair",
-      "source": "appointments",
-      "nav": { "group": "manifest:clinic", "order": 4 },
-      "tabs": {
-        "field": "status",
-        "values": ["checked_in", "roomed", "with_clinician", "ready"],
-        "default": "checked_in",
-        "control": "segmented-control"
-      },
-      "list": {
-        "title": "patient_id",
-        "subtitle": "reason",
-        "timestamp": "checked_in_at",
-        "badge": "clinician_id"
-      },
-      "detail": {
-        "title": "patient_id",
-        "fields": [
-          "ref",
-          "clinician_id",
-          "visit_type_id",
-          "starts_at",
-          "minutes",
-          "reason",
-          "desk_note",
-          "checked_in_at"
-        ],
-        "edit": ["status", "desk_note"],
-        "actions": [
-          {
-            "key": "move-on",
-            "label": "Move them on",
-            "advance": {
-              "field": "status",
-              "order": ["checked_in", "roomed", "with_clinician", "ready", "done"]
-            },
-            "undo": true
-          },
-          {
-            "key": "no-show",
-            "label": "Mark no-show",
-            "set": { "status": "no_show" },
-            "undo": true
-          }
-        ],
-        "undo": { "view": "toast-stack" }
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "layout-dashboard",
+        "order": 1
       }
     },
     {
-      "key": "clinic-accounts",
-      "title": { "key": "mft.clinic.page.accounts", "fallback": "Accounts" },
-      "path": "/accounts",
-      "type": "page-crud",
-      "icon": "receipt",
-      "source": "charges",
-      "nav": { "group": "manifest:clinic", "order": 5 },
-      "columns": ["appointment_id", "amount", "created_at"],
-      "filters": ["created_at"],
-      "orderBy": { "field": "created_at", "dir": "asc" },
-      "children": [
-        {
-          "key": "payments",
-          "label": { "key": "mft.clinic.tab.payments", "fallback": "Payments" },
-          "source": "payments",
-          "foreignKey": "charge_id",
-          "columns": ["amount", "method", "paid_at"],
-          "orderBy": { "field": "paid_at", "dir": "desc" }
-        }
-      ],
-      "blocks": [
-        {
-          "kind": "mini-table",
-          "key": "aging",
-          "label": { "key": "mft.clinic.block.aging", "fallback": "How old the balances are" },
-          "source": "charges",
-          "group": { "field": "created_at", "buckets": [7, 30, 60, 90] },
-          "metric": "sum",
-          "field": "amount",
-          "format": "money"
-        },
-        {
-          "kind": "kpi-stat-card",
-          "key": "taken-today",
-          "label": { "key": "mft.clinic.kpi.taken", "fallback": "Taken today" },
-          "source": "payments",
-          "metric": "sum",
-          "field": "amount",
-          "format": "money",
-          "filter": { "paid_at": "today" }
-        }
-      ]
+      "ref": "clinic-day",
+      "template": "page-calendar",
+      "title": {
+        "key": "mft.clinic.page.day",
+        "fallback": "Day sheet"
+      },
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "calendar-days",
+        "order": 2
+      }
     },
     {
-      "key": "clinic-recalls",
-      "title": { "key": "mft.clinic.page.recalls", "fallback": "Recalls" },
-      "path": "/recalls",
-      "type": "page-queue-inbox",
-      "icon": "calendar-clock",
-      "source": "recalls",
-      "nav": { "group": "manifest:clinic", "order": 6 },
-      "tabs": {
-        "field": "booked",
-        "values": ["due", "booked"],
-        "default": "due",
-        "control": "segmented-control"
+      "ref": "clinic-patients",
+      "template": "page-crud",
+      "title": {
+        "key": "mft.clinic.page.patients",
+        "fallback": "Patients"
       },
-      "list": {
-        "title": "patient_id",
-        "subtitle": "reason",
-        "timestamp": "due_on",
-        "badge": "booked"
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "users",
+        "order": 3
+      }
+    },
+    {
+      "ref": "clinic-queue",
+      "template": "page-queue-inbox",
+      "title": {
+        "key": "mft.clinic.page.queue",
+        "fallback": "Waiting room"
       },
-      "detail": {
-        "title": "patient_id",
-        "fields": ["due_on", "reason", "from_appointment_id", "booked"],
-        "edit": ["due_on", "booked"],
-        "actions": [
-          { "key": "mark-booked", "label": "Booked in", "set": { "booked": true }, "undo": true }
-        ],
-        "undo": { "view": "toast-stack" }
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "armchair",
+        "order": 4
+      }
+    },
+    {
+      "ref": "clinic-accounts",
+      "template": "page-crud",
+      "title": {
+        "key": "mft.clinic.page.accounts",
+        "fallback": "Accounts"
       },
-      "orderBy": { "field": "due_on", "dir": "asc" }
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "receipt",
+        "order": 5
+      }
+    },
+    {
+      "ref": "clinic-recalls",
+      "template": "page-queue-inbox",
+      "title": {
+        "key": "mft.clinic.page.recalls",
+        "fallback": "Recalls"
+      },
+      "nav": {
+        "group": "manifest:clinic",
+        "icon": "calendar-clock",
+        "order": 6
+      }
     }
   ],
-
-  "roles": [
-    {
-      "key": "front-desk",
-      "name": { "key": "mft.clinic.role.front-desk", "fallback": "Front desk" },
-      "description": {
-        "key": "mft.clinic.role.front-desk.desc",
-        "fallback": "Runs the day: books and moves appointments, checks people in, raises charges and takes payments. Can read and register patients, but not delete them. No access to settings or roles."
-      },
-      "permissions": [
-        { "resource": "appointments", "actions": ["read", "create", "update"] },
-        { "resource": "patients", "actions": ["read", "create", "update"] },
-        { "resource": "charges", "actions": ["read", "create", "update"] },
-        { "resource": "payments", "actions": ["read", "create"] },
-        { "resource": "recalls", "actions": ["read", "create", "update"] },
-        { "resource": "clinicians", "actions": ["read"] },
-        { "resource": "clinician_hours", "actions": ["read"] },
-        { "resource": "visit_types", "actions": ["read"] },
-        { "resource": "closures", "actions": ["read"] }
-      ]
-    },
-    {
-      "key": "clinician",
-      "name": { "key": "mft.clinic.role.clinician", "fallback": "Clinician" },
-      "description": {
-        "key": "mft.clinic.role.clinician.desc",
-        "fallback": "Sees their own day and the people on it, and moves a visit along as they take it. Reads patients; sets who should come back and when. No money, no other clinician's diary."
-      },
-      "permissions": [
-        { "resource": "appointments", "actions": ["read", "update"], "scope": "own" },
-        { "resource": "patients", "actions": ["read"] },
-        { "resource": "recalls", "actions": ["read", "create", "update"] },
-        { "resource": "clinicians", "actions": ["read"] },
-        { "resource": "clinician_hours", "actions": ["read"] },
-        { "resource": "visit_types", "actions": ["read"] },
-        { "resource": "closures", "actions": ["read"] }
-      ]
-    }
+  "capabilities": [
+    "payments",
+    "email-delivery",
+    "realtime"
   ],
-
-  "settings": [
+  "kind": "app",
+  "frontends": [
     {
-      "key": "practice_name",
-      "type": "text",
-      "label": { "key": "mft.clinic.set.practice_name", "fallback": "Practice name" },
-      "required": true
-    },
-    {
-      "key": "time_zone",
-      "type": "text",
-      "label": { "key": "mft.clinic.set.time_zone", "fallback": "Time zone" },
-      "default": "Europe/London",
-      "required": true,
-      "help": {
-        "key": "mft.clinic.set.time_zone.help",
-        "fallback": "Opening hours and every appointment resolve against this zone. One practice, one zone."
+      "side": "staff",
+      "kind": "spa",
+      "entry": "index.html",
+      "routes": {
+        "desk": "/"
       }
     },
     {
-      "key": "slot_minutes",
-      "type": "int",
-      "label": { "key": "mft.clinic.set.slot_minutes", "fallback": "Slot length (minutes)" },
-      "default": 15,
-      "required": true,
-      "help": {
-        "key": "mft.clinic.set.slot_minutes.help",
-        "fallback": "The grid every start sits on. A visit type's length must be a multiple of it."
+      "side": "customer",
+      "kind": "spa",
+      "entry": "index.html",
+      "routes": {
+        "book": "/",
+        "visits": "/"
       }
-    },
-    {
-      "key": "no_show_after_minutes",
-      "type": "int",
-      "label": {
-        "key": "mft.clinic.set.no_show_after_minutes",
-        "fallback": "Count as not arrived after (minutes)"
-      },
-      "default": 15
-    },
-    {
-      "key": "late_cancel_hours",
-      "type": "int",
-      "label": { "key": "mft.clinic.set.late_cancel_hours", "fallback": "Late cancellation window (hours)" },
-      "default": 24,
-      "help": {
-        "key": "mft.clinic.set.late_cancel_hours.help",
-        "fallback": "Cancel inside this window and the visit is marked a late cancellation. The practice still cancels at no charge; the flag is there so the desk can see a pattern."
-      }
-    },
-    {
-      "key": "currency",
-      "type": "enum",
-      "label": { "key": "mft.clinic.set.currency", "fallback": "Currency" },
-      "values": ["GBP", "EUR", "USD", "AUD", "CAD"],
-      "default": "GBP",
-      "required": true
-    },
-    {
-      "key": "ref_prefix",
-      "type": "text",
-      "label": { "key": "mft.clinic.set.ref_prefix", "fallback": "Appointment reference prefix" },
-      "default": "RH-",
-      "required": true
     }
-  ],
-
-  "capabilities": ["payments", "email-delivery", "realtime"],
-
-  "frontend": {
-    "kind": "spa",
-    "root": ".",
-    "buildCommand": "npm run build",
-    "buildOutput": "dist",
-    "entry": "index.html",
-    "routes": {
-      "book": "/",
-      "visits": "/",
-      "desk": "/"
-    }
-  }
+  ]
 }
