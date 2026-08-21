@@ -145,9 +145,10 @@ appointment desk up by itself, running on the bundled demo day. No database, no
 dashboard — a fully static preview.
 
 **One command — the whole stack.**
-[`docker-compose.yml`](docker-compose.yml) stands up Postgres (seeded with the
-*same* clinicians, patients, appointments, charges and payments), an
-auto-generated Adminium dashboard that runs that real database, and the desk:
+[`docker-compose.yml`](docker-compose.yml) stands up Postgres (seeded by
+default with the *same* clinicians, patients, appointments, charges and
+payments), an auto-generated Adminium dashboard that runs that real database,
+and the desk:
 
 ```bash
 cp .env.example .env      # then set ADMINIUM_SECRET — e.g. openssl rand -hex 32
@@ -157,17 +158,44 @@ docker compose up
 - **Appointment desk** → http://localhost:8080
 - **Adminium dashboard** → http://localhost:4600
 
-On first boot, `clinic-db` applies [`db/schema.sql`](db/schema.sql) then
-[`db/seed.sql`](db/seed.sql), and Adminium imports the practice database
-(`rowan`) as its first source connection, introspects the schema, and generates
-the back office. Finish the ~1-minute first-run wizard at `:4600` — it's
-pre-pointed at the seeded DB. The install spec Adminium reads to configure
-itself is [`manifest.json`](manifest.json).
+On first boot, `clinic-db` applies [`db/schema.sql`](db/schema.sql), installs
+the demo bookkeeping from [`db/demo-toolkit.sql`](db/demo-toolkit.sql), and then
+[`db/init-demo.sh`](db/init-demo.sh) loads [`db/seed.sql`](db/seed.sql) unless
+you set `DEMO_DATA=0`. Adminium imports the practice database (`rowan`) as its
+first source connection, introspects the schema, and generates the back office.
+Finish the ~1-minute first-run wizard at `:4600` — it's pre-pointed at the
+practice DB. The install spec Adminium reads to configure itself is
+[`manifest.json`](manifest.json).
 
 The seed is the app's own day, not a second fiction: the same Tuesday morning
 pinned to 28 July 2026, the same four clinicians, the same thirty patients, the
 same forty appointments, the same forty-day-old balance. Open the dashboard and
 Betty Ochoa is the row you were just looking at on the waiting board.
+
+### Demo data
+
+Rowan Health arrives seeded, so the desk and the dashboard both have a day in
+them the moment they come up. For an empty database with the same full schema,
+set `DEMO_DATA=0` in `.env` before the first `docker compose up`. Neither choice
+is permanent — the demo rows go in and out afterwards with four commands:
+
+| Command | What it does |
+| --- | --- |
+| `npm run demo:status` | What is loaded right now, table by table. |
+| `npm run demo:import` | Load [`db/seed.sql`](db/seed.sql). |
+| `npm run demo:wipe` | Remove the demo rows. The schema and your own rows stay. |
+| `npm run demo:reset` | Wipe, then import a fresh copy. |
+
+A wipe deletes only the rows the seed put there, so a patient you registered
+yourself is still on the board afterwards, and a demo row your own data depends
+on is kept rather than deleted under it. `ON DELETE CASCADE` is the exception:
+a payment you recorded against a demo charge goes when that charge does,
+because that is what [`db/schema.sql`](db/schema.sql) says should happen, and
+those rows are counted separately as `cascaded` rather than folded into the
+total. `wipe` and `reset` ask before they run; `npm run demo:wipe -- --yes`
+skips the question. Set `DATABASE_URL` to point any of them at a Postgres
+elsewhere — Neon, Supabase, RDS — instead of the compose container.
+[db/README.md](db/README.md) has the rest.
 
 ## The split: the desk and the back office
 
@@ -228,7 +256,7 @@ src/
   components/  two shells, demo dock, overlays, primitives
   styles/      tokens.css (canonical design tokens), base.css, components.css,
                screens.css
-db/            schema.sql + seed.sql for the full self-host stack
+db/            schema.sql + seed.sql + the demo-data toolkit (self-host stack)
 public/fonts/  self-hosted Manrope + JetBrains Mono (woff2)
 manifest.json  the Adminium install spec (9 tables, 6 pages, 2 roles)
 ```
