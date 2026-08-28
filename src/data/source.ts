@@ -92,3 +92,13 @@ export function setDataSource(next: DataSource): void {
   }
   current = next;
 }
+
+/**
+ * True once a real backend is behind the seam.
+ *
+ * Read by the demo dock, which resets and advances seeded fiction: against real
+ * rows those controls either lie or do damage, so it does not render.
+ */
+export function isConnected(): boolean {
+  return current !== demoSource;
+}

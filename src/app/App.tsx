@@ -15,6 +15,7 @@ import { useEffect } from "react";
 import type { ComponentType } from "react";
 
 import DemoDock from "../components/DemoDock.tsx";
+import { DEMO, SURFACE_SIDE } from "../surface.ts";
 import { CancelDialog, CardSheet, ToastLayer, VisitPanel } from "../components/Overlays.tsx";
 import Shell from "../components/Shell.tsx";
 import type { View } from "../data/types.ts";
@@ -26,18 +27,37 @@ import { Accounts, DaySheet, Patients, Recalls, Waiting } from "../screens/Clini
 import NotFound from "../screens/NotFound.tsx";
 import { Confirm, Details, Find, MyVisits } from "../screens/Patient.tsx";
 
-const SCREENS: Record<View, ComponentType> = {
-  find: Find,
-  details: Details,
-  confirm: Confirm,
-  myvisits: MyVisits,
+const CLINIC_SCREENS = {
   daysheet: DaySheet,
   waiting: Waiting,
   patients: Patients,
   accounts: Accounts,
   recalls: Recalls,
-  notfound: NotFound,
-};
+} satisfies Partial<Record<View, ComponentType>>;
+
+const PATIENT_SCREENS = {
+  find: Find,
+  details: Details,
+  confirm: Confirm,
+  myvisits: MyVisits,
+} satisfies Partial<Record<View, ComponentType>>;
+
+/*
+ * A surface build ships ONE side's screens. `SURFACE_SIDE` folds to a literal,
+ * so the branch not taken is eliminated and every screen only it referenced
+ * goes with it — which is what stops the PUBLIC patient bundle from carrying
+ * the day sheet, the accounts ledger and the recall list.
+ *
+ * The two screen files import nothing from each other here, so the cut is
+ * clean; `notfound` is in every build because an unknown view must land
+ * somewhere.
+ */
+const SCREENS: Partial<Record<View, ComponentType>> =
+  SURFACE_SIDE === "staff"
+    ? { ...CLINIC_SCREENS, notfound: NotFound }
+    : SURFACE_SIDE === "customer"
+      ? { ...PATIENT_SCREENS, notfound: NotFound }
+      : { ...CLINIC_SCREENS, ...PATIENT_SCREENS, notfound: NotFound };
 
 function CurrentScreen() {
   const view = useStore((s) => s.view);
@@ -82,7 +102,15 @@ export default function App() {
       <Shell>
         <CurrentScreen />
       </Shell>
-      <DemoDock />
+      {/* §5.2 item 8 — the dock resets and advances seeded fiction. Against
+          real rows those controls either lie or do damage. */}
+      {/*
+        Build-time, not runtime. `DEMO` folds to a literal, so a hosted or
+        connected build does not CONTAIN the dock — it is not merely hidden.
+        The old guard was `!isConnected()`, a runtime comparison against a
+        mutable module binding, which no bundler can eliminate.
+      */}
+      {DEMO && <DemoDock />}
       <ToastLayer />
       <VisitPanel />
       <CancelDialog />
