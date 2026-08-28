@@ -197,6 +197,36 @@ async function boot(): Promise<void> {
   const { default: App } = await import("./app/App.tsx");
 
   /*
+   * ── REGISTERING THE ADD-ONS, AND WHY THE CONDITION IS NOT `true` ──────────
+   *
+   * The store boots an EMPTY registry and is told what exists here, at
+   * bootstrap. That ordering is what let this seam land before an add-on
+   * existed — with nothing registered every slot draws its fallback and the app
+   * is unchanged on screen — and it is what keeps `state/store.ts` from
+   * importing an add-on bundle, which every screen would then carry.
+   *
+   * THE CONDITION IS A BUNDLE DECISION AND CHANGES NO BEHAVIOUR. `register()`
+   * builds a React settings panel, and `SURFACE_SIDE` folds to a literal, so a
+   * hosted-CUSTOMER build with this branch eliminated does not contain that
+   * panel, its eight-locale bundle, or the add-on's day-set data.
+   *
+   * Nothing is lost, and the reason is worth stating rather than assuming: an
+   * add-on's days live in this app's own in-memory settings for that add-on,
+   * written by a staff-only panel. A hosted customer surface is a separate page
+   * load with no panel and no way to have imported anything, so it could never
+   * have had a day to apply. Where its closing days actually come from is the
+   * `closures` table, over the transport, which `data/adminiumSource.ts` reads
+   * on every side. In the DEMO build both personas share one store, so the
+   * booking strip does see what the desk imported — which is why `DEMO` is on
+   * the left of the `||` rather than the branch being staff-only.
+   */
+  if (DEMO || SURFACE_SIDE === "staff") {
+    const { useStore } = await import("./state/store.ts");
+    const { demoAddOns } = await import("./add-ons/registry.ts");
+    useStore.getState().registerAddOns(demoAddOns());
+  }
+
+  /*
    * The side→persona map is the ONE app-specific line here, which is why it is
    * not in `surface.ts`: every app names its personas differently, and a shared
    * module that knew those names could not be shared.

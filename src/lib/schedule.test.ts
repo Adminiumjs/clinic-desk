@@ -21,7 +21,7 @@ import {
   PAYMENTS,
   VISIT_TYPES,
 } from "../data/demo.ts";
-import type { Appointment, Now } from "../data/types.ts";
+import type { Appointment, Closure, Now } from "../data/types.ts";
 import {
   BREAK_END,
   BREAK_START,
@@ -67,6 +67,9 @@ import {
   waitingBoard,
   waitingMinutes,
   weekStart,
+  closuresOn,
+  isAway,
+  practiceClosure,
 } from "./schedule.ts";
 
 const appt = (over: Partial<Appointment> = {}): Appointment => ({
@@ -86,12 +89,32 @@ const appt = (over: Partial<Appointment> = {}): Appointment => ({
 
 const at = (date: string, minutes: number): Now => ({ date, minutes });
 
+/**
+ * NO CLOSURES — what the shipped seed holds, and the state 24 D6 is about.
+ *
+ * Every assertion in this file that predates the closures capability passes
+ * `NONE`, unchanged, and that is the point rather than a chore: with an empty
+ * list `isWorkingDay` reduces to the weekday predicate it was, and the whole
+ * engine behaves exactly as it did before. The cases below `closing days` are
+ * the only ones that hand it anything.
+ */
+const NONE: readonly Closure[] = [];
+
+/** One closing day, defaulted to the practice's own and to the whole practice. */
+const shut = (over: Partial<Closure> = {}): Closure => ({
+  date: "2026-07-29",
+  reason: "Refit",
+  clinician: null,
+  from: null,
+  ...over,
+});
+
 describe("the pinned clock", () => {
   it("is Tuesday 28 July 2026 at 09:20", () => {
     expect(NOW.date).toBe("2026-07-28");
     expect(NOW.minutes).toBe(560);
     expect(hhmm(NOW.minutes)).toBe("09:20");
-    expect(isWorkingDay(NOW.date)).toBe(true);
+    expect(isWorkingDay(NOW.date, NONE)).toBe(true);
   });
 
   it("renders minutes as a zero-padded 24-hour clock", () => {
@@ -115,18 +138,18 @@ describe("calendar helpers", () => {
   });
 
   it("knows the practice is shut at the weekend", () => {
-    expect(isWorkingDay("2026-08-01")).toBe(false);
-    expect(isWorkingDay("2026-08-02")).toBe(false);
-    expect(isWorkingDay("2026-08-03")).toBe(true);
+    expect(isWorkingDay("2026-08-01", NONE)).toBe(false);
+    expect(isWorkingDay("2026-08-02", NONE)).toBe(false);
+    expect(isWorkingDay("2026-08-03", NONE)).toBe(true);
   });
 
   it("skips the weekend when asked for the next working day", () => {
-    expect(nextWorkingDay("2026-07-31")).toBe("2026-08-03");
-    expect(nextWorkingDay("2026-07-28")).toBe("2026-07-29");
+    expect(nextWorkingDay("2026-07-31", NONE)).toBe("2026-08-03");
+    expect(nextWorkingDay("2026-07-28", NONE)).toBe("2026-07-29");
   });
 
   it("builds a ten-day strip that shows the weekend rather than hiding it", () => {
-    const strip = dayStrip(NOW.date, 10);
+    const strip = dayStrip(NOW.date, 10, NONE);
     expect(strip).toHaveLength(10);
     expect(strip[0].iso).toBe("2026-07-28");
     expect(strip.filter((d) => !d.working).map((d) => d.iso)).toEqual([
@@ -268,9 +291,132 @@ describe("slot generation", () => {
   });
 });
 
+describe("closing days", () => {
+  /*
+   * `db/seed.sql` says exactly what this suite is for: "a closure the app does
+   * not know about would be a day the dashboard says is shut while the booking
+   * screen carries on offering times on it." Every case here is one screen and
+   * one engine function agreeing about one day.
+   */
+
+  it("does not change a single answer when the list is empty (24 D6)", () => {
+    for (const iso of ["2026-07-28", "2026-07-29", "2026-08-01", "2026-08-03"]) {
+      const wd = new Date(`${iso}T00:00:00`).getDay();
+      expect(isWorkingDay(iso, NONE)).toBe(wd >= 1 && wd <= 5);
+    }
+    expect(practiceClosure(NONE, "2026-07-29")).toBeNull();
+    expect(closuresOn(NONE, "2026-07-29")).toEqual([]);
+  });
+
+  it("shuts a weekday the whole practice has closed", () => {
+    const closures = [shut({ date: "2026-07-29", reason: "Refit" })];
+    expect(isWorkingDay("2026-07-29", closures)).toBe(false);
+    expect(isWorkingDay("2026-07-30", closures)).toBe(true);
+    expect(practiceClosure(closures, "2026-07-29")?.reason).toBe("Refit");
+  });
+
+  it("does NOT shut the practice for one clinician being away", () => {
+    const closures = [shut({ date: "2026-07-29", clinician: "nadia", reason: "Course" })];
+    expect(isWorkingDay("2026-07-29", closures)).toBe(true);
+    expect(isAway(closures, "nadia", "2026-07-29")).toBe(true);
+    expect(isAway(closures, "amara", "2026-07-29")).toBe(false);
+  });
+
+  it("counts everyone as away on a day the whole practice is shut", () => {
+    const closures = [shut({ date: "2026-07-29" })];
+    expect(isAway(closures, "nadia", "2026-07-29")).toBe(true);
+    expect(isAway(closures, "amara", "2026-07-29")).toBe(true);
+  });
+
+  it("offers no times on a closed day, and names the next day that is open", () => {
+    const closures = [shut({ date: "2026-07-29" })];
+    expect(
+      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-29", "routine", NOW, closures),
+    ).toEqual([]);
+    expect(
+      nextDayWithRoom(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-28", "routine", NOW, closures),
+    ).toBe("2026-07-30");
+  });
+
+  it("drops an away clinician from the pool rather than offering their times", () => {
+    const closures = [shut({ date: "2026-07-29", clinician: "nadia", reason: "Course" })];
+    const open = openStarts(
+      APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-29", "physio", NOW, closures,
+    );
+    expect(open).toEqual([]);
+    // …and the practice is still open for everything else that day.
+    expect(
+      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-29", "routine", NOW, closures)
+        .length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("skips a closed weekday when walking to the next working day", () => {
+    const closures = [shut({ date: "2026-07-29" }), shut({ date: "2026-07-30" })];
+    expect(nextWorkingDay("2026-07-28", closures)).toBe("2026-07-31");
+  });
+
+  it("dims a closed weekday on the strip and says why, with its source", () => {
+    const closures = [
+      shut({ date: "2026-07-30", reason: "Bank holiday", from: "some-add-on" }),
+    ];
+    const strip = dayStrip("2026-07-28", 5, closures);
+    const closed = strip.find((d) => d.iso === "2026-07-30");
+    expect(closed?.working).toBe(false);
+    expect(closed?.closedFor).toBe("Bank holiday");
+    expect(closed?.closedBy).toBe("some-add-on");
+    // A weekend carries no reason: the panel's own subtitle already says it.
+    expect(strip.find((d) => d.iso === "2026-08-01")?.closedFor).toBeNull();
+  });
+
+  /*
+   * ── THE WORST BUG THIS RETROFIT COULD HAVE ────────────────────────────────
+   *
+   * A practice shuts for reasons that are not public holidays. If an imported
+   * day could displace or outrank one somebody here typed, a re-import would
+   * silently delete "Refit" from a date a curated set happens to name too, and
+   * the first anybody would know is a patient at a locked door.
+   */
+  it("keeps BOTH rows when an imported day lands on the practice's own", () => {
+    const closures = [
+      shut({ date: "2026-12-25", reason: "Christmas Day", from: "some-add-on" }),
+      shut({ date: "2026-12-25", reason: "Refit — no clinicians on site" }),
+    ];
+    const both = closuresOn(closures, "2026-12-25");
+    expect(both).toHaveLength(2);
+    expect(both.map((c) => c.from)).toEqual([null, "some-add-on"]);
+  });
+
+  it("shows the practice's OWN reason first on a shared date", () => {
+    const closures = [
+      shut({ date: "2026-12-25", reason: "A holiday", from: "some-add-on" }),
+      shut({ date: "2026-12-25", reason: "Zulu — last alphabetically, still ours" }),
+    ];
+    // Sorted by reason it would come second; being the practice's own wins.
+    expect(practiceClosure(closures, "2026-12-25")?.from).toBeNull();
+  });
+
+  it("orders two imported days on one date by content, not by arrival", () => {
+    const a = shut({ date: "2026-12-25", reason: "Alpha", from: "one" });
+    const b = shut({ date: "2026-12-25", reason: "Beta", from: "two" });
+    expect(closuresOn([b, a], "2026-12-25").map((c) => c.reason)).toEqual(["Alpha", "Beta"]);
+    expect(closuresOn([a, b], "2026-12-25").map((c) => c.reason)).toEqual(["Alpha", "Beta"]);
+  });
+
+  it("marks the away clinician's day-sheet column and leaves the others alone", () => {
+    const closures = [shut({ date: "2026-07-29", clinician: "nadia", reason: "Course" })];
+    const sheet = daySheet(APPOINTMENTS, CLINICIANS, "2026-07-29", closures);
+    expect(sheet.find((c) => c.clinician.id === "nadia")?.awayFor).toBe("Course");
+    expect(sheet.filter((c) => c.awayFor !== null)).toHaveLength(1);
+    // The column is still there. A missing column reads as a clinician who
+    // never existed, which is the one thing the desk must not conclude.
+    expect(sheet).toHaveLength(CLINICIANS.length);
+  });
+});
+
 describe("finding a day with room", () => {
   it("finds open starts today for a routine check after the pinned clock", () => {
-    const open = openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", NOW.date, "routine", NOW);
+    const open = openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", NOW.date, "routine", NOW, NONE);
     expect(open.length).toBeGreaterThan(0);
     expect(open.every((o) => o.start >= NOW.minutes)).toBe(true);
     expect(open[0].start).toBeGreaterThanOrEqual(NOW.minutes);
@@ -278,13 +424,13 @@ describe("finding a day with room", () => {
 
   it("returns nothing at all for a weekend", () => {
     expect(
-      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-08-01", "routine", NOW),
+      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-08-01", "routine", NOW, NONE),
     ).toEqual([]);
   });
 
   it("returns nothing when the chosen clinician does not do that visit", () => {
     expect(
-      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "amara", "2026-08-04", "physio", NOW),
+      openStarts(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "amara", "2026-08-04", "physio", NOW, NONE),
     ).toEqual([]);
   });
 
@@ -302,16 +448,16 @@ describe("finding a day with room", () => {
     }
     const book = [...APPOINTMENTS, ...full];
     expect(
-      openStarts(book, CLINICIANS, VISIT_TYPES, "nadia", "2026-07-29", "physio", NOW),
+      openStarts(book, CLINICIANS, VISIT_TYPES, "nadia", "2026-07-29", "physio", NOW, NONE),
     ).toEqual([]);
     expect(
-      nextDayWithRoom(book, CLINICIANS, VISIT_TYPES, "nadia", "2026-07-29", "physio", NOW),
+      nextDayWithRoom(book, CLINICIANS, VISIT_TYPES, "nadia", "2026-07-29", "physio", NOW, NONE),
     ).toBe("2026-07-30");
   });
 
   it("skips the weekend when naming the next day with room", () => {
     expect(
-      nextDayWithRoom(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-31", "routine", NOW),
+      nextDayWithRoom(APPOINTMENTS, CLINICIANS, VISIT_TYPES, "any", "2026-07-31", "routine", NOW, NONE),
     ).toBe("2026-08-03");
   });
 });
@@ -320,7 +466,7 @@ describe("today's book", () => {
   it("holds nineteen visits across the four columns", () => {
     const today = APPOINTMENTS.filter((a) => a.date === NOW.date);
     expect(today).toHaveLength(19);
-    const sheet = daySheet(APPOINTMENTS, CLINICIANS, NOW.date);
+    const sheet = daySheet(APPOINTMENTS, CLINICIANS, NOW.date, NONE);
     expect(sheet.map((c) => c.appts.length)).toEqual([6, 5, 4, 4]);
   });
 

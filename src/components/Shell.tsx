@@ -21,6 +21,7 @@ import {
   Moon,
   ReceiptText,
   Search,
+  SlidersHorizontal,
   Stethoscope,
   Sun,
   Users,
@@ -43,7 +44,8 @@ interface NavEntry {
     | "chrome.nav.waiting"
     | "chrome.nav.patients"
     | "chrome.nav.accounts"
-    | "chrome.nav.recalls";
+    | "chrome.nav.recalls"
+    | "chrome.nav.settings";
   icon: typeof CalendarDays;
 }
 
@@ -53,6 +55,7 @@ const NAV: NavEntry[] = [
   { view: "patients", labelKey: "chrome.nav.patients", icon: Stethoscope },
   { view: "accounts", labelKey: "chrome.nav.accounts", icon: ReceiptText },
   { view: "recalls", labelKey: "chrome.nav.recalls", icon: CalendarPlus },
+  { view: "settings", labelKey: "chrome.nav.settings", icon: SlidersHorizontal },
 ];
 
 function NavList({ onPick }: { onPick?: () => void }) {

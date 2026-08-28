@@ -56,11 +56,35 @@ export type TFunction = (
   count?: number,
 ) => string;
 
+/**
+ * The same lookup, over a key THIS APP DOES NOT OWN.
+ *
+ * An add-on's strings arrive at registration rather than at compile time
+ * (`messages/index.ts` sets out the whole trade), so their keys are not members
+ * of `MessageKey` and the compiler cannot check them. They are also never
+ * written down in this app: they arrive on the add-on object as `lineKey`,
+ * `whatKey` and the two disconnect keys, so what a screen has in its hand is a
+ * `string` and the question is only how to render it.
+ *
+ * A SEPARATE FUNCTION RATHER THAN A CAST AT EACH CALL SITE. `t(addOn.lineKey as
+ * never)` is what the other hosts in this fleet write, and it works; it also
+ * teaches every reader of a screen file that a cast next to a slot is ordinary,
+ * in an app whose one payload contract is enforced by there being no casts.
+ * One named function says the true thing instead: this key is unchecked, and
+ * `registerAddOnMessages` is what took the compiler's job over.
+ */
+export type TAddOnFunction = (
+  key: string,
+  params?: Record<string, string | number>,
+) => string;
+
 interface I18nValue {
   locale: LocaleTag;
   dir: "ltr" | "rtl";
   setLocale: (t: LocaleTag) => void;
   t: TFunction;
+  /** Render a key an add-on contributed. See `TAddOnFunction`. */
+  tAddOn: TAddOnFunction;
   /** Currency is a property of the money, not of the reader's language. */
   money: (value: number, currency?: string) => string;
   number: (n: number, opts?: Intl.NumberFormatOptions) => string;
@@ -135,7 +159,14 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     const pr = new Intl.PluralRules(locale);
     const nf = new Intl.NumberFormat(locale);
 
-    const t: TFunction = (key, params, count) => {
+    /* One implementation, over a plain `string`, so the two views below differ
+     * in what the COMPILER will accept and in nothing else. A second lookup
+     * would be a second place for the plural and placeholder rules to live. */
+    const lookup = (
+      key: string,
+      params?: Record<string, string | number>,
+      count?: number,
+    ): string => {
       let raw = bundle[key] ?? fallback[key] ?? key;
 
       if (count !== undefined && raw.includes("|")) {
@@ -155,11 +186,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       );
     };
 
+    const t: TFunction = (key, params, count) => lookup(key, params, count);
+    const tAddOn: TAddOnFunction = (key, params) => lookup(key, params);
+
     return {
       locale,
       dir,
       setLocale,
       t,
+      tAddOn,
       money: (v, currency = tenantCurrency()) =>
         new Intl.NumberFormat(locale, {
           style: "currency",

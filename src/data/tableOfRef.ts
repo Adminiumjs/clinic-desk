@@ -11,4 +11,12 @@ export const TABLE_OF_REF = {
   visitTypes: "visit_types",
   clinicians: "clinicians",
   appointments: "appointments",
+  /*
+   * The days the practice does not work. Added the same hour as the `closures`
+   * entry in `REQUIRED`, because the two are one decision: a ref this app reads
+   * and this map does not carry throws `UNKNOWN_REF` on the first hosted load,
+   * in production, in a repo whose suite is green. `refCoverage.test.ts` is
+   * what makes forgetting one half a red suite instead.
+   */
+  closures: "closures",
 } as const;

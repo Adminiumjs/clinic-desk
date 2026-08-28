@@ -47,6 +47,7 @@ const EN = {
   "chrome.nav.patients": "Patients",
   "chrome.nav.accounts": "Accounts",
   "chrome.nav.recalls": "Recalls",
+  "chrome.nav.settings": "Practice settings",
   "chrome.nav.book": "Book",
   "chrome.nav.myvisits": "My visits",
   "chrome.nav.findus": "Find us",
@@ -129,6 +130,7 @@ const EN = {
   "chrome.toast.reschedule": "Pick a new time for {name}.",
   "chrome.toast.clock": "The clock now reads {time}.",
   "chrome.toast.reset": "Demo reset to Tuesday, 09:20.",
+  "chrome.toast.closureAdded": "Recorded: the practice is shut on {date}.",
 } as const satisfies Record<string, string>;
 
 /*
@@ -164,6 +166,7 @@ export const chrome = {
     "chrome.nav.patients": "Patienten",
     "chrome.nav.accounts": "Konten",
     "chrome.nav.recalls": "Kontrolltermine",
+    "chrome.nav.settings": "Praxiseinstellungen",
     "chrome.nav.book": "Termin buchen",
     "chrome.nav.myvisits": "Meine Termine",
     "chrome.nav.findus": "Anfahrt",
@@ -248,6 +251,7 @@ export const chrome = {
     "chrome.toast.reschedule": "Neue Uhrzeit für {name} auswählen.",
     "chrome.toast.clock": "Die Uhr zeigt jetzt {time}.",
     "chrome.toast.reset": "Demo auf Dienstag, 09:20 Uhr zurückgesetzt.",
+    "chrome.toast.closureAdded": "Eingetragen: Die Praxis ist am {date} geschlossen.",
   },
 
   "fr-FR": {
@@ -271,6 +275,7 @@ export const chrome = {
     "chrome.nav.patients": "Patients",
     "chrome.nav.accounts": "Comptes",
     "chrome.nav.recalls": "Rappels",
+    "chrome.nav.settings": "Réglages du cabinet",
     "chrome.nav.book": "Prendre rendez-vous",
     "chrome.nav.myvisits": "Mes rendez-vous",
     "chrome.nav.findus": "Nous trouver",
@@ -356,6 +361,7 @@ export const chrome = {
     "chrome.toast.reschedule": "Choisissez un nouvel horaire pour {name}.",
     "chrome.toast.clock": "L’horloge indique maintenant {time}.",
     "chrome.toast.reset": "Démo réinitialisée à mardi, 09:20.",
+    "chrome.toast.closureAdded": "Enregistré : le cabinet est fermé le {date}.",
   },
 
   "cs-CZ": {
@@ -379,6 +385,7 @@ export const chrome = {
     "chrome.nav.patients": "Pacienti",
     "chrome.nav.accounts": "Účty",
     "chrome.nav.recalls": "Kontroly",
+    "chrome.nav.settings": "Nastavení ordinace",
     "chrome.nav.book": "Objednat se",
     "chrome.nav.myvisits": "Moje návštěvy",
     "chrome.nav.findus": "Kde nás najdete",
@@ -464,6 +471,7 @@ export const chrome = {
     "chrome.toast.reschedule": "Vyberte pro {name} nový čas.",
     "chrome.toast.clock": "Hodiny nyní ukazují {time}.",
     "chrome.toast.reset": "Ukázka resetována na úterý, 9:20.",
+    "chrome.toast.closureAdded": "Uloženo: {date} má ordinace zavřeno.",
   },
 
   "da-DK": {
@@ -487,6 +495,7 @@ export const chrome = {
     "chrome.nav.patients": "Patienter",
     "chrome.nav.accounts": "Konti",
     "chrome.nav.recalls": "Indkaldelser",
+    "chrome.nav.settings": "Klinikkens indstillinger",
     "chrome.nav.book": "Book tid",
     "chrome.nav.myvisits": "Mine besøg",
     "chrome.nav.findus": "Find os",
@@ -571,6 +580,7 @@ export const chrome = {
     "chrome.toast.reschedule": "Vælg et nyt tidspunkt til {name}.",
     "chrome.toast.clock": "Uret viser nu {time}.",
     "chrome.toast.reset": "Demoen er nulstillet til tirsdag kl. 09.20.",
+    "chrome.toast.closureAdded": "Registreret: klinikken holder lukket den {date}.",
   },
 
   "zh-CN": {
@@ -594,6 +604,7 @@ export const chrome = {
     "chrome.nav.patients": "患者",
     "chrome.nav.accounts": "账户",
     "chrome.nav.recalls": "复诊提醒",
+    "chrome.nav.settings": "诊所设置",
     "chrome.nav.book": "预约",
     "chrome.nav.myvisits": "我的就诊",
     "chrome.nav.findus": "到院路线",
@@ -676,6 +687,7 @@ export const chrome = {
     "chrome.toast.reschedule": "为 {name} 选择新的时间。",
     "chrome.toast.clock": "时钟现在显示 {time}。",
     "chrome.toast.reset": "演示已重置为周二 09:20。",
+    "chrome.toast.closureAdded": "已记录：{date} 诊所休诊。",
   },
 
   "zh-TW": {
@@ -699,6 +711,7 @@ export const chrome = {
     "chrome.nav.patients": "病患",
     "chrome.nav.accounts": "帳戶",
     "chrome.nav.recalls": "回診提醒",
+    "chrome.nav.settings": "診所設定",
     "chrome.nav.book": "預約",
     "chrome.nav.myvisits": "我的就診",
     "chrome.nav.findus": "如何前往",
@@ -781,6 +794,7 @@ export const chrome = {
     "chrome.toast.reschedule": "為 {name} 選擇新的時間。",
     "chrome.toast.clock": "時鐘現在顯示 {time}。",
     "chrome.toast.reset": "示範已重設為週二 09:20。",
+    "chrome.toast.closureAdded": "已記錄：{date} 診所休診。",
   },
 
   "ar-EG": {
@@ -804,6 +818,7 @@ export const chrome = {
     "chrome.nav.patients": "المرضى",
     "chrome.nav.accounts": "الحسابات",
     "chrome.nav.recalls": "المتابعات",
+    "chrome.nav.settings": "إعدادات العيادة",
     "chrome.nav.book": "احجز موعدًا",
     "chrome.nav.myvisits": "زياراتي",
     "chrome.nav.findus": "مكان العيادة",
@@ -894,5 +909,6 @@ export const chrome = {
     "chrome.toast.reschedule": "اختر موعدًا جديدًا لـ {name}.",
     "chrome.toast.clock": "الساعة الآن {time}.",
     "chrome.toast.reset": "تمت إعادة ضبط العرض إلى الثلاثاء، 09:20.",
+    "chrome.toast.closureAdded": "تم التسجيل: العيادة مغلقة في {date}.",
   },
 } satisfies Record<LocaleTag, Record<string, string>>;

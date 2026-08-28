@@ -27,6 +27,7 @@ import type {
   Appointment,
   Charge,
   Clinician,
+  Closure,
   Now,
   Patient,
   Payment,
@@ -295,3 +296,27 @@ export const PAYMENTS: Payment[] = [
   { id: "p-14", charge: "c-4002", amount: 45, method: "cash", date: "2026-07-28" },
   { id: "p-15", charge: "c-4007", amount: 45, method: "card", date: "2026-07-28" },
 ];
+
+/**
+ * DAYS OFF — DELIBERATELY EMPTY, exactly as `db/seed.sql` leaves the table.
+ *
+ * Nobody is away in the fortnight this seed covers, and the seed's own comment
+ * says why an invented row would be worse than none: "a closure the app does
+ * not know about would be a day the dashboard says is shut while the booking
+ * screen carries on offering times on it." The two halves of this demo — this
+ * app and the generated dashboard over the same schema — have to agree, and
+ * they agree here by both holding nothing.
+ *
+ * IT IS A DECLARED EMPTY LIST RATHER THAN AN ABSENT ONE, and the difference is
+ * the whole reason this constant exists at all instead of `closures: () => []`
+ * in `source.ts`. An absent seed is indistinguishable from a forgotten one; a
+ * named export with this comment on it is a statement that the emptiness was
+ * chosen, and `db/seed-drift.test.ts` compares the two files' rows so the day
+ * somebody adds a closure to one and not the other is a red suite.
+ *
+ * It is also what makes 24 D6 checkable rather than asserted: with nothing
+ * connected the practice's closure list is empty, `isWorkingDay` reduces to the
+ * weekday predicate it was before this retrofit, and every screen renders
+ * exactly what it rendered before.
+ */
+export const CLOSURES: Closure[] = [];

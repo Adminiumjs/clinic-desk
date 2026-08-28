@@ -79,6 +79,25 @@ export const SURFACE_NAV = [
     labelKey: "chrome.nav.recalls",
   },
   /*
+   * THE ONE DECLARATION THAT PUTS THE SETTINGS SCREEN IN ALL THREE STAFF
+   * PLACEMENTS.
+   *
+   * This app ships three shells, and a settings surface added to one of them
+   * would be invisible in the other two — including the internal placement,
+   * where Adminium's own sidebar carries this app's sections and reads exactly
+   * this list. A row here is a row in the desk sidebar, a path the URL sync can
+   * restore, and a section the dashboard offers. Last, because it is the one
+   * screen nobody opens to do the day's work.
+   */
+  {
+    id: "settings",
+    path: "settings",
+    view: "settings",
+    side: "staff",
+    icon: "sliders-horizontal",
+    labelKey: "chrome.nav.settings",
+  },
+  /*
    * The patient side's entry screen takes the EMPTY path: a mapped domain
    * serves this app at `/`, and booking is what someone arriving there came to
    * do. Giving it `find` as well would make two URLs for one screen.

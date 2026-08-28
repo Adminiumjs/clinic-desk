@@ -16,14 +16,25 @@
  * Nothing else in the app reads a real clock.
  */
 
+import { useMemo } from "react";
 import { create } from "zustand";
 
 import { source } from "../data/source.ts";
 import { ADDRESS, DEMO_LOOKUP, NEXT_REF, STAFF } from "../data/demo.ts";
+import { addOnClosures, mergeClosures, DAY_SOURCES } from "../add-ons/closures.ts";
+import {
+  applyAddOnSettings,
+  createRegistry,
+  defaultSettingsFor,
+  type AddOn,
+  type AddOnRegistry,
+  type AddOnSettings,
+} from "../add-ons/vendor/host/index.ts";
 import type {
   Appointment,
   Charge,
   Clinician,
+  Closure,
   Now,
   PayMethod,
   Patient,
@@ -36,7 +47,7 @@ import type {
   VisitStatus,
 } from "../data/types.ts";
 import { t } from "../i18n/ambient.ts";
-import { STATUS_KEY, clock, label, money } from "../lib/format.ts";
+import { STATUS_KEY, clock, dateLong, label, money } from "../lib/format.ts";
 import {
   addDays,
   balanceOf,
@@ -135,6 +146,18 @@ interface State {
   appts: Appointment[];
   charges: Charge[];
   payments: Payment[];
+  /**
+   * THE PRACTICE'S OWN closing days — the rows a person here entered.
+   *
+   * An add-on's days are NOT in here and never will be. They live in that
+   * add-on's own values (`addOnSettings`), are read through its own function,
+   * and are merged into one list at the point of use by `useClosures`. Copying
+   * them into this array is the one shortcut that would break every promise
+   * this seam makes at once: an operator could then delete a row an add-on
+   * owns, a disconnect would either destroy data or leave orphans, and a
+   * re-import would have to reconcile against rows it did not write.
+   */
+  closures: Closure[];
   /** Names for people booked during the session, who are not in the seed. */
   walkIns: Record<string, string>;
 
@@ -158,6 +181,35 @@ interface State {
   openPatientId: string | null;
   /** The recall that sent the reader to the day sheet, if any. */
   prefill: { patient: string; reason: string } | null;
+
+  /* --- add-ons --- */
+  /**
+   * The five things the seam needs from a store, and the one rule.
+   *
+   * `registry` starts EMPTY and is filled by `registerAddOns` at bootstrap
+   * rather than being built here from the add-on list. That is not a detail:
+   * every screen imports this store, so building the registry at store-init
+   * would put every add-on bundle in every screen's module graph — and it would
+   * make the seam impossible to land before an add-on exists, which is exactly
+   * the state a retrofit has to be reviewable in.
+   */
+  registry: AddOnRegistry;
+  /** Which add-ons are switched on. Nothing is, until somebody connects one. */
+  enabled: Set<string>;
+  /**
+   * Which add-ons have supplied a credential.
+   *
+   * SEPARATE FROM `enabled` BECAUSE THEY ARE DIFFERENT FACTS, and this app is
+   * the awkward case that proves it rather than the one that demonstrates it:
+   * the one add-on it hosts declares `connect: "none"`, so connecting it adds
+   * nothing here and this set stays empty. It exists anyway because
+   * `disconnectAddOn` promises two things — the surfaces go, the data stays —
+   * and an app with one set cannot say which of the two it did. The day a
+   * credentialled add-on is vendored here, the promise is already implemented.
+   */
+  credentialled: Set<string>;
+  /** Each add-on's saved values, keyed by add-on key and opaque to this app. */
+  addOnSettings: AddOnSettings;
 
   /* --- overlays --- */
   panelRef: string | null;
@@ -197,6 +249,18 @@ interface State {
   closePatient: () => void;
   bookThemIn: (patient: string, reason: string) => void;
   clearPrefill: () => void;
+
+  /** Replace the registry, and push everyone their saved values. */
+  registerAddOns: (addOns: readonly AddOn[]) => void;
+  toggleAddOn: (key: string) => void;
+  connectAddOn: (key: string) => void;
+  disconnectAddOn: (key: string) => void;
+  patchAddOnSettings: (addOn: string, patch: Record<string, unknown>) => void;
+
+  /** Record a day the practice will be shut. Refuses a duplicate of its own. */
+  addClosure: (date: string, reason: string, clinician: string | null) => boolean;
+  /** Drop one of the practice's OWN closing days. Cannot reach an add-on's. */
+  removeClosure: (date: string, reason: string) => void;
 
   openPanel: (ref: string | null) => void;
   advanceVisit: (ref: string) => void;
@@ -242,7 +306,24 @@ export const useStore = create<State>((set, get) => ({
   appts: source.appointments(),
   charges: source.charges(),
   payments: source.payments(),
+  closures: source.closures(),
   walkIns: {},
+
+  registry: createRegistry([]),
+  enabled: new Set<string>(),
+  credentialled: new Set<string>(),
+  /*
+   * EMPTY, AND FILLED BY `registerAddOns` — because this file must not import
+   * the add-on list.
+   *
+   * The obvious spelling is `defaultSettingsFor(demoAddOns())` right here, and
+   * it costs the whole bundle split: every screen imports this store, so a
+   * store that named the add-on list would put every add-on's settings panel in
+   * every screen's module graph. `registerAddOns` seeds the defaults from the
+   * add-ons it is handed instead, which is the same information arriving from
+   * the one place that is allowed to know it.
+   */
+  addOnSettings: {},
 
   draft: freshDraft(source.now()),
   confirmedRef: null,
@@ -534,6 +615,134 @@ export const useStore = create<State>((set, get) => ({
 
   clearPrefill: () => set({ prefill: null }),
 
+  /* ------------------------------------------------------------- add-ons */
+
+  registerAddOns: (addOns) => {
+    /*
+     * Defaults first, then whatever is already saved — so registering twice, or
+     * registering after somebody has changed a value, cannot reset it. An
+     * add-on's defaults are the value it starts from and never a value it goes
+     * back to.
+     */
+    const addOnSettings: AddOnSettings = { ...defaultSettingsFor(addOns), ...get().addOnSettings };
+    set({ registry: createRegistry(addOns), addOnSettings });
+    applyAddOnSettings(addOns, addOnSettings);
+  },
+
+  toggleAddOn: (key) => {
+    if (get().enabled.has(key)) get().disconnectAddOn(key);
+    else get().connectAddOn(key);
+  },
+
+  connectAddOn: (key) =>
+    set((s) => {
+      const enabled = new Set(s.enabled);
+      enabled.add(key);
+      return { enabled };
+    }),
+
+  /**
+   * DISCONNECTING TAKES THE SURFACES AND THE CREDENTIALS. IT NEVER TAKES DATA.
+   *
+   * ── WHAT HAPPENS TO THE DAYS, AND WHY IT IS THIS AND NOT THE OTHER ONE ────
+   *
+   * The add-on's saved days are untouched — `addOnSettings` is not read, not
+   * cleared, not filtered. What changes is that the add-on is no longer in
+   * `enabled`, so `useClosures` stops asking it, so those days stop shutting
+   * the practice. Reconnect and every one of them is back, unchanged, in the
+   * same order.
+   *
+   * THE ALTERNATIVE WAS TO KEEP APPLYING THEM, and it is worse on a clinic's
+   * screens rather than merely different. A disconnected add-on has no surface:
+   * no panel, no list, nothing to open. Days that went on closing the practice
+   * from behind a disconnected add-on would be a rule with no page — a reader
+   * looking at a shut Thursday with nothing anywhere that explains it and no
+   * control that changes it. That is the shape of bug this app has a settings
+   * screen to prevent.
+   *
+   * SO THE APP SAYS SO. `dormantDayCounts` is read by the settings screen for
+   * exactly this: while an add-on is disconnected it prints how many days are
+   * still saved, that they are not being applied, and the two things a reader
+   * can do about it — reconnect, or enter the ones they need as the practice's
+   * own. That is 25 D10: a refusal by a real rule the reader can act on, rather
+   * than a silence.
+   */
+  disconnectAddOn: (key) =>
+    set((s) => {
+      const enabled = new Set(s.enabled);
+      enabled.delete(key);
+      const credentialled = new Set(s.credentialled);
+      credentialled.delete(key);
+      return { enabled, credentialled };
+    }),
+
+  /**
+   * Merge a patch into ONE add-on's own values, and push the result.
+   *
+   * `applyAddOnSettings` on the last line is the rule: add-ons are HANDED their
+   * settings and never poll for them. An add-on that read this store would be
+   * coupled to this app's state shape, which is the coupling every other
+   * decision in the seam exists to prevent — and one that read it on a timer
+   * would be worse, because the version that works is indistinguishable from
+   * the version that is one tick stale.
+   *
+   * The add-on this app hosts declares no `applySettings`, deliberately: its
+   * engines take the values as an argument, so it has no copy to keep in step.
+   * The push happens anyway, for every add-on, because the seam is written
+   * about add-ons and not about the one that is here.
+   */
+  patchAddOnSettings: (addOn, patch) => {
+    const addOnSettings: AddOnSettings = {
+      ...get().addOnSettings,
+      [addOn]: { ...(get().addOnSettings[addOn] ?? {}), ...patch },
+    };
+    set({ addOnSettings });
+    applyAddOnSettings(get().registry.all, addOnSettings);
+  },
+
+  /* ------------------------------------------------------------ closures */
+
+  /**
+   * Record a day the practice will be shut.
+   *
+   * Refuses a date the practice has ALREADY entered at the same scope, and
+   * refuses only that: adding "Stocktake" to a day an add-on has already named
+   * a public holiday is a coherent thing to record, and refusing it would make
+   * an imported set an obstacle rather than a starting point. It also refuses
+   * an empty reason, because "the practice is shut on the fourth" with no
+   * reason beside it is the row somebody comes back to in March and cannot act
+   * on. Returns false so the screen can say which refusal it was.
+   */
+  addClosure: (date, reason, clinician) => {
+    const trimmed = reason.trim();
+    if (date.length === 0 || trimmed.length === 0) return false;
+    if (get().closures.some((c) => c.date === date && c.clinician === clinician)) return false;
+    set({
+      closures: [...get().closures, { date, reason: trimmed, clinician, from: null }],
+    });
+    get().toast(t("chrome.toast.closureAdded", { date: dateLong(date) }), "pos");
+    return true;
+  },
+
+  /**
+   * Drop one of the practice's own closing days.
+   *
+   * THE FILTER TESTS `from === null`, AND THAT IS NOT BELT AND BRACES. Nothing
+   * an add-on supplied is in `closures` to begin with — imported days live in
+   * that add-on's own values and are merged at read time — so this clause can
+   * never fire today. It is here because the day it CAN fire is the day
+   * somebody has copied imported rows into this array, and the first symptom
+   * would be a delete button that appears to work and un-deletes itself on the
+   * next render. A predicate that states the rule is how that arrives as an
+   * unreachable branch rather than as a bug report.
+   */
+  removeClosure: (date, reason) =>
+    set((s) => ({
+      closures: s.closures.filter(
+        (c) => !(c.from === null && c.date === date && c.reason === reason),
+      ),
+    })),
+
   /* ------------------------------------------------------------ overlays */
 
   openPanel: (panelRef) => set({ panelRef, overlayOpen: panelRef !== null }),
@@ -789,6 +998,7 @@ export const useStore = create<State>((set, get) => ({
       appts: source.appointments(),
       charges: source.charges(),
       payments: source.payments(),
+      closures: source.closures(),
       walkIns: {},
       draft: freshDraft(now),
       confirmedRef: null,
@@ -817,4 +1027,39 @@ export const useStore = create<State>((set, get) => ({
 /** The dock's mono clock readout. */
 export function clockLabel(now: Now): string {
   return clock(now.minutes);
+}
+
+/**
+ * EVERY DAY THE PRACTICE DOES NOT WORK — its own, and the add-ons'.
+ *
+ * ── THIS IS THE MOUNT SITE, AND IT IS A HOOK RATHER THAN A STORE FIELD ─────
+ *
+ * The merged list is DERIVED, and this app's rule is that derived things are
+ * computed at render time from what lives in the store, never stored beside it
+ * — a stored copy is a copy to keep in step, and the five actions that can
+ * change this one are five chances to forget. So it is computed here.
+ *
+ * The five inputs are selected SEPARATELY and the merge is memoised on them.
+ * That is not style: a zustand selector returning a fresh array on every call
+ * compares unequal to itself, so `useStore((s) => merge(...))` re-renders for
+ * ever. Each selector below returns a field the store already holds, so each is
+ * reference-stable until something actually changes it.
+ *
+ * ── WHAT IT MEANS FOR A SCREEN ─────────────────────────────────────────────
+ *
+ * A screen asks for closures and gets one list. It does not know, and must not
+ * ask, which rows came from where — except to LABEL them, which is what `from`
+ * is for. That is what makes the whole retrofit reversible: with nothing
+ * connected the list is the practice's own rows and nothing else, which in the
+ * demo is the empty array `db/seed.sql` seeds, and every screen behaves exactly
+ * as it did before this seam existed.
+ */
+export function useClosures(): Closure[] {
+  const own = useStore((s) => s.closures);
+  const enabled = useStore((s) => s.enabled);
+  const addOnSettings = useStore((s) => s.addOnSettings);
+  return useMemo(
+    () => mergeClosures(own, addOnClosures(DAY_SOURCES, enabled, addOnSettings)),
+    [own, enabled, addOnSettings],
+  );
 }

@@ -33,7 +33,15 @@ import {
 
 import { resolveSurfaceConfig } from "../publicConfig.ts";
 
-import type { Appointment, Clinician, Now, VisitType, VisitTypeId, VisitStatus } from "./types.ts";
+import type {
+  Appointment,
+  Clinician,
+  Closure,
+  Now,
+  VisitType,
+  VisitTypeId,
+  VisitStatus,
+} from "./types.ts";
 import type { SnapshotPort } from "./snapshotPort.ts";
 import type { DataSource } from "./source.ts";
 import { demoSource } from "./source.ts";
@@ -61,6 +69,25 @@ interface WireAppointment {
   /** `timestamptz`, serialized as a UTC instant. */
   starts_at: string;
   minutes: number;
+}
+
+interface WireClosure {
+  /** Null means the whole practice is shut; a value means one clinician is away. */
+  clinician_id: number | null;
+  /**
+   * A `date` COLUMN, NOT A `timestamptz` — and that distinction is the one
+   * thing this row can get wrong.
+   *
+   * Every other time in this file goes through `toTenantDay`, because it is an
+   * instant and the day it falls on depends on a zone. A closing day is a
+   * CALENDAR DAY: the practice is shut on the twenty-fifth, in the practice's
+   * own words, and there is no instant underneath it to convert. Passing it
+   * through the same helper would shift it by a day for any tenant west of the
+   * zone the value was serialized in — which is a locked door on the wrong
+   * date, and it is silent.
+   */
+  on_date: string;
+  reason: string;
 }
 
 /* WS-I GAP — no slug column. Keyed off operator-editable display text. */
@@ -117,6 +144,7 @@ export interface Snapshot {
   visitTypes: VisitType[];
   clinicians: Clinician[];
   appointments: Appointment[];
+  closures: Closure[];
   now: Now;
 }
 
@@ -125,6 +153,27 @@ export const REQUIRED = {
   visitTypes: ["id", "name", "minutes", "fee", "color"],
   clinicians: ["id", "name", "initials", "role", "color"],
   appointments: ["clinician_id", "visit_type_id", "starts_at", "minutes"],
+  /*
+   * REQUIRED, NOT OPTIONAL, AND THAT IS THE CLINICAL CHOICE.
+   *
+   * A scope that does not expose `closures` makes this app read an empty list,
+   * and an empty list is indistinguishable from a practice with no closing
+   * days. The consequence is the failure `db/seed.sql` names in so many words:
+   * the booking screen offers times on a day the practice is shut, and the
+   * first anybody knows is a patient at a locked door.
+   *
+   * So it goes through `assertRefs` with the rest, and a deployment whose scope
+   * has not been widened fails AT BOOT naming this ref — an operator adding one
+   * ref in Studio — instead of taking bookings it cannot honour. That is the
+   * same trade every other line in this object makes, on the one row where
+   * getting it wrong is not a rendering problem.
+   *
+   * The map in `data/tableOfRef.ts` carries the other half. A ref read here and
+   * unmapped there throws `UNKNOWN_REF` on the first hosted load, in
+   * production, in a repo whose whole suite is green — which is what
+   * `refCoverage.test.ts` exists to make impossible.
+   */
+  closures: ["clinician_id", "on_date", "reason"],
 };
 
 /**
@@ -175,10 +224,11 @@ export async function loadSnapshot(client: SnapshotPort): Promise<Snapshot | nul
     /* The operator's per-ref page ceiling. `?? 100` is the server's own
      * conservative default for a ref the scope does not size. */
     const cap = (ref: string): number => config.refs[ref]?.limit ?? 100;
-    const [types, clinicians, appts] = await Promise.all([
+    const [types, clinicians, appts, closureRows] = await Promise.all([
       listAll<WireVisitType>(client, "visitTypes", cap("visitTypes"), 50_000),
       listAll<WireClinician>(client, "clinicians", cap("clinicians"), 50_000),
       listAll<WireAppointment>(client, "appointments", cap("appointments"), 50_000),
+      listAll<WireClosure>(client, "closures", cap("closures"), 50_000),
     ]);
 
     const typeById = new Map<number, VisitTypeId>();
@@ -237,6 +287,34 @@ export async function loadSnapshot(client: SnapshotPort): Promise<Snapshot | nul
       });
     }
 
+    /*
+     * A closure the app cannot attribute to a clinician it knows is dropped
+     * rather than promoted to a practice-wide one. Promoting it would shut the
+     * whole practice on the strength of a row this build could not read, and
+     * `clinician: null` is a much stronger statement than "we are not sure who
+     * this is about". Dropping is also what every other mapping above does with
+     * a row it cannot resolve, for the same reason.
+     *
+     * `from: null` on every row, always: `from` names the ADD-ON that supplied
+     * a day, and nothing arriving over this transport came from one. An add-on
+     * writes its own values, never this app's tables — a row in the database is
+     * by definition the practice's own.
+     */
+    const closures: Closure[] = [];
+    for (const row of closureRows) {
+      const clinician = row.clinician_id === null ? null : clinicianById.get(row.clinician_id);
+      if (clinician === undefined) continue;
+      closures.push({
+        // Sliced rather than parsed: a `date` column serializes as `YYYY-MM-DD`
+        // and a driver that hands back a full ISO instant would otherwise put a
+        // `T` in a string every comparison in the engine does as text.
+        date: row.on_date.slice(0, 10),
+        reason: row.reason,
+        clinician,
+        from: null,
+      });
+    }
+
     // "Now" in the PRACTICE's zone, for the same reason every other time is.
     const nowIso = new Date().toISOString();
     return {
@@ -248,6 +326,7 @@ export async function loadSnapshot(client: SnapshotPort): Promise<Snapshot | nul
       visitTypes,
       clinicians: staff,
       appointments,
+      closures,
       now: { date: toTenantDay(nowIso, timezone), minutes: toTenantMinutes(nowIso, timezone) },
     };
   } catch (error) {
@@ -274,6 +353,7 @@ export function snapshotSource(snap: Snapshot): DataSource {
     visitTypes: () => snap.visitTypes.map((v) => ({ ...v })),
     clinicians: () => snap.clinicians.map((c) => ({ ...c, offers: [...c.offers] })),
     appointments: () => snap.appointments.map((a) => ({ ...a })),
+    closures: () => snap.closures.map((c) => ({ ...c })),
     /*
      * The staff side's read-set. `DataSource` is ONE interface for both sides of
      * the app, so a customer-only connected build still has to satisfy these.

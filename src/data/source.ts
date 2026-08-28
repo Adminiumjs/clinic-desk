@@ -16,6 +16,7 @@ import {
   APPOINTMENTS,
   CHARGES,
   CLINICIANS,
+  CLOSURES,
   NOW,
   PATIENTS,
   PAYMENTS,
@@ -25,6 +26,7 @@ import type {
   Appointment,
   Charge,
   Clinician,
+  Closure,
   Now,
   Patient,
   Payment,
@@ -40,6 +42,19 @@ export interface DataSource {
   appointments(): Appointment[];
   charges(): Charge[];
   payments(): Payment[];
+  /**
+   * The days the practice does not work.
+   *
+   * A NEW MEMBER ON AN INTERFACE EVERY IMPLEMENTATION MUST SATISFY, which is
+   * the point of adding it here rather than reading `closures` off a store
+   * field somewhere. `db/schema.sql` has declared this table since the app was
+   * written and nothing read it; a seam that names it is what makes "does this
+   * deployment expose its closures?" a question with one answer per transport
+   * instead of a silence per screen.
+   *
+   * The demo answers `[]`, which is what `db/seed.sql` inserts, deliberately.
+   */
+  closures(): Closure[];
 }
 
 /**
@@ -54,6 +69,7 @@ export const demoSource: DataSource = {
   appointments: () => APPOINTMENTS.map((a) => ({ ...a })),
   charges: () => CHARGES.map((c) => ({ ...c })),
   payments: () => PAYMENTS.map((p) => ({ ...p })),
+  closures: () => CLOSURES.map((c) => ({ ...c })),
 };
 
 /*
@@ -81,6 +97,7 @@ export const source: DataSource = {
   appointments: () => ((read = true), current.appointments()),
   charges: () => ((read = true), current.charges()),
   payments: () => ((read = true), current.payments()),
+  closures: () => ((read = true), current.closures()),
 };
 
 /** Swap the backing source. Must happen before any module-scope read. */

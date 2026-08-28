@@ -24,6 +24,7 @@ import { useI18n } from "../i18n/index.tsx";
 import { useStore } from "../state/store.ts";
 
 import { Accounts, DaySheet, Patients, Recalls, Waiting } from "../screens/Clinic.tsx";
+import Settings from "../screens/Settings.tsx";
 import NotFound from "../screens/NotFound.tsx";
 import { Confirm, Details, Find, MyVisits } from "../screens/Patient.tsx";
 
@@ -33,6 +34,15 @@ const CLINIC_SCREENS = {
   patients: Patients,
   accounts: Accounts,
   recalls: Recalls,
+  /*
+   * STAFF ONLY, and that is a build-time fact rather than a hidden route. The
+   * practice's settings — its closing days, and the add-ons that supply some of
+   * them — are the desk's, so this component is referenced from the clinic
+   * record and from nowhere else. `SURFACE_SIDE` folds to a literal, so the
+   * public patient bundle does not contain this screen, the add-on shelf, or
+   * the settings panel any add-on draws inside it.
+   */
+  settings: Settings,
 } satisfies Partial<Record<View, ComponentType>>;
 
 const PATIENT_SCREENS = {

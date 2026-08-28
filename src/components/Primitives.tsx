@@ -271,14 +271,32 @@ export function Empty({
 }: {
   icon?: ReactNode;
   title: string;
-  body?: string;
+  /**
+   * `ReactNode` rather than `string`, so an empty state can carry a chip or a
+   * line of fine print under its sentence — which is what the day sheet's
+   * closed-day state needs in order to say WHERE a closing day came from on
+   * the same surface that acts on it (24 AC6).
+   */
+  body?: ReactNode;
   action?: ReactNode;
 }) {
   return (
     <div className="rh-empty">
       {icon !== undefined && <div className="rh-empty__icon">{icon}</div>}
       <div className="rh-empty__title">{title}</div>
-      {body !== undefined && <p className="rh-empty__body">{body}</p>}
+      {/*
+        * A `div` AND NOT A `p`, since `body` became a `ReactNode`.
+        *
+        * The day sheet's closed-day state puts a chip and a line of fine print
+        * in here, and the line is itself a paragraph — so a `p` wrapper is a
+        * nested `p`, which is invalid HTML. The browser SILENTLY closes the
+        * outer one and reparents everything after it, so the styling comes off
+        * the fine print and React logs a hydration warning nobody reads in a
+        * dev console. Every rule on the class is a block-level rule that a
+        * `div` satisfies identically; nothing on screen changes for the empty
+        * states that pass a plain string.
+        */}
+      {body !== undefined && <div className="rh-empty__body">{body}</div>}
       {action !== undefined && <div style={{ marginBlockStart: 14 }}>{action}</div>}
     </div>
   );

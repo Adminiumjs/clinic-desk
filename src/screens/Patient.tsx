@@ -42,6 +42,7 @@ import {
   cliniciansFor,
   dayStrip,
   endOf,
+  isAway,
   isWorkingDay,
   nextDayWithRoom,
   slotsFor,
@@ -55,6 +56,7 @@ import {
   VISIT_TYPES,
   clinicianById,
   patientById,
+  useClosures,
   useStore,
 } from "../state/store.ts";
 import { Avatar, Button, Chip, Empty, Field, Mono, Panel } from "../components/Primitives.tsx";
@@ -97,6 +99,19 @@ export function Find() {
   const appts = useStore((s) => s.appts);
   const now = useStore((s) => s.now);
   const go = useStore((s) => s.go);
+  /*
+   * The same merged list the day sheet reads, through the same hook. Two
+   * screens over one predicate is the whole point: `db/seed.sql` says a closure
+   * the app half-knows is a day the dashboard calls shut while this screen goes
+   * on offering times on it, and there is no arrangement of these two files
+   * that can produce that while both take the list as an argument.
+   *
+   * `eligible` is deliberately NOT filtered by who is away here. `openStarts`
+   * and `slotsFor` are where availability is decided, and a chooser that hid a
+   * clinician on a day they happen to be off would make the patient think the
+   * practice does not employ them.
+   */
+  const closures = useClosures();
 
   const eligible = useMemo(
     () =>
@@ -107,22 +122,26 @@ export function Find() {
   );
 
   const type = visitTypeById(VISIT_TYPES, draft.type);
-  const strip = useMemo(() => dayStrip(now.date, 10), [now.date]);
+  const strip = useMemo(() => dayStrip(now.date, 10, closures), [now.date, closures]);
 
   const slots = useMemo(() => {
-    if (!isWorkingDay(draft.day) || eligible.length === 0) return [];
+    if (!isWorkingDay(draft.day, closures) || eligible.length === 0) return [];
     return mergeSlots(
-      eligible.map((c) => slotsFor(appts, VISIT_TYPES, c.id, draft.day, draft.type, now)),
+      eligible
+        .filter((c) => !isAway(closures, c.id, draft.day))
+        .map((c) => slotsFor(appts, VISIT_TYPES, c.id, draft.day, draft.type, now)),
     );
-  }, [appts, eligible, draft.day, draft.type, now]);
+  }, [appts, eligible, draft.day, draft.type, now, closures]);
 
   const openCount = slots.filter((s) => s.available).length;
   const nextDay = useMemo(
     () =>
       openCount > 0
         ? null
-        : nextDayWithRoom(appts, CLINICIANS, VISIT_TYPES, draft.clinician, draft.day, draft.type, now),
-    [openCount, appts, draft.clinician, draft.day, draft.type, now],
+        : nextDayWithRoom(
+            appts, CLINICIANS, VISIT_TYPES, draft.clinician, draft.day, draft.type, now, closures,
+          ),
+    [openCount, appts, draft.clinician, draft.day, draft.type, now, closures],
   );
 
   const chosenClinician =
@@ -203,6 +222,30 @@ export function Find() {
               className={`rh-day${d.working ? "" : " rh-day--off"}`}
               aria-pressed={draft.day === d.iso}
               disabled={!d.working}
+              /*
+               * THE REASON, AND DELIBERATELY NOT THE SOURCE.
+               *
+               * A closed weekday says why — "Closed — Christmas Day" — because
+               * a patient looking at a dimmed Thursday in the middle of a week
+               * of open days is owed the difference between that and a
+               * Saturday. What it does NOT say is which add-on supplied the
+               * day, and that absence is a decision rather than an oversight:
+               * this is a public page, the practice's opening hours are the
+               * practice's, and telling a patient which piece of software the
+               * receptionist gets its bank holidays from is both no use to
+               * them and not theirs to be told. Every surface where the row is
+               * looked at AS A RECORD — the day sheet, the settings screen — is
+               * a staff surface and names it there.
+               *
+               * A `title` and not visible text: the button is three short lines
+               * in a horizontal strip and a holiday name would either wrap it
+               * out of shape or be truncated to nothing.
+               */
+              title={
+                d.closedFor === null
+                  ? undefined
+                  : t("find.closedFor", { reason: d.closedFor })
+              }
               onClick={() => setDraft({ day: d.iso })}
             >
               <span className="rh-day__wd">{weekdayShort(d.iso)}</span>

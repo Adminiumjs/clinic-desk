@@ -27,6 +27,7 @@ import type { Appointment, PayMethod, QueueStatus } from "../data/types.ts";
 import type { MessageKey } from "../i18n/messages/index.ts";
 import { useI18n } from "../i18n/index.tsx";
 import { ClinicianLegend } from "../components/Overlays.tsx";
+import { FromAddOn } from "../components/Affiliation.tsx";
 import {
   Avatar,
   Button,
@@ -63,6 +64,7 @@ import {
   gridRows,
   isBreakRow,
   isWorkingDay,
+  practiceClosure,
   lastVisit,
   minutesLate,
   nextStatus,
@@ -86,6 +88,7 @@ import {
   clinicianById,
   patientById,
   patientName,
+  useClosures,
   useStore,
 } from "../state/store.ts";
 
@@ -122,10 +125,18 @@ export function DaySheet() {
   const walkIns = useStore((s) => s.walkIns);
   const prefill = useStore((s) => s.prefill);
   const clearPrefill = useStore((s) => s.clearPrefill);
+  /*
+   * The practice's own closing days AND every day an enabled add-on supplies,
+   * as one list. The sheet does not know or ask which is which except to say so
+   * below — see `state/store.ts` for why the merge is a hook rather than a
+   * store field, and `add-ons/closures.ts` for why it concatenates.
+   */
+  const closures = useClosures();
+  const closed = practiceClosure(closures, sheetDay);
 
   const columns = useMemo(
-    () => daySheet(appts, CLINICIANS, sheetDay),
-    [appts, sheetDay],
+    () => daySheet(appts, CLINICIANS, sheetDay, closures),
+    [appts, sheetDay, closures],
   );
   const rows = useMemo(() => gridRows(), []);
   const offset = nowOffset(now, sheetDay);
@@ -195,10 +206,35 @@ export function DaySheet() {
 
       <ClinicianLegend />
 
-      {!isWorkingDay(sheetDay) ? (
+      {/*
+        * THE ONE TERNARY THAT DECIDES WHETHER THERE IS A DAY AT ALL.
+        *
+        * It used to ask a pure weekday question. It now asks the engine, which
+        * folds the weekend rule together with whatever the practice — and
+        * whatever an enabled add-on — says about this date. `db/seed.sql` names
+        * the failure the second half exists to stop: the dashboard saying a day
+        * is shut while the booking screen carries on offering times on it. Both
+        * screens read the same predicate over the same list, so they cannot
+        * disagree.
+        *
+        * The reason and its source are on THIS surface rather than a screen
+        * further in, because this is where somebody stands when they ask why
+        * the day is empty — and because a name printed anywhere carries the
+        * line about who else is involved with it (24 AC6).
+        */}
+      {!isWorkingDay(sheetDay, closures) ? (
         <Empty
           icon={<Clock3 size={22} aria-hidden="true" />}
-          title={t("daysheet.closed", { date: dateLong(sheetDay) })}
+          title={
+            closed === null
+              ? t("daysheet.closed", { date: dateLong(sheetDay) })
+              : t("daysheet.closedFor", { date: dateLong(sheetDay), reason: closed.reason })
+          }
+          body={
+            closed?.from == null ? undefined : (
+              <FromAddOn addOnKey={closed.from} messageKey="addon.host.dayFrom" />
+            )
+          }
           action={<Button onClick={() => setSheetDay(now.date)}>{t("daysheet.today")}</Button>}
         />
       ) : (
@@ -287,7 +323,22 @@ export function DaySheet() {
                       );
                     })}
 
-                    {col.appts.length === 0 && (
+                    {/*
+                      * One clinician away while the practice is open. The
+                      * column stays — a missing column is indistinguishable
+                      * from a clinician who never existed, and "where is she
+                      * today" is a question the desk asks out loud — and its
+                      * reason sits over it. Never an add-on's day: an imported
+                      * closing day shuts the whole practice and is handled by
+                      * the branch above, so nothing here can carry a name.
+                      */}
+                    {col.awayFor !== null && (
+                      <span className="rh-col__away">
+                        {t("daysheet.away", { reason: col.awayFor })}
+                      </span>
+                    )}
+
+                    {col.appts.length === 0 && col.awayFor === null && (
                       <span className="rh-col__empty">{t("daysheet.empty")}</span>
                     )}
                   </div>

@@ -20,6 +20,7 @@ import type {
   Appointment,
   Charge,
   Clinician,
+  Closure,
   Now,
   Patient,
   Payment,
@@ -84,35 +85,139 @@ export function dayDiff(a: string, b: string): number {
   return Math.round((parseDay(a).getTime() - parseDay(b).getTime()) / 86_400_000);
 }
 
-/** Monday to Friday. The practice does not open at the weekend. */
-export function isWorkingDay(iso: string): boolean {
+/* ------------------------------------------------------------------ closures */
+
+/*
+ * ═══════════════════════════════════════════════════════════════════════════
+ * WHY THE CLOSURE LIST IS AN ARGUMENT AND NOT A MODULE-LEVEL SET
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * `isWorkingDay` was a pure weekday predicate reading `getDay()` and nothing
+ * else. Making it answer for a day the practice has shut needed the list of
+ * closures, and there were two ways to give it one: thread it through every
+ * consumer, or hold it in module state and have a setter.
+ *
+ * THREADING WON, AND THE ARGUMENT IS REQUIRED RATHER THAN DEFAULTED.
+ *
+ *   · This module's own header is the first reason: it is pure and React-free,
+ *     data in and data out, and anything needing a "now" takes it as an
+ *     argument so the suite exercises the real thing against the shipped seed.
+ *     A module-level closure set would be state this module has to be put into
+ *     before it answers correctly, which is the property the header exists to
+ *     deny — and the failure would be a test file that passed alone and failed
+ *     in a suite that ran a different file first.
+ *
+ *   · A DEFAULT OF `[]` WOULD HAVE COMPILED EVERY EXISTING CALL SITE
+ *     UNCHANGED, and that is exactly what makes it wrong. `db/seed.sql` names
+ *     the failure this table exists to prevent: "a closure the app does not
+ *     know about would be a day the dashboard says is shut while the booking
+ *     screen carries on offering times on it." A defaulted parameter is a
+ *     machine for producing that state — one screen passes the list, the next
+ *     screen added forgets, and nothing anywhere disagrees out loud. Required,
+ *     a forgotten call site is a compile error, which is the only place this
+ *     particular bug can be caught before a patient meets it.
+ *
+ * The cost is real and was paid once: six call sites, four of them in this
+ * file. It does not grow — a seventh consumer pays one argument.
+ */
+
+/** Every closure that falls on one day, the practice's OWN entries first.
+ *
+ * The order is the display guarantee, not a convenience. An imported day and a
+ * day somebody here typed can land on the same date — that is the ordinary case
+ * on a bank holiday the practice was already closing for — and whichever comes
+ * first is the reason a reader sees on the day sheet. It is theirs.
+ * Within each group the order is by reason, so two imported sets naming one
+ * date do not swap places depending on which was imported first. */
+export function closuresOn(closures: readonly Closure[], iso: string): Closure[] {
+  return closures
+    .filter((c) => c.date === iso)
+    .sort((a, b) => {
+      if ((a.from === null) !== (b.from === null)) return a.from === null ? -1 : 1;
+      return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
+    });
+}
+
+/**
+ * The practice-wide closure on a day, or null.
+ *
+ * `clinician === null` is the schema's own spelling of "the whole practice is
+ * shut". A row naming a clinician is somebody away while the door is open, and
+ * reading it as a closure would empty a day sheet that has two other columns
+ * still seeing patients.
+ */
+export function practiceClosure(closures: readonly Closure[], iso: string): Closure | null {
+  return closuresOn(closures, iso).find((c) => c.clinician === null) ?? null;
+}
+
+/** Is this clinician away on this day — practice shut, or only them? */
+export function isAway(
+  closures: readonly Closure[],
+  clinicianId: string,
+  iso: string,
+): boolean {
+  return closuresOn(closures, iso).some(
+    (c) => c.clinician === null || c.clinician === clinicianId,
+  );
+}
+
+/**
+ * Monday to Friday, and not a day the practice has closed.
+ *
+ * The weekend half is a rule and the closure half is data, and they are one
+ * predicate because every caller wants the same answer: may anything happen
+ * here at all. A clinician-specific row deliberately does NOT make the day
+ * non-working — `isAway` is the question about one person.
+ */
+export function isWorkingDay(iso: string, closures: readonly Closure[]): boolean {
   const wd = parseDay(iso).getDay();
-  return wd >= 1 && wd <= 5;
+  if (wd < 1 || wd > 5) return false;
+  return practiceClosure(closures, iso) === null;
 }
 
 /** The next working day strictly after `iso`. */
-export function nextWorkingDay(iso: string): string {
+export function nextWorkingDay(iso: string, closures: readonly Closure[]): string {
   let cursor = addDays(iso, 1);
-  while (!isWorkingDay(cursor)) cursor = addDays(cursor, 1);
+  while (!isWorkingDay(cursor, closures)) cursor = addDays(cursor, 1);
   return cursor;
 }
 
 export interface StripDay {
   iso: string;
-  /** False at the weekend, which is why those columns are dimmed. */
+  /** False at the weekend and on a closed day, which is why those are dimmed. */
   working: boolean;
+  /**
+   * Why it is not offered, when there is something to say — the closure's own
+   * reason. Null at the weekend, which the panel's subtitle already explains
+   * and which needs no per-day wording.
+   */
+  closedFor: string | null;
+  /** The key of the add-on that supplied the reason, or null. */
+  closedBy: string | null;
 }
 
 /**
  * The day strip on the booking screen: `count` consecutive calendar days from
  * `from`. Weekends are INCLUDED rather than skipped, so a reader can see why
- * Saturday is not offered instead of wondering where it went.
+ * Saturday is not offered instead of wondering where it went. A closed weekday
+ * is included for exactly the same reason, and carries its reason so the strip
+ * can say which it is rather than looking like a weekend in the wrong place.
  */
-export function dayStrip(from: string, count: number): StripDay[] {
+export function dayStrip(
+  from: string,
+  count: number,
+  closures: readonly Closure[],
+): StripDay[] {
   const out: StripDay[] = [];
   for (let i = 0; i < count; i += 1) {
     const iso = addDays(from, i);
-    out.push({ iso, working: isWorkingDay(iso) });
+    const closure = practiceClosure(closures, iso);
+    out.push({
+      iso,
+      working: isWorkingDay(iso, closures),
+      closedFor: closure?.reason ?? null,
+      closedBy: closure?.from ?? null,
+    });
   }
   return out;
 }
@@ -255,13 +360,24 @@ export function openStarts(
   date: string,
   typeId: VisitTypeId,
   now: Now,
+  closures: readonly Closure[],
 ): { clinician: string; start: number }[] {
-  if (!isWorkingDay(date)) return [];
+  if (!isWorkingDay(date, closures)) return [];
 
+  /*
+   * An away clinician is dropped from the pool rather than having their slots
+   * drawn and disabled. That is the same rule `slotsFor` already applies to a
+   * start that could never work — absent rather than struck through — and it is
+   * the right one here for a stronger reason: a struck-through row invites
+   * "can they not fit me in", and the answer for somebody who is not in the
+   * building is no. The whole-practice case never reaches this line; it is the
+   * `isWorkingDay` above.
+   */
+  const available = clinicians.filter((c) => !isAway(closures, c.id, date));
   const pool =
     clinicianId === "any"
-      ? cliniciansFor(clinicians, typeId)
-      : clinicians.filter((c) => c.id === clinicianId && c.offers.includes(typeId));
+      ? cliniciansFor(available, typeId)
+      : available.filter((c) => c.id === clinicianId && c.offers.includes(typeId));
 
   const out: { clinician: string; start: number }[] = [];
   for (const c of pool) {
@@ -285,12 +401,13 @@ export function nextDayWithRoom(
   from: string,
   typeId: VisitTypeId,
   now: Now,
+  closures: readonly Closure[],
   withinDays = 30,
 ): string | null {
   for (let i = 1; i <= withinDays; i += 1) {
     const iso = addDays(from, i);
-    if (!isWorkingDay(iso)) continue;
-    if (openStarts(appts, clinicians, types, clinicianId, iso, typeId, now).length > 0) {
+    if (!isWorkingDay(iso, closures)) continue;
+    if (openStarts(appts, clinicians, types, clinicianId, iso, typeId, now, closures).length > 0) {
       return iso;
     }
   }
@@ -606,16 +723,32 @@ export function recalls(appts: Appointment[], now: Now): Recall[] {
 export interface DaySheetColumn {
   clinician: Clinician;
   appts: Appointment[];
+  /**
+   * Why this clinician is not here today, or null.
+   *
+   * The column is still DRAWN when somebody is away, with its reason across it.
+   * Removing it would reflow the grid and make the day look like a practice
+   * with two clinicians, which is the reading a receptionist must not get: a
+   * missing column is indistinguishable from a clinician who never existed,
+   * and the question at the desk is always "where is she today".
+   *
+   * Whole-practice closures never reach here — the screen swaps the entire grid
+   * for a closed-day state before it asks for columns.
+   */
+  awayFor: string | null;
 }
 
 export function daySheet(
   appts: Appointment[],
   clinicians: Clinician[],
   date: string,
+  closures: readonly Closure[],
 ): DaySheetColumn[] {
   return clinicians.map((clinician) => ({
     clinician,
     appts: apptsFor(appts, clinician.id, date),
+    awayFor:
+      closuresOn(closures, date).find((c) => c.clinician === clinician.id)?.reason ?? null,
   }));
 }
 
