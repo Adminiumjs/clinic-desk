@@ -24,6 +24,8 @@ import {
   type ReactNode,
 } from "react";
 
+import { tenantCurrency } from "./ambient.ts";
+
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -67,7 +69,27 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
+/**
+ * The locale the Adminium host frame pushed, and the live setter that applies
+ * it (29 D8).
+ *
+ * Module scope because it arrives from the embed bridge BEFORE React mounts —
+ * the host hands over its locale during the handshake — and again later when an
+ * operator switches language in the dashboard. Neither is persisted: the host's
+ * language is the host's setting, and writing it here would leave the app stuck
+ * in it once opened standalone.
+ */
+let hostLocale: LocaleTag | null = null;
+let applyLocale: ((t: LocaleTag) => void) | null = null;
+
+export function setHostLocale(tag: string): void {
+  if (!isLocaleTag(tag)) return; // an unknown tag leaves the app's own default
+  hostLocale = tag;
+  applyLocale?.(tag);
+}
+
 function initialLocale(): LocaleTag {
+  if (hostLocale !== null) return hostLocale;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (isLocaleTag(stored)) return stored;
@@ -83,6 +105,15 @@ export function I18nProvider({ children }: { children: ReactNode }) {
 
   // Stamp <html> so CSS logical properties resolve and screen readers announce
   // the right language. This is the single switch that turns RTL on.
+  // Register the un-persisted setter for `setHostLocale`, so a language flip in
+  // the dashboard restyles this frame live rather than on next load.
+  useEffect(() => {
+    applyLocale = setLocaleState;
+    return () => {
+      applyLocale = null;
+    };
+  }, []);
+
   useEffect(() => {
     const el = document.documentElement;
     el.setAttribute("lang", LOCALES[locale].tag);
@@ -129,7 +160,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       dir,
       setLocale,
       t,
-      money: (v, currency = "USD") =>
+      money: (v, currency = tenantCurrency()) =>
         new Intl.NumberFormat(locale, {
           style: "currency",
           currency,

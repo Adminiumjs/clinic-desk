@@ -31,7 +31,10 @@ import {
   type PublicClient,
 } from "@adminiumjs/public-client";
 
+import { resolveSurfaceConfig } from "../publicConfig.ts";
+
 import type { Appointment, Clinician, Now, VisitType, VisitTypeId, VisitStatus } from "./types.ts";
+import type { SnapshotPort } from "./snapshotPort.ts";
 import type { DataSource } from "./source.ts";
 import { demoSource } from "./source.ts";
 
@@ -86,7 +89,31 @@ const OFFERS_BY_ROLE: Record<WireClinician["role"], VisitTypeId[]> = {
   nurse: ["nurse"],
 };
 
+/**
+ * Why the last {@link loadSnapshot} returned null, or null if it did not.
+ *
+ * Module-scope because the failure has to reach a caller that only sees a
+ * `null` return, and adding a second return shape would touch every screen.
+ */
+let lastSnapshotError: Error | null = null;
+
+/** The reason the last snapshot attempt failed. */
+export function snapshotFailure(): Error | null {
+  return lastSnapshotError;
+}
+
 export interface Snapshot {
+  /** The tenant\'s ISO-4217 code, or null (28-T34). Drives every formatter. */
+  currency: string | null;
+  /** The zone the serials below were computed in. */
+  timezone: string;
+  /**
+   * Who chose {@link timezone}. Carried so the UI can SAY which zone these
+   * dates are in when nobody confirmed it — the field exists precisely because
+   * both an unconfirmed zone and a UTC substitute are silent otherwise (a
+   * console line is not an operator surface).
+   */
+  timezoneSource: 'operator' | 'host' | 'fallback' | null;
   visitTypes: VisitType[];
   clinicians: Clinician[];
   appointments: Appointment[];
@@ -94,11 +121,38 @@ export interface Snapshot {
 }
 
 /** What `Find` needs, and the columns the scope must expose for it. */
-const REQUIRED = {
+export const REQUIRED = {
   visitTypes: ["id", "name", "minutes", "fee", "color"],
   clinicians: ["id", "name", "initials", "role", "color"],
   appointments: ["clinician_id", "visit_type_id", "starts_at", "minutes"],
 };
+
+/**
+ * Read a whole ref, a page at a time.
+ *
+ * The page size is the SCOPE's — `refs[ref].limit` is the operator's ceiling
+ * and asking for more than it allows is refused. This file used to read each
+ * ref in ONE request with a generous `limit`, which works only while the set is
+ * small: past the operator's ceiling the server answers page one with a 200 and
+ * nothing anywhere says so. `max` is this app's own guard against a runaway
+ * read; hitting it is reported rather than silently dropping the tail.
+ */
+async function listAll<T>(
+  client: SnapshotPort,
+  ref: string,
+  size: number,
+  max: number,
+): Promise<T[]> {
+  const out: T[] = [];
+  const page = Math.max(1, Math.min(size, 500));
+  for (let offset = 0; offset < max; offset += page) {
+    const res = await client.list<T>(ref, { limit: page, offset });
+    out.push(...res.data);
+    if (res.data.length < page) return out;
+  }
+  console.warn(`[adminium] ${ref}: stopped at ${String(max)} rows — the rest were not read.`);
+  return out;
+}
 
 /**
  * Fetch the read-set and map it into the app's shapes.
@@ -107,7 +161,7 @@ const REQUIRED = {
  * structurally rather than in a catch — the marketplace demos are static clones
  * with no server and must keep working byte-identically.
  */
-export async function loadSnapshot(client: PublicClient): Promise<Snapshot | null> {
+export async function loadSnapshot(client: SnapshotPort): Promise<Snapshot | null> {
   try {
     /*
      * Fail at BOOT with a legible message rather than at render with a 403 on
@@ -116,16 +170,20 @@ export async function loadSnapshot(client: PublicClient): Promise<Snapshot | nul
      */
     await client.assertRefs(REQUIRED);
 
-    const { timezone } = await client.config();
+    const config = await client.config();
+    const timezone = config.timezone;
+    /* The operator's per-ref page ceiling. `?? 100` is the server's own
+     * conservative default for a ref the scope does not size. */
+    const cap = (ref: string): number => config.refs[ref]?.limit ?? 100;
     const [types, clinicians, appts] = await Promise.all([
-      client.list<WireVisitType>("visitTypes", { limit: 50 }),
-      client.list<WireClinician>("clinicians", { limit: 50 }),
-      client.list<WireAppointment>("appointments", { limit: 200 }),
+      listAll<WireVisitType>(client, "visitTypes", cap("visitTypes"), 50_000),
+      listAll<WireClinician>(client, "clinicians", cap("clinicians"), 50_000),
+      listAll<WireAppointment>(client, "appointments", cap("appointments"), 50_000),
     ]);
 
     const typeById = new Map<number, VisitTypeId>();
     const visitTypes: VisitType[] = [];
-    for (const row of types.data) {
+    for (const row of types) {
       const slug = VISIT_TYPE_BY_NAME[row.name];
       // A row with no slug cannot be booked — it has no tint, no i18n key and
       // no place in `offers`. Dropping it is the honest outcome, and is itself
@@ -143,7 +201,7 @@ export async function loadSnapshot(client: PublicClient): Promise<Snapshot | nul
     }
 
     const clinicianById = new Map<number, string>();
-    const staff: Clinician[] = clinicians.data.map((row) => {
+    const staff: Clinician[] = clinicians.map((row) => {
       const slug = row.initials.toLowerCase();
       clinicianById.set(row.id, slug);
       return {
@@ -157,7 +215,7 @@ export async function loadSnapshot(client: PublicClient): Promise<Snapshot | nul
     });
 
     const appointments: Appointment[] = [];
-    for (const row of appts.data) {
+    for (const row of appts) {
       const clinician = clinicianById.get(row.clinician_id);
       const type = typeById.get(row.visit_type_id);
       if (clinician === undefined || type === undefined) continue;
@@ -182,13 +240,29 @@ export async function loadSnapshot(client: PublicClient): Promise<Snapshot | nul
     // "Now" in the PRACTICE's zone, for the same reason every other time is.
     const nowIso = new Date().toISOString();
     return {
+      currency: config.currency,
+      timezone,
+      // Absent on the public path (the API always carries a real zone on its
+      // scope), and absent means no claim — never a guess.
+      timezoneSource: config.timezoneSource ?? null,
       visitTypes,
       clinicians: staff,
       appointments,
       now: { date: toTenantDay(nowIso, timezone), minutes: toTenantMinutes(nowIso, timezone) },
     };
   } catch (error) {
-    console.warn("[adminium] connected mode unavailable, using demo data:", error);
+    /*
+     * The reason is REPORTED, not swallowed. It used to say "using demo data",
+     * which stopped being true when a non-demo build started hard-stopping
+     * instead — and the caller was left showing a generic failure while the
+     * actual cause ("this connection has no timezone") sat in the console.
+     *
+     * `lastSnapshotError` is how the entry point recovers it. A thrown error
+     * would be cleaner and is not available: this function returning `null` is
+     * the contract every caller is written against.
+     */
+    lastSnapshotError = error instanceof Error ? error : new Error(String(error));
+    console.warn("[adminium] could not load a snapshot:", error);
     return null;
   }
 }
@@ -215,7 +289,22 @@ export function snapshotSource(snap: Snapshot): DataSource {
 /** Build a client from the build-time env, or `null` in a demo build. */
 export function clientFromEnv(): PublicClient | null {
   return createPublicClient({
-    baseUrl: import.meta.env["VITE_ADMINIUM_API_BASE_URL"] as string | undefined,
-    publishableKey: import.meta.env["VITE_ADMINIUM_PUBLISHABLE_KEY"] as string | undefined,
+    /* Dot access, matching `vite.config.ts`'s `define` — see src/vite-env.d.ts.
+       An empty string is what `define` emits for an unset flag, and
+       `createPublicClient` already treats empty as "no server". */
+    baseUrl: import.meta.env.VITE_ADMINIUM_API_BASE_URL,
+    publishableKey: import.meta.env.VITE_ADMINIUM_PUBLISHABLE_KEY,
   });
+}
+
+/**
+ * The client, resolved the 29-T16 way: baked vars first (that is
+ * `clientFromEnv`, kept as the priority so a pinned key stays pinned), then —
+ * hosted customer only — the served `surface-config.json`, which is what makes
+ * key rotation Studio + reload instead of a rebuild (29 D10).
+ */
+export async function clientFromConfig(): Promise<PublicClient | null> {
+  const config = await resolveSurfaceConfig();
+  if (config === null) return null;
+  return createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey });
 }
