@@ -174,6 +174,8 @@ interface State {
   setPersona: (p: Persona) => void;
   initTheme: () => void;
   toggleTheme: () => void;
+  /** Theme pushed by the Adminium host frame; never persisted (29 D8). */
+  setHostTheme: (theme: Theme) => void;
   setNavOpen: (open: boolean) => void;
   setDockOpen: (open: boolean) => void;
   advanceClock: () => void;
@@ -304,6 +306,18 @@ export const useStore = create<State>((set, get) => ({
       window.matchMedia("(prefers-color-scheme: dark)").matches;
     const theme: Theme =
       stored === "dark" || stored === "light" ? stored : prefersDark ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    set({ theme });
+  },
+
+  /*
+   * The HOST owns the theme while blended: it is the dashboard's setting, not
+   * this app's, so this does not write the app's own storage key. Persisting it
+   * would leave the app stuck in the host's theme after it is opened
+   * standalone.
+   */
+  setHostTheme: (theme) => {
+    if (get().theme === theme) return;
     document.documentElement.setAttribute("data-theme", theme);
     set({ theme });
   },

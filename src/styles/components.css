@@ -1069,3 +1069,18 @@
   font-weight: 800;
   padding: 5px 10px;
 }
+
+/*
+ * The internal placement (29-app-surfaces.md D6): this app inside the Adminium
+ * dashboard's content outlet, in a same-origin iframe.
+ *
+ * The FRAME is the scroll container — the host's outlet is `overflow: hidden` —
+ * so this must be at least the frame's height and must not add a second
+ * scrollbar. `min-height: 100%` rather than `100vh`: inside an iframe those are
+ * the same until the host resizes, and then `100vh` is the stale one.
+ */
+.rh-embedded {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
