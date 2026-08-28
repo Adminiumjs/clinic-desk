@@ -6,10 +6,12 @@
  * flattens the three area bundles into one lookup and a later area silently
  * wins a collision.
  *
- * Two lines in here are worded exactly and must not be paraphrased in any
- * locale: the card sheet's demo callout, and the cancellation line on the
- * confirmation. Both are promises to the reader about what this demo does and
- * what the practice would do.
+ * Three lines in here are worded exactly and must not be paraphrased in any
+ * locale: the card sheet's demo callout, `confirm.sub` (which says no text is
+ * actually sent), and the cancellation line on the confirmation. All three are
+ * promises to the reader about what this demo does and what the practice would
+ * do. `confirm.sub` in particular must never go back to claiming a text was
+ * sent — nothing sends one (24 D11).
  */
 import type { LocaleTag } from "../locales.ts";
 
@@ -74,7 +76,7 @@ const EN = {
 
   /* ---------------------------------------------------- 3. confirmation */
   "confirm.title": "You are booked in",
-  "confirm.sub": "We have sent a text to the number on your record.",
+  "confirm.sub": "Keep the reference below. This is a demo, so no real text is sent.",
   "confirm.ref": "Reference",
   "confirm.clinician": "Clinician",
   "confirm.when": "When",
@@ -311,7 +313,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "Sie sind eingetragen",
-    "confirm.sub": "Wir haben eine SMS an die Nummer in Ihrem Eintrag geschickt.",
+    "confirm.sub": "Notieren Sie sich die Referenz unten. Dies ist eine Demo, es wird keine echte SMS verschickt.",
     "confirm.ref": "Referenz",
     "confirm.clinician": "Behandler",
     "confirm.when": "Wann",
@@ -537,7 +539,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "C’est réservé",
-    "confirm.sub": "Nous avons envoyé un SMS au numéro de votre fiche.",
+    "confirm.sub": "Notez la référence ci-dessous. Ceci est une démo, aucun SMS réel n’est envoyé.",
     "confirm.ref": "Référence",
     "confirm.clinician": "Praticien",
     "confirm.when": "Quand",
@@ -763,7 +765,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "Máte rezervováno",
-    "confirm.sub": "Poslali jsme SMS na číslo ve vašem záznamu.",
+    "confirm.sub": "Poznamenejte si číslo rezervace níže. Toto je ukázka, žádná skutečná SMS se neodesílá.",
     "confirm.ref": "Číslo rezervace",
     "confirm.clinician": "Ošetřující",
     "confirm.when": "Kdy",
@@ -989,7 +991,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "Du er booket ind",
-    "confirm.sub": "Vi har sendt en sms til nummeret på dine oplysninger.",
+    "confirm.sub": "Notér referencen nedenfor. Dette er en demo, der sendes ingen rigtig sms.",
     "confirm.ref": "Reference",
     "confirm.clinician": "Behandler",
     "confirm.when": "Hvornår",
@@ -1215,7 +1217,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "已为您约好",
-    "confirm.sub": "我们已向您登记的号码发送短信。",
+    "confirm.sub": "请记下下方的编号。这是演示，不会真的发送短信。",
     "confirm.ref": "编号",
     "confirm.clinician": "医护人员",
     "confirm.when": "时间",
@@ -1441,7 +1443,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "已經為您預約好",
-    "confirm.sub": "我們已傳簡訊到您資料上的號碼。",
+    "confirm.sub": "請記下下方的編號。這是示範，不會真的發送簡訊。",
     "confirm.ref": "編號",
     "confirm.clinician": "醫療人員",
     "confirm.when": "時間",
@@ -1667,7 +1669,7 @@ export const screens = {
 
     /* ---------------------------------------------------- 3. confirmation */
     "confirm.title": "تم حجز موعدك",
-    "confirm.sub": "أرسلنا رسالة نصية إلى الرقم المسجّل لديك.",
+    "confirm.sub": "احتفظ بالرقم المرجعي أدناه. هذا عرض توضيحي، ولا تُرسل رسالة نصية حقيقية.",
     "confirm.ref": "الرقم المرجعي",
     "confirm.clinician": "المعالِج",
     "confirm.when": "متى",
