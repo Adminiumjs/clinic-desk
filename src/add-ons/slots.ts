@@ -3,15 +3,15 @@
  *
  * ── IT IS NOT THE CLOSED REGISTRY, AND THE DIFFERENCE IS LOAD-BEARING ───────
  *
- * `vendor/host/slots.ts` exports the twelve-id CLOSED REGISTRY under the name
+ * `vendor/host/slots.ts` exports the whole CLOSED REGISTRY under the name
  * `HOSTED_SLOTS`, which is the same identifier this file uses for the one id
  * this app actually draws. Importing the wrong one is a mistake that compiles:
  * every check in the host kit is generic over whatever `hostedSlots` holds, so
- * the wider union would make the mounts guard demand mounts for twelve ids, the
- * empty-behaviour table need twelve rows, and the payload generic accept ids
- * nothing in `src/screens/` renders. The kit's mounts guard asserts this list is
- * a strict SUBSET of the registry, so a mis-import is a named failure rather
- * than a silently widened contract.
+ * the wider union would make the mounts guard demand mounts for every id in the
+ * registry, the empty-behaviour table need a row for each, and the payload
+ * generic accept ids nothing in `src/screens/` renders. The kit's mounts guard
+ * asserts this list is a strict SUBSET of the registry, so a mis-import is a
+ * named failure rather than a silently widened contract.
  *
  * ── WHY ONE, AND NOT THE THREE A CLINIC LOOKS LIKE IT COULD OFFER ───────────
  *
