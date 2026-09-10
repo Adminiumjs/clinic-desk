@@ -35,6 +35,8 @@ import {
   labelPairingSourceGuard,
   lexiconGuard,
   payloadCastsGuard,
+  deliveryClaimsGuard,
+  recordPayloadGuard,
   stylesGuard,
   tierGuard,
   vendoredGuard,
@@ -44,6 +46,15 @@ import { HOSTED_SLOTS, CLOSED_SLOT_IDS } from "./slots.ts";
 import { MESSAGES, registeredAddOnMessageKeys } from "../i18n/messages/index.ts";
 import { demoAddOns } from "./registry.ts";
 import { DAY_SOURCES } from "./daySources.ts";
+
+/**
+ * Claims about a delivery this app has already answered for (34 D19).
+ *
+ * Filled in below, per key, with the argument being made — see
+ * `testing/kit/delivery-claims.ts` for the three that are legitimate.
+ */
+const DELIVERY_CLAIMS: Record<string, string> = {};
+
 
 /*
  * Importing the registry is not incidental — it is what REGISTERS the add-ons'
@@ -103,4 +114,16 @@ payloadCastsGuard(hostKit);
 factsGuard(hostKit);
 vendoredGuard(hostKit);
 stylesGuard(hostKit);
+/*
+ * 34 D19. This app labels no simulation — it has no demo-marker convention at
+ * all — so every claim it makes has to be answered in `claimsDeclared`, by
+ * name, with the argument being made.
+ */
+deliveryClaimsGuard(hostKit, {
+  bundleFor: (locale) => MESSAGES[locale as "en-US"] ?? {},
+  demoLabels: {},
+  claimsDeclared: DELIVERY_CLAIMS,
+});
+recordPayloadGuard(hostKit);
+
 tierGuard(hostKit);
