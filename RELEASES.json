@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "releases": [
+    {
+      "name": "@adminiumjs/app-clinic",
+      "version": "1.0.0",
+      "integrity": "sha512-9URYKvOzKCS37ixmSw5cndGEKwE5nG/EYB1Sp3oQBcYOWUz6H1eWFwIq+E7TN2mIw+WUkJrUt8hI1722QSja8Q==",
+      "publishedAt": "2026-09-12T18:56:36.957Z"
+    }
+  ]
+}
