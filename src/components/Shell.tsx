@@ -12,6 +12,7 @@
  */
 
 import { isEmbedded } from "../embed.ts";
+import { DEMO } from "../surface.ts";
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -29,7 +30,7 @@ import {
 } from "lucide-react";
 
 import type { View } from "../data/types.ts";
-import { timezoneNotice } from "../i18n/ambient.ts";
+import { appName } from "../i18n/ambient.ts";
 import { useI18n } from "../i18n/index.tsx";
 import { ageOn } from "../lib/schedule.ts";
 import { DESK_STAFF, PATIENTS, PRACTICE_ADDRESS, useStore } from "../state/store.ts";
@@ -57,6 +58,23 @@ const NAV: NavEntry[] = [
   { view: "recalls", labelKey: "chrome.nav.recalls", icon: CalendarPlus },
   { view: "settings", labelKey: "chrome.nav.settings", icon: SlidersHorizontal },
 ];
+
+/**
+ * What this app is CALLED on screen.
+ *
+ * The operator's name from Adminium when they set one, else the name this
+ * build ships with. One helper rather than a `??` at each render site: a
+ * sidebar, a wordmark and a dialog label that disagree about the name of the
+ * app is a worse bug than any of them being wrong alone.
+ *
+ * Not localized, deliberately — an operator types one business name and it is
+ * not Adminium's to translate. `chrome.brand` still is, for the apps that keep
+ * the shipped one.
+ */
+function useBrand(): string {
+  const { t } = useI18n();
+  return appName() ?? t("chrome.brand");
+}
 
 function NavList({ onPick }: { onPick?: () => void }) {
   const { t } = useI18n();
@@ -88,6 +106,7 @@ function NavList({ onPick }: { onPick?: () => void }) {
 }
 
 function Brand() {
+  const brand = useBrand();
   const { t } = useI18n();
   return (
     <div className="rh-sidebar__brand">
@@ -95,7 +114,7 @@ function Brand() {
         <Stethoscope size={18} />
       </span>
       <span>
-        <span className="rh-sidebar__name">{t("chrome.brand")}</span>
+        <span className="rh-sidebar__name">{brand}</span>
         <span className="rh-sidebar__sub" style={{ display: "block" }}>
           {t("chrome.brand.desk")}
         </span>
@@ -104,8 +123,21 @@ function Brand() {
   );
 }
 
+/**
+ * The demo's own footer — and ONLY the demo's.
+ *
+ * It named the app a demo beside an `adminium.dev/demo/<key>` chip. True of the
+ * marketplace demo; a falsehood on an operator's own deployment, where it told
+ * their staff and their customers that the thing they were working in was a
+ * sample. It shipped that way in all eight locales, in the hosted bundles both.
+ *
+ * `DEMO` folds to a literal at build time (`surface.ts`), so in every other
+ * build this markup is eliminated rather than merely skipped — the same rule
+ * D24 applied to the demo dock, which this footer was simply missed by.
+ */
 function Footer() {
   const { t } = useI18n();
+  if (!DEMO) return null;
   return (
     <div className="rh-sidebar__foot">
       {t("chrome.footer.copy")}
@@ -200,35 +232,24 @@ function PatientSearch() {
   );
 }
 
-/**
- * The one VISIBLE trace of a zone nobody confirmed (data/sessionSource.ts).
+/*
+ * THE ZONE CHIP IS GONE, and the warning it carried now lives in Adminium.
  *
- * Two states, one chip. `fallback` — no zone on the connection at all, so every
- * date renders in UTC. `host` — a real zone, but the one Adminium took from the
- * machine it runs on, which is plausible and unverified and therefore the more
- * dangerous of the two: UTC announces itself, a wrong city does not.
+ * It rendered "Dates shown in UTC" — or a city nobody confirmed — permanently,
+ * in the header of every screen, for everyone. But an unset timezone is the
+ * OPERATOR's to fix, on the connection, in Adminium; staff and customers
+ * reading this app can do nothing about it and were shown it on every page
+ * anyway. Studio's Connections card now names the zone dates actually render
+ * in whenever a connection has none, which is both where the fix is and the
+ * only audience that can apply it.
  *
- * A chip and not a banner because the state is degraded, not broken; the fix
- * lives in the tooltip. Renders nothing for an operator-set zone, which is what
- * nearly every boot should be.
+ * `timezoneNotice()` stays in `i18n/ambient.ts`: the claim is still worth
+ * carrying and still logged at boot. Nothing renders it.
  */
-function ZoneNotice() {
-  const { t } = useI18n();
-  const notice = timezoneNotice();
-  if (notice === null) return null;
-  return notice.source === "fallback" ? (
-    <span className="rh-chip" title={t("chrome.utc.why")}>
-      {t("chrome.utc.notice")}
-    </span>
-  ) : (
-    <span className="rh-chip" title={t("chrome.zone.why", { zone: notice.zone })}>
-      {t("chrome.zone.notice", { zone: notice.zone })}
-    </span>
-  );
-}
 
 /** The desk's internal chrome. */
 function ClinicShell({ children }: { children: React.ReactNode }) {
+  const brand = useBrand();
   const { t } = useI18n();
   const navOpen = useStore((s) => s.navOpen);
   const setNavOpen = useStore((s) => s.setNavOpen);
@@ -253,7 +274,7 @@ function ClinicShell({ children }: { children: React.ReactNode }) {
             className="rh-sheet"
             role="dialog"
             aria-modal="true"
-            aria-label={t("chrome.brand")}
+            aria-label={brand}
           >
             <div style={{ display: "flex", alignItems: "center" }}>
               <Brand />
@@ -287,7 +308,6 @@ function ClinicShell({ children }: { children: React.ReactNode }) {
           <PatientSearch />
           <div className="rh-topbar__spacer" />
 
-          <ZoneNotice />
 
           <ThemeButton />
           <span className="rh-userchip">
@@ -310,6 +330,7 @@ function ClinicShell({ children }: { children: React.ReactNode }) {
  * back, rather than being a dead link in the header.
  */
 function PatientShell({ children }: { children: React.ReactNode }) {
+  const brand = useBrand();
   const { t } = useI18n();
   const view = useStore((s) => s.view);
   const go = useStore((s) => s.go);
@@ -328,7 +349,7 @@ function PatientShell({ children }: { children: React.ReactNode }) {
             <Stethoscope size={17} />
           </span>
           <span>
-            <span className="rh-site__wordmark">{t("chrome.brand")}</span>
+            <span className="rh-site__wordmark">{brand}</span>
             <span className="rh-site__tag">{t("chrome.brand.site")}</span>
           </span>
         </button>
@@ -361,8 +382,14 @@ function PatientShell({ children }: { children: React.ReactNode }) {
           <MapPin size={13} aria-hidden="true" />
           {PRACTICE_ADDRESS}
         </span>
-        <span>{t("chrome.footer.copy")}</span>
-        <span className="rh-sidebar__chip rh-mono">{t("chrome.footer.chip")}</span>
+        {/* Demo-only, like the sidebar's <Footer/>. The address above it is
+            real content and stays in every build. */}
+        {DEMO && (
+          <>
+            <span>{t("chrome.footer.copy")}</span>
+            <span className="rh-sidebar__chip rh-mono">{t("chrome.footer.chip")}</span>
+          </>
+        )}
       </footer>
     </div>
   );
