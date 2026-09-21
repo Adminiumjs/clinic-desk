@@ -398,6 +398,9 @@
         "group": "manifest:clinic",
         "icon": "calendar-days",
         "order": 2
+      },
+      "bindings": {
+        "rows": "appointments"
       }
     },
     {
@@ -411,6 +414,9 @@
         "group": "manifest:clinic",
         "icon": "users",
         "order": 3
+      },
+      "bindings": {
+        "rows": "patients"
       }
     },
     {
@@ -424,6 +430,9 @@
         "group": "manifest:clinic",
         "icon": "armchair",
         "order": 4
+      },
+      "bindings": {
+        "rows": "appointments"
       }
     },
     {
@@ -437,6 +446,9 @@
         "group": "manifest:clinic",
         "icon": "receipt",
         "order": 5
+      },
+      "bindings": {
+        "rows": "charges"
       }
     },
     {
@@ -450,6 +462,9 @@
         "group": "manifest:clinic",
         "icon": "calendar-clock",
         "order": 6
+      },
+      "bindings": {
+        "rows": "recalls"
       }
     }
   ],
