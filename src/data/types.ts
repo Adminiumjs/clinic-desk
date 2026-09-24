@@ -1,216 +1,387 @@
 /**
- * The app's domain types.
+ * The practice's data, as the desk and the patients' pages hold it.
  *
- * `View` is the routing union: `app/App.tsx` maps every member to a screen, so
- * adding a view here is a compile error until a screen exists for it. That is
- * what keeps every nav item, sheet link and footer link landing somewhere real.
+ * Each row is a row of one of the app's tables, in the table's own column
+ * names, so the store, the data sources and the server all say the same
+ * thing: `starts_at`, not a translation of it. Three conventions hold
+ * everywhere:
  *
- * Times are MINUTES SINCE MIDNIGHT — plain integers — because every question
- * this app answers ("does a 45-minute visit fit before lunch?", "how long has
- * she been waiting?") is subtraction, and a `Date` would make it arithmetic
- * over timezones instead. Dates stay as `YYYY-MM-DD` strings for the same
- * reason: they are calendar days, not instants.
+ *   - keys are numbers (the tables number their own rows);
+ *   - an INSTANT is an ISO string in UTC (`2026-07-28T08:15:00.000Z`) and a
+ *     person reads it on the practice's clock (`lib/clock.ts`);
+ *   - a CALENDAR DAY is `YYYY-MM-DD` on the practice's calendar, never an
+ *     instant: a closure "on Friday" is Friday wherever the reader is.
  *
- * Scope boundary, stated in the types themselves: an appointment carries a
- * reason as ONE short line and nothing else about why someone is here. There is
- * no field for a diagnosis, a code, a result or a note from a clinician,
- * because this is the front desk and the day, not the record.
+ * Money is a number in the practice's currency. There is no clinical record
+ * here on purpose: a visit carries one line saying what it is for and a note
+ * for the desk, and allergies are the one clinical-adjacent fact a front desk
+ * keeps.
  */
 
-export type View =
-  | "find"
-  | "details"
-  | "confirm"
-  | "myvisits"
-  | "daysheet"
-  | "waiting"
-  | "patients"
-  | "accounts"
-  | "recalls"
-  | "settings"
-  | "notfound";
+export type Id = number;
+/** An instant, as an ISO string in UTC. */
+export type Instant = string;
+/** A calendar day on the practice's calendar, `YYYY-MM-DD`. */
+export type Day = string;
+/** A wall time on the practice's clock, `HH:MM`. */
+export type Hhmm = string;
 
-export type Persona = "patient" | "clinic";
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
+export const WEEKDAYS: readonly Weekday[] = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
 
-/** The four things someone can book, each with its own length and fee. */
-export type VisitTypeId = "routine" | "newpatient" | "physio" | "nurse";
+// ── reference data ──────────────────────────────────────────────────────────
 
-export interface VisitType {
-  id: VisitTypeId;
-  /** i18n key for the display name. */
-  label: string;
-  /** i18n key for the one-line description under it. */
-  blurb: string;
-  /** How long the visit runs. Always a multiple of the 15-minute grid. */
-  minutes: number;
-  /** What the visit costs, in whole currency units. */
-  fee: number;
-  tint: string;
+export interface Settings {
+  id: Id;
+  practice_name: string;
+  mark: string;
+  address: string;
+  phone: string;
+  email: string | null;
+  intro: string | null;
+  directions: string | null;
+  map_link: string | null;
+  entrance_photo: string | null;
+  pay_note: string | null;
+  insurer_note: string | null;
+  privacy_link: string | null;
+  currency: string;
+  language: string;
+  slot_minutes: number;
+  booking_days: number;
+  min_notice_minutes: number;
+  new_patients_online: boolean;
+  online_booking_on: boolean;
+  no_show_minutes: number;
+  cancel_hours: number;
+  reminders_on: boolean;
+  default_lead_hours: number;
+  kiosk_on: boolean;
+}
+
+export interface OpeningHours {
+  id: Id;
+  weekday: Weekday;
+  open: boolean;
+  opens: Hhmm;
+  closes: Hhmm;
+  break_start: Hhmm | null;
+  break_end: Hhmm | null;
 }
 
 export interface Clinician {
-  id: string;
-  /** A person's name — a proper noun, never translated. */
+  id: Id;
   name: string;
-  ini: string;
-  /** i18n key for the role line. */
-  role: string;
-  tint: string;
-  /** Which visit types this clinician takes. A GP does not do physiotherapy. */
-  offers: VisitTypeId[];
+  short_name: string;
+  role_label: string;
+  color: string;
+  photo: string | null;
+  bio: string | null;
+  bookable_online: boolean;
+  active: boolean;
+  position: number;
+  staff_email: string | null;
 }
+
+export interface VisitType {
+  id: Id;
+  name: string;
+  short_name: string;
+  minutes: number;
+  fee: number;
+  color: string;
+  icon: string;
+  bookable_online: boolean;
+  new_patients_only: boolean;
+  active: boolean;
+  position: number;
+}
+
+export interface ClinicianVisitType {
+  id: Id;
+  clinician_id: Id;
+  visit_type_id: Id;
+}
+
+export interface ClinicianHours {
+  id: Id;
+  clinician_id: Id;
+  weekday: Weekday;
+  opens: Hhmm;
+  closes: Hhmm;
+  break_start: Hhmm | null;
+  break_end: Hhmm | null;
+}
+
+export interface Closure {
+  id: Id;
+  client_key: string | null;
+  /** Null: the whole practice is shut. */
+  clinician_id: Id | null;
+  from_date: Day;
+  to_date: Day;
+  label: string;
+  /** What the patients read ("The practice is closed for staff training that day."). */
+  note: string | null;
+  active: boolean;
+  created_at: Instant | null;
+}
+
+export interface Faq {
+  id: Id;
+  question: string;
+  answer: string;
+  position: number;
+  active: boolean;
+}
+
+// ── people and work ─────────────────────────────────────────────────────────
 
 export interface Patient {
-  id: string;
-  /** A proper noun. */
+  id: Id;
+  client_key: string | null;
   name: string;
-  ini: string;
-  /** `YYYY-MM-DD`. Age is DERIVED from this against the pinned date. */
-  dob: string;
+  born_on: Day;
   mobile: string;
-  /**
-   * i18n key for an allergies chip, or null. This is the one clinical-adjacent
-   * fact a real front desk carries, and it is deliberately the only one.
-   */
-  allergies: string | null;
+  email: string | null;
+  address: string | null;
+  emergency_contact: string | null;
+  allergies_note: string | null;
+  insurer: string | null;
+  policy_ref: string | null;
+  language: string | null;
+  remind_email: boolean;
+  remind_lead_hours: number;
+  status: "active" | "archived";
+  created_at: Instant | null;
 }
 
-/**
- * The visit state machine.
- *
- * `booked → checked_in → roomed → with_clinician → ready → done`, with
- * `no_show` and `cancelled` as the two ways out. `ready` is "ready to go" —
- * still in the building; `done` is seen and gone, which is why the waiting
- * board stops at `ready`.
- */
-export type VisitStatus =
+export type RegistrationStatus = "new" | "rang" | "accepted" | "declined" | "duplicate";
+
+export interface Registration {
+  id: Id;
+  ref: string;
+  name: string;
+  born_on: Day;
+  mobile: string;
+  email: string | null;
+  address: string | null;
+  emergency_contact: string | null;
+  language: string | null;
+  status: RegistrationStatus;
+  patient_id: Id | null;
+  outcome: string | null;
+  note: string | null;
+  handled_by: string | null;
+  handled_at: Instant | null;
+  created_at: Instant | null;
+}
+
+export type AppointmentStatus =
   | "booked"
   | "checked_in"
   | "roomed"
   | "with_clinician"
   | "ready"
-  | "done"
+  | "seen"
   | "no_show"
   | "cancelled";
 
-/** The four statuses that put someone on the waiting board. */
-export type QueueStatus = "checked_in" | "roomed" | "with_clinician" | "ready";
+/** The four statuses of someone in the building, in the order they move. */
+export const IN_THE_BUILDING: readonly AppointmentStatus[] = ["checked_in", "roomed", "with_clinician", "ready"];
+/** The statuses that hold a clinician's time (the server's booking rule counts the same). */
+export const COUNTED: readonly AppointmentStatus[] = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
+
+export type Channel = "online" | "phone" | "desk" | "walk_in" | "waiting_list" | "recall";
+export type CheckStatus = "to_check" | "rang" | "accepted" | "linked" | "declined";
 
 export interface Appointment {
-  /** The reference the patient is given, e.g. `RH-4013`. */
-  id: string;
-  patient: string;
-  clinician: string;
-  type: VisitTypeId;
-  /** `YYYY-MM-DD`. */
-  date: string;
-  /** Start, in minutes since midnight. The end is derived from the type. */
-  start: number;
-  status: VisitStatus;
-  /** Minutes since midnight when they arrived at the desk, or null. */
-  checkedInAt: number | null;
-  /** i18n key for the one short plain line saying why they are coming. */
-  reason: string;
-  /** i18n key for what the patient told the desk, or null. */
-  deskNote: string | null;
-  /** "See them again in N weeks", or null when no recall was set. */
-  recallWeeks: number | null;
-  /** Set when the visit was cancelled inside 24 hours of its start. */
-  lateCancel?: boolean;
-}
-
-/** What a visit costs, once it has happened. */
-export interface Charge {
-  id: string;
-  /** The appointment reference this charge came from. */
-  appt: string;
-  patient: string;
-  /** Whole currency units. */
-  amount: number;
-  /** `YYYY-MM-DD` the charge was raised — what the age chip counts from. */
-  raised: string;
+  id: Id;
+  ref: string;
+  patient_id: Id | null;
+  /** A first visit's details, until the desk accepts it or links it to a patient. */
+  new_name: string | null;
+  new_born_on: Day | null;
+  new_mobile: string | null;
+  new_email: string | null;
+  clinician_id: Id | null;
+  visit_type_id: Id;
+  starts_at: Instant;
+  minutes: number;
+  fee: number | null;
+  waived: number;
+  paid: number;
+  balance: number;
+  reason: string | null;
+  desk_note: string | null;
+  status: AppointmentStatus;
+  channel: Channel;
+  checked_in_at: Instant | null;
+  roomed_at: Instant | null;
+  seen_at: Instant | null;
+  cancelled_at: Instant | null;
+  late_cancel: boolean;
+  cancelled_by: "patient" | "desk" | null;
+  recall_weeks: number | null;
+  language: string | null;
+  booked_by: string | null;
+  /** Null: not a first visit booked online. */
+  check_status: CheckStatus | null;
+  client_key: string | null;
+  created_at: Instant | null;
 }
 
 export type PayMethod = "card" | "cash" | "transfer";
 
 export interface Payment {
-  id: string;
-  charge: string;
+  id: Id;
+  appointment_id: Id;
   amount: number;
   method: PayMethod;
-  /** `YYYY-MM-DD`. "Taken today" sums the ones matching the pinned date. */
-  date: string;
+  taken_by: string | null;
+  paid_at: Instant;
+  voided: boolean;
+  void_reason: string | null;
+  voided_by: string | null;
+  client_key: string | null;
 }
+
+export interface WriteOff {
+  id: Id;
+  appointment_id: Id;
+  amount: number;
+  reason: string;
+  written_by: string | null;
+  written_at: Instant;
+  client_key: string | null;
+}
+
+export interface CheckNote {
+  id: Id;
+  registration_id: Id | null;
+  appointment_id: Id | null;
+  note: string;
+  written_by: string | null;
+  client_key: string | null;
+  created_at: Instant | null;
+}
+
+export type RecallStatus = "due" | "noted" | "booked" | "not_needed";
+
+export interface Recall {
+  id: Id;
+  patient_id: Id;
+  from_appointment_id: Id | null;
+  visit_type_id: Id | null;
+  clinician_id: Id;
+  client_key: string | null;
+  weeks: number;
+  due_on: Day;
+  status: RecallStatus;
+  reason: string | null;
+  dismiss_reason: string | null;
+  booked_appointment_id: Id | null;
+  created_at: Instant | null;
+}
+
+export type PartOfDay = "any" | "mornings" | "afternoons";
+
+export interface WaitingEntry {
+  id: Id;
+  patient_id: Id;
+  visit_type_id: Id;
+  clinician_id: Id | null;
+  part_of_day: PartOfDay;
+  status: "waiting" | "booked" | "removed";
+  channel: "online" | "desk";
+  booked_appointment_id: Id | null;
+  note: string | null;
+  created_at: Instant | null;
+}
+
+export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled";
+export type MessageStatus = "queued" | "sent" | "failed" | "skipped";
+
+export interface Message {
+  id: Id;
+  kind: MessageKind;
+  patient_id: Id | null;
+  appointment_id: Id | null;
+  recall_id: Id | null;
+  closure_id: Id | null;
+  to_address: string | null;
+  language: string | null;
+  status: MessageStatus;
+  error: string | null;
+  due_at: Instant | null;
+  sent_at: Instant | null;
+  created_by: string | null;
+  client_key: string | null;
+  created_at: Instant | null;
+}
+
+export interface DayClose {
+  id: Id;
+  day: Day;
+  no_shows_marked: number;
+  cash_expected: number;
+  cash_counted: number | null;
+  note: string | null;
+  closed_by: string | null;
+  closed_at: Instant;
+}
+
+/** Every table, by its short name, with the row it holds. */
+export interface Tables {
+  settings: Settings;
+  opening_hours: OpeningHours;
+  clinicians: Clinician;
+  visit_types: VisitType;
+  clinician_visit_types: ClinicianVisitType;
+  clinician_hours: ClinicianHours;
+  closures: Closure;
+  faqs: Faq;
+  patients: Patient;
+  registrations: Registration;
+  appointments: Appointment;
+  payments: Payment;
+  write_offs: WriteOff;
+  check_notes: CheckNote;
+  recalls: Recall;
+  waiting_list: WaitingEntry;
+  messages: Message;
+  day_closes: DayClose;
+}
+export type TableRef = keyof Tables;
+
+// ── screens ─────────────────────────────────────────────────────────────────
 
 /**
- * A DAY THE PRACTICE DOES NOT WORK.
+ * Every screen, by the id the URL, the sidebar and the demo card use.
  *
- * `db/schema.sql` has held this table since the app was written and nothing in
- * `src/` read it: no type, no `DataSource` method, no engine function and no
- * screen. The seed inserts zero rows on purpose, and its comment names the
- * exact failure that made the table worth having — *"a closure the app does not
- * know about would be a day the dashboard says is shut while the booking screen
- * carries on offering times on it"*. That sentence is why `isWorkingDay` below
- * takes the list as an argument instead of reading a module-level one: a
- * default would let one screen pass closures and another forget, which is
- * precisely the two-screens-disagreeing failure it describes.
- *
- * ── THE TWO SHAPES OF CLOSURE, AND WHY ONE FIELD CARRIES BOTH ───────────────
- *
- * `clinician: null` is the whole practice shut — a bank holiday, a refit, a
- * training day. A clinician id is one person away while the practice is open,
- * which the schema states in the same words. Nothing may be booked against
- * either, and they are one table because they are one fact at two scopes; two
- * tables would mean two lists to merge and two chances to check only one.
- *
- * ── `from`, AND THE WORST BUG THIS APP COULD HAVE ──────────────────────────
- *
- * A practice shuts for reasons that are NOT public holidays. If an imported set
- * could overwrite, replace or outrank a day somebody here typed, a re-import
- * would silently delete "Refit — no clinicians on site" from the twenty-seventh
- * of December because a curated set happens to name that date too, and the
- * first anybody would know is a patient arriving at a locked door.
- *
- * So `from` is the add-on's KEY when a day arrived from one, and null when a
- * person here entered it — and every rule in this app is written against that
- * field rather than against the date. `closures.ts` merges by CONCATENATION,
- * so an imported day cannot displace anything; `closuresOn` returns the
- * practice's own rows first, so an imported name cannot be the one a reader
- * sees instead; and only a row with `from === null` can be deleted from the
- * settings screen, so the delete button cannot reach what an add-on supplied.
- *
- * It is a KEY and not a name because no file in this app but `add-ons/registry`
- * may name an add-on (24 AC5). The screen resolves the key to a display name
- * through the registry at render time, so what a reader sees is the add-on's
- * own name, arriving from the add-on.
+ * `app/App.tsx` maps each to its component, so a view added here is a compile
+ * error until a screen exists for it — that is what keeps every link, nav row
+ * and card chip landing somewhere real.
  */
-export interface Closure {
-  /** `YYYY-MM-DD`. A calendar day, never an instant. */
-  date: string;
-  /**
-   * Why the practice is shut, as a reader sees it. For a day somebody here
-   * entered this is their own words; for an imported day it is the country's
-   * own name for the holiday. Never a key: neither of those is translatable by
-   * this app, and running one through `t()` would print a dotted key.
-   */
-  reason: string;
-  /** null when the whole practice is shut; a clinician id when one is away. */
-  clinician: string | null;
-  /** The key of the add-on that supplied this day, or null for the practice's own. */
-  from: string | null;
-}
+export type PatientView = "find" | "details" | "confirm" | "visits" | "team" | "findus" | "prices" | "sooner" | "prefs" | "register" | "faq" | "notfound";
+export type DeskView =
+  | "daysheet"
+  | "waiting"
+  | "patients"
+  | "registrations"
+  | "week"
+  | "waitlist"
+  | "accounts"
+  | "recalls"
+  | "hours"
+  | "outbox"
+  | "endofday"
+  | "settings"
+  | "kiosk"
+  | "notfound";
+export type View = PatientView | DeskView;
 
-/** The pinned clock, passed into every engine function that needs a "now". */
-export interface Now {
-  /** `YYYY-MM-DD`. */
-  date: string;
-  /** Minutes since midnight. */
-  minutes: number;
-}
+export type Persona = "patient" | "clinic";
 
-export interface Toast {
-  id: number;
-  /** Already-resolved text — toasts are raised from the store, post-`t()`. */
-  text: string;
-  tone: "pos" | "danger" | "info";
-}
+/** The desk's roles, by the manifest's keys; `null` when the person holds none of them (an administrator). */
+export type DeskRole = "reception" | "clinician" | "manager" | "kiosk";

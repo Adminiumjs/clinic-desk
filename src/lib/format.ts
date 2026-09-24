@@ -1,191 +1,112 @@
 /**
- * Presentation helpers.
+ * How the desk and the patients' pages write a time, a day, an amount.
  *
- * Everything here reads the ambient locale (`i18n/ambient.ts`) rather than a
- * hook, so the store and the pure engine can format without being inside the
- * React tree. Callers that ARE in the tree get the same output, because the
- * provider pushes its own `t` / `money` / `number` into the ambient module on
- * every render.
- *
- * Nothing in this file reads the real clock — `now` is always passed in.
+ * Every instant is read on the PRACTICE's clock (`lib/clock.ts`), never the
+ * reader's device: a 09:00 visit is 09:00 on every screen. Times are 24-hour
+ * (a clinic's diary), days read as the design writes them — "Tue 28 Jul",
+ * "Tuesday 28 July 2026" — in the page's language, and money is in the
+ * practice's currency with no ".00" on a whole amount.
  */
-
-import type { VisitStatus } from "../data/types.ts";
-import { locale, money as ambientMoney, number as ambientNumber, t, tOr } from "../i18n/ambient.ts";
-import type { MessageKey } from "../i18n/messages/index.ts";
-import { dayDiff, hhmm, parseDay } from "./schedule.ts";
+import { locale, money as ambientMoney } from "../i18n/ambient.ts";
+import type { Day, Instant } from "../data/types.ts";
+import { venueDay, venueTime } from "../data/venueTime.ts";
+import { practiceZone } from "./clock.ts";
 
 /**
- * Status → message key, written out rather than assembled from a template so
- * the compiler still checks every key. A missing status here is a build error;
- * `` t(`chrome.status.${s}`) `` would have been a runtime shrug.
+ * The formatting language for dates: the page's, except English, which the
+ * design writes day-before-month ("Tue 28 Jul") as the practice does.
  */
-export const STATUS_KEY = {
-  booked: "chrome.status.booked",
-  checked_in: "chrome.status.checked_in",
-  roomed: "chrome.status.roomed",
-  with_clinician: "chrome.status.with_clinician",
-  ready: "chrome.status.ready",
-  done: "chrome.status.done",
-  no_show: "chrome.status.no_show",
-  cancelled: "chrome.status.cancelled",
-} as const satisfies Record<VisitStatus, MessageKey>;
+const dateLocale = (): string => (locale() === "en-US" ? "en-GB" : locale());
 
-export function statusLabel(status: VisitStatus): string {
-  return t(STATUS_KEY[status]);
+const cache = new Map<string, Intl.DateTimeFormat>();
+function dtf(opts: Intl.DateTimeFormatOptions, zone: string): Intl.DateTimeFormat {
+  const key = `${dateLocale()}|${zone}|${JSON.stringify(opts)}`;
+  let found = cache.get(key);
+  if (found === undefined) {
+    found = new Intl.DateTimeFormat(dateLocale(), { ...opts, timeZone: zone });
+    cache.set(key, found);
+  }
+  return found;
+}
+/** Noon of a calendar day, which no zone can move to another day. */
+const noon = (day: Day): Date => new Date(`${day}T12:00:00Z`);
+
+/** `09:05` — an instant's time on the practice's clock. */
+export function time(at: Instant | number): string {
+  const ms = typeof at === "number" ? at : Date.parse(at);
+  return dtf({ hour: "2-digit", minute: "2-digit", hourCycle: "h23" }, practiceZone()).format(ms);
 }
 
-/** Resolve a seed field that stores an i18n key. */
-export function label(key: string): string {
-  return tOr(key, key);
+/** `09:00–09:45` — a visit's span. */
+export function timeRange(at: Instant, minutes: number): string {
+  const start = Date.parse(at);
+  return `${time(start)}–${time(start + minutes * 60_000)}`;
 }
 
-/**
- * Fees and balances are whole pounds at this practice — pence would be noise on
- * a price list where everything ends in a five. The currency is a property of
- * the money and not of the reader's language, so it is fixed here rather than
- * following the locale.
- */
-export function money(value: number): string {
-  return ambientMoney(Math.round(value), "GBP");
+/** `Tue 28 Jul` */
+export function dayShort(day: Day): string {
+  return dtf({ weekday: "short", day: "numeric", month: "short" }, "UTC").format(noon(day));
+}
+/** `Tuesday 28 July 2026` */
+export function dayLong(day: Day): string {
+  const parts = dtf({ weekday: "long", day: "numeric", month: "long", year: "numeric" }, "UTC").formatToParts(noon(day));
+  // English writes "Tuesday 28 July 2026" on the desk; other languages keep
+  // their own punctuation ("Dienstag, 28. Juli 2026" is right in German).
+  const english = locale().startsWith("en");
+  return parts.map((p, i) => (english && p.type === "literal" && parts[i - 1]?.type === "weekday" ? " " : p.value)).join("");
+}
+/** `28 Jul` */
+export function dayMonth(day: Day): string {
+  return dtf({ day: "numeric", month: "short" }, "UTC").format(noon(day));
+}
+/** `Tue` */
+export function weekdayShort(day: Day): string {
+  return dtf({ weekday: "short" }, "UTC").format(noon(day));
+}
+/** `Tuesday` */
+export function weekdayLong(day: Day): string {
+  return dtf({ weekday: "long" }, "UTC").format(noon(day));
+}
+/** `28` */
+export function dayOfMonth(day: Day): string {
+  return dtf({ day: "numeric" }, "UTC").format(noon(day));
 }
 
-export function number(value: number, opts?: Intl.NumberFormatOptions): string {
-  return ambientNumber(value, opts);
+/** The practice's calendar day of an instant. */
+export const dayOf = (at: Instant | number): Day => venueDay(typeof at === "number" ? at : Date.parse(at), practiceZone());
+/** The practice's `HH:MM` of an instant (for arithmetic, not display). */
+export const hhmmOf = (at: Instant | number): string => venueTime(typeof at === "number" ? at : Date.parse(at), practiceZone());
+/** Minutes since midnight of an `HH:MM`. */
+export function minutesOf(hhmm: string): number {
+  const [h, m] = hhmm.split(":").map(Number) as [number, number];
+  return h * 60 + m;
+}
+/** `HH:MM` of minutes since midnight. */
+export const clockOf = (minutes: number): string =>
+  `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`;
+
+/** Whole days from `a` to `b` (calendar days). */
+export function daysBetween(a: Day, b: Day): number {
+  return Math.round((Date.parse(`${b}T00:00:00Z`) - Date.parse(`${a}T00:00:00Z`)) / 86_400_000);
 }
 
-/* --------------------------------------------------------------------- times */
-
-/**
- * A clock reading. Deliberately NOT `Intl.DateTimeFormat`: every time in this
- * app is a minute count on a 24-hour grid, and rendering 09:20 as "9:20 AM" in
- * one locale would break the column alignment the day sheet depends on.
- */
-export function clock(minutes: number): string {
-  return hhmm(minutes);
+/** Age in whole years on `today`. */
+export function ageOn(bornOn: Day, today: Day): number {
+  const [by, bm, bd] = bornOn.split("-").map(Number) as [number, number, number];
+  const [ty, tm, td] = today.split("-").map(Number) as [number, number, number];
+  let age = ty - by;
+  if (tm < bm || (tm === bm && td < bd)) age -= 1;
+  return age;
 }
 
-/** "09:45 – 10:30" — a start and an end, as one mono run. */
-export function span(start: number, end: number): string {
-  return `${hhmm(start)} – ${hhmm(end)}`;
+/** An amount in the practice's currency, with no ".00" on a whole amount. */
+export function money(value: number, currency?: string): string {
+  const whole = Math.round(value * 100) % 100 === 0;
+  const text = ambientMoney(value, currency);
+  return whole ? text.replace(/([.,]00)(?!\d)/, "") : text;
 }
 
-/** "45 min" / "1 hr 15 min" — how long a visit runs. */
-export function duration(minutes: number): string {
-  if (minutes < 60) return t("chrome.mins", { count: minutes }, minutes);
-  const hrs = Math.floor(minutes / 60);
-  const rest = minutes % 60;
-  if (rest === 0) return t("chrome.hrs", { count: hrs }, hrs);
-  return `${t("chrome.hrs", { count: hrs }, hrs)} ${t("chrome.mins", { count: rest }, rest)}`;
+/** A plain number in the page's language. */
+export function num(value: number): string {
+  return new Intl.NumberFormat(locale()).format(value);
 }
-
-/* --------------------------------------------------------------------- dates */
-
-function fmt(iso: string, opts: Intl.DateTimeFormatOptions): string {
-  return new Intl.DateTimeFormat(locale(), opts).format(parseDay(iso));
-}
-
-/** "28 Jul" — chips, day strips and table cells. */
-export function dateShort(iso: string): string {
-  return fmt(iso, { day: "numeric", month: "short" });
-}
-
-/** "28 July 2026" — headers and summary rails. */
-export function dateLong(iso: string): string {
-  return fmt(iso, { day: "numeric", month: "long", year: "numeric" });
-}
-
-/** "Tuesday 28 July 2026" — the day sheet's own heading. */
-export function dateFull(iso: string): string {
-  return fmt(iso, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
-}
-
-/** "Tue" — the day strip's top line. */
-export function weekdayShort(iso: string): string {
-  return fmt(iso, { weekday: "short" });
-}
-
-/** "28" — the day strip's big number. */
-export function dayNumber(iso: string): string {
-  return fmt(iso, { day: "numeric" });
-}
-
-/**
- * A relative day for visit lists and recall rows: today and yesterday get their
- * own words, the rest of the fortnight counts, and anything older falls back to
- * a plain date. Future days count forward.
- */
-export function relativeDay(iso: string, today: string): string {
-  const diff = dayDiff(today, iso);
-  if (diff === 0) return t("chrome.rel.today");
-  if (diff === 1) return t("chrome.rel.yesterday");
-  if (diff === -1) return t("chrome.rel.tomorrow");
-  if (diff > 1 && diff <= 14) return t("chrome.rel.daysAgo", { count: diff }, diff);
-  if (diff < -1 && diff >= -14) return t("chrome.rel.inDays", { count: -diff }, -diff);
-  return dateShort(iso);
-}
-
-/** "40 days" — the age chip on an outstanding amount. */
-export function ageLabel(days: number): string {
-  return t("chrome.days", { count: days }, days);
-}
-
-/** "waiting 34 min" — the waiting card's chip. */
-export function waitLabel(minutes: number): string {
-  return t("waiting.chip", { count: minutes }, minutes);
-}
-
-/** "42 years old", derived — never stored on the patient. */
-export function ageLine(years: number): string {
-  return t("chrome.years", { count: years }, years);
-}
-
-/** Two-letter initials from a display name, for a tinted tile. */
-export function initials(name: string): string {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-
-/* --------------------------------------------------------------------- tints */
-
-function toRgb(hex: string): [number, number, number] {
-  let h = (hex || "#0369a1").replace("#", "");
-  if (h.length === 3)
-    h = h
-      .split("")
-      .map((c) => c + c)
-      .join("");
-  const n = Number.parseInt(h, 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-export function rgba(hex: string, alpha: number): string {
-  const [r, g, b] = toRgb(hex);
-  return `rgba(${r},${g},${b},${alpha})`;
-}
-
-/** Pull a hex toward white — how a seed tint stays legible on a dark surface. */
-export function lighten(hex: string, amount: number): string {
-  const [r, g, b] = toRgb(hex);
-  const mix = (c: number) => Math.round(c + (255 - c) * amount);
-  return `rgb(${mix(r)},${mix(g)},${mix(b)})`;
-}
-
-/**
- * The layered gradient every avatar and clinician tile uses in place of
- * photography: a highlight sweep, a corner glow, and the seed tint underneath.
- */
-export function tileBackground(hex: string, dark: boolean, angle = "150deg"): string {
-  const highlight = dark
-    ? "radial-gradient(120% 84% at 50% 0%, rgba(255,255,255,.07), transparent 56%)"
-    : "radial-gradient(120% 84% at 50% 0%, rgba(255,255,255,.6), transparent 58%)";
-  const glow = `radial-gradient(58% 46% at 72% 88%, ${rgba(hex, dark ? 0.3 : 0.2)}, transparent 72%)`;
-  const base = `linear-gradient(${angle}, ${rgba(hex, dark ? 0.34 : 0.22)}, ${rgba(hex, dark ? 0.12 : 0.07)})`;
-  return `${highlight}, ${glow}, ${base}`;
-}
-
-/** Re-export so screens can pull one translation helper from one place. */
-export { t };
-export type { MessageKey };

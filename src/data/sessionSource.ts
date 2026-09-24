@@ -45,7 +45,7 @@
  * the app can say so on screen (see the fallback in `config()`).
  */
 
-import type { SnapshotPort } from "./snapshotPort.ts";
+import type { ListOptions, SnapshotPort } from "./snapshotPort.ts";
 
 /**
  * Ref name → table name.
@@ -81,6 +81,22 @@ export interface SessionPortOptions {
    * deployment this app ships as and ambiguous the moment there are two.
    */
   connectionId?: string | undefined;
+  /**
+   * The staff config's own facts (`surface-config.json`), when the till was
+   * served one: the signed-in person's token and the venue's zone and money.
+   * With a token and a `connectionId` the transport reads neither the
+   * dashboard's bootstrap nor its connections list — a screens-only cashier
+   * may read neither.
+   */
+  staff?: {
+    csrfToken: string | null;
+    timezone?: string | null;
+    timezoneSource?: string | null;
+    serverTimezone?: string | null;
+    currency?: string | null;
+  };
+  /** A fresh token after `CSRF_FAILED` — the staff config again, for a till booted from it. */
+  refreshToken?: () => Promise<string | null>;
   /** Test seam. */
   fetchImpl?: typeof fetch;
 }
@@ -166,7 +182,16 @@ function sourceOf(override: string | undefined, row: ConnectionRow): TimezoneSou
 }
 
 interface SchemaReply {
-  model?: { tables?: { name: string; columns?: { name: string }[] }[] };
+  model?: {
+    tables?: { id?: string; name: string; columns?: { name: string }[] }[];
+    /** A foreign key, by the id the data API names it with in `children`. */
+    relations?: {
+      id: string;
+      through?: unknown;
+      from?: { tableId?: string; columns?: string[] };
+      to?: { tableId?: string };
+    }[];
+  };
 }
 
 export class SessionPortError extends Error {
@@ -174,12 +199,15 @@ export class SessionPortError extends Error {
      with `erasableSyntaxOnly`, which rejects the shorthand. */
   readonly status: number;
   readonly code: string;
+  /** What the server said beyond the message — a refused write's column issues. */
+  readonly details: unknown;
 
-  constructor(message: string, status: number, code: string) {
+  constructor(message: string, status: number, code: string, details?: unknown) {
     super(message);
     this.name = "SessionPortError";
     this.status = status;
     this.code = code;
+    this.details = details;
   }
 }
 
@@ -233,17 +261,54 @@ function buildTransport(opts: SessionPortOptions): SessionTransport {
     }
 
     if (!response.ok) {
-      const envelope = body as { error?: { code?: string; message?: string } } | null;
+      const envelope = body as { error?: { code?: string; message?: string; details?: unknown } } | null;
       throw new SessionPortError(
         envelope?.error?.message ?? `Request failed with status ${String(response.status)}.`,
         response.status,
         envelope?.error?.code ?? "INTERNAL",
+        envelope?.error?.details,
       );
     }
     return body as T;
   }
 
+  /** The connection's schema, read once: the till asks it about tables and links. */
+  let schemaRead: Promise<SchemaReply> | null = null;
+  async function schemaOf(): Promise<SchemaReply> {
+    schemaRead ??= discover().then((conn) =>
+      call<SchemaReply>(`/api/v1/connections/${encodeURIComponent(conn)}/schema`),
+    );
+    try {
+      return await schemaRead;
+    } catch (error) {
+      schemaRead = null;
+      throw error;
+    }
+  }
+
+  let discovered = false;
   async function discover(): Promise<string> {
+    /*
+     * BOOTED FROM THE STAFF CONFIG: the person, the token and the venue are
+     * already known, and asking the dashboard for them would be refused for a
+     * screens-only cashier.
+     */
+    const staff = opts.staff;
+    if (staff?.csrfToken && connectionId !== null) {
+      if (!discovered) {
+        discovered = true;
+        csrfToken = staff.csrfToken;
+        serverTimezone = staff.serverTimezone ?? null;
+        tenantTimezone = opts.timezone ?? staff.timezone ?? null;
+        tenantTimezoneSource = sourceOf(opts.timezone, {
+          id: connectionId,
+          timezone: staff.timezone ?? null,
+          timezoneSource: staff.timezoneSource ?? null,
+        });
+        tenantCurrency = opts.currency ?? staff.currency ?? null;
+      }
+      return connectionId;
+    }
     const boot = await call<BootstrapReply>("/api/v1/bootstrap");
     // Absent only if the server is unauthenticated, which `call` already threw
     // on — so this is a contract check, not a fallback.
@@ -381,7 +446,7 @@ function buildTransport(opts: SessionPortOptions): SessionTransport {
          *
          * WHAT WE FALL BACK TO IS THE SERVER'S ZONE, not UTC and never the
          * READER's. `Intl…resolvedOptions()` in the browser would render a
-         * Lisbon practice in a Berlin viewer's hours and look like data, and two
+         * Lisbon studio in a Berlin viewer's hours and look like data, and two
          * people would see different times for one appointment. Adminium's own
          * zone is a single value for the tenant, it is the machine the operator
          * deliberately deployed on, and it is what Adminium already seeds a new
@@ -432,10 +497,7 @@ function buildTransport(opts: SessionPortOptions): SessionTransport {
     },
 
     async assertRefs(required) {
-      const conn = await discover();
-      const schema = await call<SchemaReply>(
-        `/api/v1/connections/${encodeURIComponent(conn)}/schema`,
-      );
+      const schema = await schemaOf();
       const byTable = new Map(
         (schema.model?.tables ?? []).map((t) => [
           t.name,
@@ -469,23 +531,62 @@ function buildTransport(opts: SessionPortOptions): SessionTransport {
       }
     },
 
-    async list<T>(ref: string, { limit, offset }: { limit: number; offset: number }) {
+    async list<T>(ref: string, { limit, offset, where, order, count }: ListOptions) {
       const conn = await discover();
       const table = opts.tableOfRef[ref];
       if (table === undefined) {
         throw new SessionPortError(`unknown ref "${ref}"`, 400, "UNKNOWN_REF");
       }
       const size = Math.min(limit, PAGE_MAX);
-      const query = `limit=${String(size)}&offset=${String(offset)}`;
-      const res = await call<{ data?: T[] }>(
+      let query = `limit=${String(size)}&offset=${String(offset)}`;
+      if (where !== undefined) query += `&where=${encodeURIComponent(JSON.stringify(where))}`;
+      if (order !== undefined) query += `&order=${encodeURIComponent(order)}`;
+      if (count === true) query += "&count=exact";
+      const res = await call<{ data?: T[]; page?: { total?: number | null } }>(
         `/api/v1/data/${encodeURIComponent(conn)}/${encodeURIComponent(table)}?${query}`,
       );
-      return { data: res.data ?? [] };
+      // Only a count that was asked for is reported: an absent one is not zero.
+      return count === true ? { data: res.data ?? [], total: res.page?.total ?? null } : { data: res.data ?? [] };
     },
   };
 
   return {
     port,
+    connection: discover,
+    async tableId(name: string): Promise<string> {
+      const table = ((await schemaOf()).model?.tables ?? []).find((t) => t.name === name);
+      if (table === undefined) throw new SessionPortError(`table "${name}" is absent`, 412, "SCHEMA_MISMATCH");
+      return table.id ?? name;
+    },
+    async relation(child: string, column: string): Promise<string> {
+      const model = (await schemaOf()).model;
+      const table = (model?.tables ?? []).find((t) => t.name === child);
+      const found = (model?.relations ?? []).find(
+        (r) =>
+          (r.through === null || r.through === undefined) &&
+          r.from?.tableId === (table?.id ?? child) &&
+          r.from?.columns?.length === 1 &&
+          r.from.columns[0] === column,
+      );
+      if (found === undefined) {
+        throw new SessionPortError(`nothing links "${child}.${column}" to its parent`, 412, "SCHEMA_MISMATCH");
+      }
+      return found.id;
+    },
+    async refresh(): Promise<void> {
+      if (opts.refreshToken !== undefined) {
+        csrfToken = (await opts.refreshToken()) ?? csrfToken;
+        return;
+      }
+      const boot = await call<BootstrapReply>("/api/v1/bootstrap");
+      csrfToken = boot.data?.csrfToken ?? null;
+    },
+    async get<T>(path: string): Promise<T> {
+      // The connection is discovered first so a booted-from-config transport
+      // has its session, exactly as a list would.
+      await discover();
+      return call<T>(path);
+    },
     async mutate<T>(
       path: string,
       method: "POST" | "PATCH" | "DELETE",
@@ -528,6 +629,31 @@ export interface SessionTransport {
    * `CSRF_FAILED` that looks like a permissions problem.
    */
   mutate: <T>(path: string, method: "POST" | "PATCH" | "DELETE", body?: unknown) => Promise<T>;
+  /**
+   * A `GET` of a dashboard route through the same session, for the reads a
+   * `SnapshotPort` has no method for — a booking table's free times, one
+   * record by its key. The path is the caller's, whole; the answer is the
+   * route's own envelope. Never carries the CSRF token (the server checks
+   * none on a read).
+   */
+  get: <T>(path: string) => Promise<T>;
+  /** The connection the app's tables are in (discovered on first use). */
+  connection: () => Promise<string>;
+  /**
+   * A table's id in the connection's schema (`public.pos_tickets`) — what a
+   * live-updates channel names it by.
+   */
+  tableId: (name: string) => Promise<string>;
+  /**
+   * The id the data API names a child link by, in a write's `children`: the
+   * foreign key `child.column` pointing at the parent being written.
+   */
+  relation: (child: string, column: string) => Promise<string>;
+  /**
+   * A fresh CSRF token, after a write came back `CSRF_FAILED` — the token
+   * rotates with the session, and one retry with the new one is the answer.
+   */
+  refresh: () => Promise<void>;
 }
 
 export function createSessionTransport(opts: SessionPortOptions): SessionTransport {

@@ -1,22 +1,39 @@
 /**
- * Ref → table for this app.
+ * Every table this app reads and writes, by the manifest's short name, and
+ * the real name an install gave it.
  *
- * App-specific by nature: it is one of exactly two things a repo supplies to
- * the shared hosted-mode machinery (the other is the side→persona line in
- * `main.tsx`). Kept in its own module rather than beside that line so
- * `refCoverage.test.ts` can check it against `REQUIRED` — an unmapped ref is
- * invisible until a hosted build asks for it.
+ * The manifest asks for prefixed tables, so Adminium makes `clinic_patients`
+ * for `patients` and hands the real names over at boot (`realTables`).
+ * `TABLE_OF_REF` is the fallback the demo and an older server use: the same
+ * prefix Adminium would have chosen. `refCoverage.test.ts` checks it against
+ * `REQUIRED`, so a table read at boot is never missing from the map.
  */
-export const TABLE_OF_REF = {
-  visitTypes: "visit_types",
-  clinicians: "clinicians",
-  appointments: "appointments",
-  /*
-   * The days the practice does not work. Added the same hour as the `closures`
-   * entry in `REQUIRED`, because the two are one decision: a ref this app reads
-   * and this map does not carry throws `UNKNOWN_REF` on the first hosted load,
-   * in production, in a repo whose suite is green. `refCoverage.test.ts` is
-   * what makes forgetting one half a red suite instead.
-   */
-  closures: "closures",
-} as const;
+import type { TableRef } from "./types.ts";
+
+const REFS: readonly TableRef[] = [
+  "settings",
+  "opening_hours",
+  "clinicians",
+  "visit_types",
+  "clinician_visit_types",
+  "clinician_hours",
+  "closures",
+  "faqs",
+  "patients",
+  "registrations",
+  "appointments",
+  "payments",
+  "write_offs",
+  "check_notes",
+  "recalls",
+  "waiting_list",
+  "messages",
+  "day_closes",
+];
+
+export const TABLE_OF_REF: Readonly<Record<TableRef, string>> = Object.fromEntries(REFS.map((ref) => [ref, `clinic_${ref}`])) as Record<TableRef, string>;
+
+/** The real names Adminium sent, over the default ones for any it did not. */
+export function realTables(fromConfig: Record<string, string>): Record<TableRef, string> {
+  return { ...TABLE_OF_REF, ...Object.fromEntries(Object.entries(fromConfig).filter(([ref]) => ref in TABLE_OF_REF)) } as Record<TableRef, string>;
+}
