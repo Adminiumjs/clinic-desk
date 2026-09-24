@@ -57,10 +57,23 @@ if (!existsSync(product)) {
 /** source path (relative to the product) → vendored basename. */
 const FILES = [
   ['packages/manifest/src/schema.ts', 'schema.ts'],
+  // The modules `schema.ts` was split into when the manifest learned booking,
+  // the outbox and a person's own rows: each is imported by `schema.ts`, so a
+  // copy without them does not compile.
+  ['packages/manifest/src/refs.ts', 'refs.ts'],
+  ['packages/manifest/src/semver.ts', 'semver.ts'],
+  ['packages/manifest/src/booking.ts', 'booking.ts'],
+  ['packages/manifest/src/public-access.ts', 'public-access.ts'],
+  ['packages/manifest/src/outbox.ts', 'outbox.ts'],
+  // An app role's limits on what its update writes, and a calendar page's columns.
+  ['packages/manifest/src/roles.ts', 'roles.ts'],
+  ['packages/manifest/src/page-calendar.ts', 'page-calendar.ts'],
   ['packages/manifest/src/validate.ts', 'validate.ts'],
+  ['packages/manifest/src/sample.ts', 'sample.ts'],
   ['packages/add-on-contracts/src/add-on-block.ts', 'add-on-block.ts'],
   ['packages/add-on-contracts/src/contracts.ts', 'contracts.ts'],
   ['packages/add-on-contracts/src/slots.ts', 'slots.ts'],
+  ['packages/add-on-contracts/src/nav-groups.ts', 'nav-groups.ts'],
 ];
 const VENDORED = new Set(FILES.map(([, base]) => base));
 
@@ -99,7 +112,9 @@ function specifiersIn(text) {
  *
  * It also reads `export { a, b as c }` lists, not just declarations. A symbol
  * this cannot place becomes a refusal downstream, which is the safe direction:
- * an openly failed sync beats a subtly wrong copy.
+ * an openly failed sync beats a subtly wrong copy. A RE-export
+ * (`export { a } from './b.js'`) is skipped: it names the symbol's home rather
+ * than being one, and that home is scanned in its own right.
  */
 function exportIndex() {
   const index = new Map();
@@ -110,7 +125,7 @@ function exportIndex() {
     const declared =
       /^export\s+(?:declare\s+)?(?:const|let|var|function|type|interface|class|enum)\s+([A-Za-z0-9_$]+)/gm;
     for (const [, name] of text.matchAll(declared)) names.push(name);
-    for (const [, list] of text.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+    for (const [, list] of text.matchAll(/^export\s*\{([^}]*)\}(?!\s*from\b)/gm)) {
       for (const entry of list.split(',')) {
         const parts = entry.trim().replace(/^type\s+/, '').split(/\s+as\s+/);
         const exported = (parts[parts.length - 1] ?? '').trim();

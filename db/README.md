@@ -5,11 +5,28 @@ rows back out once you have data of your own.
 
 ```
 schema.sql         the tables, keys, constraints and indexes — the app's shape
-seed.sql           realistic demo rows, so the app is useful the moment it boots
+seed.sql           Rowan Health's rows, so the app is useful the moment it boots
 demo-toolkit.sql   bookkeeping that records which rows came from seed.sql
 init-demo.sh       first-boot hook: loads the demo rows unless DEMO_DATA=0
 demo.mjs           the command behind `npm run demo:*`
+write-sample.ts    the command behind `npm run sample` (below)
 ```
+
+`schema.sql` and `seed.sql` are **generated**, never edited by hand:
+`npm run sample` writes `schema.sql` from `manifest.json` and `seed.sql` from
+the same sample bundle an operator adds from Adminium
+(`seeds/clinic.sample.json`, built by `src/data/sample.ts`). The tables carry
+the names an Adminium install gives them (`clinic_appointments`,
+`clinic_patients`, …), so the two ways of running the app use one schema.
+`src/data/sample-drift.test.ts` fails when any of the files is out of date.
+
+The bundle dates everything relative to the day it is added — today's visits
+follow the clock, and "today" is always a working day. `seed.sql` is that
+bundle resolved once, at the moment the design is drawn: **Tuesday 28 July
+2026, 09:20 in London**. Whenever you load it, the database is that morning —
+three people seen, four in the building, one who has not turned up, the
+afternoon still booked. The words are the English ones; sample data added from
+Adminium comes in the language of whoever adds it.
 
 `schema.sql` is always applied. It is also a valid **schema-only import** for
 Adminium on its own, if you want to see the generated admin app without a
