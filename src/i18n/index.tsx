@@ -112,7 +112,8 @@ export function setHostLocale(tag: string): void {
   applyLocale?.(tag);
 }
 
-function initialLocale(): LocaleTag {
+/** The language the page opens in: the host's, else the one chosen before, else the browser's. */
+export function initialLocale(): LocaleTag {
   if (hostLocale !== null) return hostLocale;
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
@@ -196,10 +197,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       t,
       tAddOn,
       money: (v, currency = tenantCurrency()) =>
+        // Pence when there are any (a part payment of 12.50 is not "13"), none
+        // on a whole amount; the plain symbol ("£", not "UK£") in every language.
         new Intl.NumberFormat(locale, {
           style: "currency",
           currency,
-          maximumFractionDigits: 0,
+          currencyDisplay: "narrowSymbol",
+          ...(Math.round(v * 100) % 100 === 0 ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
         }).format(v),
       number: (n, opts) =>
         opts ? new Intl.NumberFormat(locale, opts).format(n) : nf.format(n),

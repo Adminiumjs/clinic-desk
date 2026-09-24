@@ -37,11 +37,13 @@ const fallbackT: TFunction = (key, params, count) => {
   );
 };
 
+// Pence when there are any, none on a whole amount (as the provider's `money`).
 const fallbackMoney: MoneyFn = (value, currency = activeCurrency) =>
   new Intl.NumberFormat(DEFAULT_LOCALE, {
     style: "currency",
     currency,
-    maximumFractionDigits: 0,
+    currencyDisplay: "narrowSymbol",
+    ...(Math.round(value * 100) % 100 === 0 ? { minimumFractionDigits: 0, maximumFractionDigits: 0 } : {}),
   }).format(value);
 
 const fallbackNumber: NumberFn = (value, opts) =>

@@ -1,13 +1,14 @@
 /**
  * The message registry.
  *
- * The app's strings are split across three area modules under `../strings/` so
+ * The app's strings are split across area modules under `../strings/` (one per
+ * part of the app: the desk's day, its work, its sheets, the patients' pages…) so
  * they can be authored without one enormous file. This module is the only
  * place that knows they are separate: it flattens them into one bundle per
  * locale, which is what the runtime looks keys up in.
  *
  * Keys must be unique across areas — a later area silently wins a collision,
- * so namespace them (`chrome.*`, `today.*`, `data.*`).
+ * so namespace them by screen (`daysheet.*`, `sendOff.*`, `find.*`).
  *
  * ── AN ADD-ON'S STRINGS ARE NOT IMPORTED HERE, AND WHAT THAT COST ───────────
  *
@@ -34,14 +35,20 @@
  *            and throws naming the add-on, the locale and the key. It runs on
  *            every boot, including the demo, so it cannot be skipped the way a
  *            test can.
- *   KEPT   — full compile-time parity for this app's own three areas, below,
+ *   KEPT   — full compile-time parity for this app's own areas, below,
  *            entirely unchanged.
  */
 import type { Translated } from "../untranslated.ts";
 import { LOCALE_TAGS, type LocaleTag } from "../locales.ts";
-import { chrome } from "../strings/chrome.ts";
-import { screens } from "../strings/screens.ts";
-import { data } from "../strings/data.ts";
+import { nav } from "../strings/nav.ts";
+import { common } from "../strings/common.ts";
+import { deskDay } from "../strings/desk-day.ts";
+import { deskWork } from "../strings/desk-work.ts";
+import { deskSheets } from "../strings/desk-sheets.ts";
+import { patient } from "../strings/patient.ts";
+import { demo } from "../strings/demo.ts";
+import { waitlist } from "../strings/waitlist.ts";
+import { kiosk } from "../strings/kiosk.ts";
 
 /**
  * Parity guard. `en-US` defines the keys; the other seven must each carry a
@@ -55,10 +62,16 @@ type Area<EN extends Record<string, string>> = { "en-US": EN } & Record<
 >;
 
 const AREAS: [
-  Area<(typeof chrome)["en-US"]>,
-  Area<(typeof screens)["en-US"]>,
-  Area<(typeof data)["en-US"]>,
-] = [chrome, screens, data];
+  Area<(typeof nav)["en-US"]>,
+  Area<(typeof common)["en-US"]>,
+  Area<(typeof deskDay)["en-US"]>,
+  Area<(typeof deskWork)["en-US"]>,
+  Area<(typeof deskSheets)["en-US"]>,
+  Area<(typeof patient)["en-US"]>,
+  Area<(typeof demo)["en-US"]>,
+  Area<(typeof waitlist)["en-US"]>,
+  Area<(typeof kiosk)["en-US"]>,
+] = [nav, common, deskDay, deskWork, deskSheets, patient, demo, waitlist, kiosk];
 
 export const MESSAGES = Object.fromEntries(
   LOCALE_TAGS.map((t) => [t, Object.assign({}, ...AREAS.map((a) => a[t] ?? {}))]),
@@ -66,9 +79,15 @@ export const MESSAGES = Object.fromEntries(
 
 /** Keys are typed off English — the source of truth — so a typo is a compile error. */
 export type MessageKey =
-  | keyof (typeof chrome)["en-US"]
-  | keyof (typeof screens)["en-US"]
-  | keyof (typeof data)["en-US"];
+  | keyof (typeof nav)["en-US"]
+  | keyof (typeof common)["en-US"]
+  | keyof (typeof deskDay)["en-US"]
+  | keyof (typeof deskWork)["en-US"]
+  | keyof (typeof deskSheets)["en-US"]
+  | keyof (typeof patient)["en-US"]
+  | keyof (typeof demo)["en-US"]
+  | keyof (typeof waitlist)["en-US"]
+  | keyof (typeof kiosk)["en-US"];
 
 /** One add-on's bundle, as it travels on the add-on object. */
 export type AddOnMessages = Readonly<Record<string, Readonly<Record<string, string>>>>;
