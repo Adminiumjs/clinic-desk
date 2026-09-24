@@ -1,4 +1,6 @@
 import { surfaceJsonPlugin } from "./surface-emit.ts";
+import { demoJsonPlugin } from "./demo-emit.ts";
+import { DEMO_APP_KEY, DEMO_CLOCK, DEMO_DIR, DEMO_FRAMES, DEMO_PERSONAS, DEMO_SCREENS } from "./src/demo-card.ts";
 import { APP_KEY, APP_LABEL_KEY, SURFACE_NAV } from "./src/surface-nav.ts";
 import { MESSAGES } from "./src/i18n/messages/index.ts";
 
@@ -84,6 +86,20 @@ export default defineConfig({
       appKey: APP_KEY,
       appLabelKey: APP_LABEL_KEY,
       nav: SURFACE_NAV,
+      messages: MESSAGES,
+    }),
+    /*
+     * `demo.json` beside the demo build — only the build whose base is
+     * `/demo/clinic-desk/app/` (`build:demo`). The website's card reads it;
+     * every other build writes nothing.
+     */
+    demoJsonPlugin({
+      appKey: DEMO_APP_KEY,
+      dir: DEMO_DIR,
+      frames: DEMO_FRAMES,
+      screens: DEMO_SCREENS,
+      personas: DEMO_PERSONAS,
+      clock: DEMO_CLOCK,
       messages: MESSAGES,
     }),
   ],
