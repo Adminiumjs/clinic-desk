@@ -39,7 +39,7 @@
 import type { CSSProperties } from "react";
 
 import { useI18n } from "../i18n/index.tsx";
-import { useStore } from "../state/store.ts";
+import { useAddOns as useStore } from "../state/addOns.ts";
 import type { AddOn } from "../add-ons/vendor/host/index.ts";
 
 export function Affiliation({ addOn, style }: { addOn: AddOn; style?: CSSProperties }) {

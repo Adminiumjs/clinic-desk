@@ -28,9 +28,25 @@
  * second one is a row in that list rather than an edit here.
  */
 
-import type { Closure } from '../data/types.ts';
 import { DAY_SOURCES, type DaySource } from './daySources.ts';
 import type { AddOnSettings } from './vendor/host/index.ts';
+
+/**
+ * A day an add-on says the practice does not work (a public holiday). The
+ * desk offers each as a SUGGESTION — "Add as a closure" writes a real
+ * closure row — because the server's booking rule cannot see an add-on's
+ * saved days: only rows in the closures table close the diary.
+ */
+export interface Closure {
+  /** `YYYY-MM-DD`. A calendar day, never an instant. */
+  date: string;
+  /** The day's own name, as the add-on supplied it (never translated here). */
+  reason: string;
+  /** null: the whole practice. */
+  clinician: string | null;
+  /** The add-on that supplied it, or null for a day entered at the practice. */
+  from: string | null;
+}
 
 /** The sources this app consults. Exported as a value so a suite can substitute. */
 export { DAY_SOURCES };

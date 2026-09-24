@@ -34,7 +34,7 @@
 
 import { createAddOnSlot, type UseSlotFills } from './kit/index.ts';
 import { hostKit } from './host-kit.config.ts';
-import { useStore } from '../state/store.ts';
+import { useAddOns as useStore } from '../state/addOns.ts';
 import type { HostedSlotId } from './slots.ts';
 
 const useSlotFills: UseSlotFills<HostedSlotId> = (slot, forAddOn) => ({

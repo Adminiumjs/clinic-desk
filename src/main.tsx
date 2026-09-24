@@ -1,87 +1,44 @@
-/*
- * Entry point.
- *
- * The four global stylesheets are imported here, before `App`, so the cascade
- * order is deterministic in the built bundle: tokens (custom properties) →
- * base (reset, fonts, behaviour classes) → components (shared UI) → screens
- * (view-specific rules, which therefore always win a tie).
- */
-
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
 import "./styles/tokens.css";
 import "./styles/base.css";
-import "./styles/components.css";
-import "./styles/screens.css";
+import "./styles/rh.css";
 
-import { I18nProvider } from "./i18n/index.tsx";
-import { setDataSource } from "./data/source.ts";
-import { clientFromConfig, loadSnapshot, snapshotFailure, snapshotSource } from "./data/adminiumSource.ts";
-import { createSessionTransport } from "./data/sessionSource.ts";
-import { TABLE_OF_REF } from "./data/tableOfRef.ts";
-import { resolveStaffConnectionId } from "./staffConnection.ts";
+import { I18nProvider, initialLocale, setHostLocale } from "./i18n/index.tsx";
 import { appName, setTenantCurrency, setTimezoneClaim } from "./i18n/ambient.ts";
 import { DEMO, HOSTED, SURFACE_SIDE } from "./surface.ts";
-
+import { setClockSource, setZone } from "./lib/clock.ts";
+import { setServerZone } from "./data/venueTime.ts";
+import { useUi } from "./state/ui.ts";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root — check index.html");
+const mount: HTMLElement = container;
 
-/*
- * ONE condition decides demo vs connected: whether the API base URL and key are
- * present at build time. `createPublicClient` returns null when either is
- * missing, so the fallback is structural rather than a catch, and there is no
- * second flag to drift. The marketplace demo builds set neither and behave
- * byte-identically to before this file changed.
- *
- * The dynamic `import()` of `App` is load-bearing, not stylistic: `App` pulls
- * `state/store.ts`, which reads the data source at MODULE SCOPE. A static
- * import would evaluate the store during this module's own imports — before the
- * fetch below could resolve — and the app would render demo data whatever the
- * server said. The `await` has to sit between the swap and the import, so the
- * import has to be dynamic.
- */
-/** This app's name, as the failure screen says it. */
-const BRAND = "Clinic Desk";
+/** This app's name as a failure screen says it: the product's, never a practice's. */
+const PRODUCT = "Clinic Desk";
 
-/**
- * The headline for a startup failure, chosen by CAUSE.
- *
- * One sentence used to cover every cause: "<Brand> is not connected". It was
- * wrong for most of them and actively misleading for two — an app that reached
- * Adminium, authenticated, and refused only because two databases are serving
- * is not "not connected", and an operator who reads that goes looking for a
- * broken connection instead of the choice the app is actually waiting on.
- *
- * The DETAIL under it already says precisely what happened; this only has to
- * name the KIND of problem without contradicting it.
- */
+/** The headline for a startup failure, chosen by cause. */
 function titleFor(code: string | null): string {
   switch (code) {
-    case "AMBIGUOUS_CONNECTION":
-      return `${BRAND} does not know which database to read`;
-    case "CONNECTION_PAUSED":
-      return `${BRAND}'s database is paused`;
     case "NO_CONNECTION":
-      return `${BRAND} is not connected`;
+      return `${PRODUCT} is not connected`;
     case "NO_BACKEND":
-      return `${BRAND} has no backend configured`;
+      return `${PRODUCT} has no backend configured`;
+    case "SCHEMA_MISMATCH":
+      return `${PRODUCT}'s tables do not match what it reads`;
     default:
-      // Reached the server and could not finish: a refused scope, a schema that
-      // does not match, an expired session. "Not connected" would be a guess.
-      return `${BRAND} could not load its data`;
+      return `${PRODUCT} could not load its data`;
   }
 }
 
 /**
- * The smallest honest "this is not configured" surface.
- *
- * Deliberately plain DOM and inline styles: it has to work when the data layer,
- * and possibly the locale bundle, did not. Anything richer would be one more
- * thing that can fail while reporting a failure.
+ * The smallest honest "this is not configured" surface: plain DOM and English,
+ * because it has to work when the data layer, and maybe the locale bundle,
+ * did not.
  */
-function showStartupFailure(mount: HTMLElement, detail: string, code: string | null): void {
+function showStartupFailure(detail: string, code: string | null): void {
   const title = titleFor(code);
   console.error(`[adminium] ${title}: ${detail}`);
   mount.innerHTML = "";
@@ -95,216 +52,366 @@ function showStartupFailure(mount: HTMLElement, detail: string, code: string | n
   h.style.cssText = "margin:0 0 .5rem;font-size:1.05rem;font-weight:600";
   const p = document.createElement("p");
   p.textContent = detail;
-  // `pre-wrap`: the detail is a LIST — one problem per line, and a blank line
-  // before any hint. Collapsed to a single run of prose (the CSS default) the
-  // nine missing tables and the sentence that explains them read as one
-  // sentence, which is how "resume it in Connections" ends up glued to a
-  // column name.
   p.style.cssText = "margin:0;color:#52525b;white-space:pre-wrap";
   box.append(h, p);
   mount.append(box);
 }
 
-/**
- * The transport's code for a failure, when it carried one.
- *
- * Duck-typed rather than `instanceof`: the reason travels through
- * `snapshotFailure()` as a plain `Error`, and a build that swaps transports
- * should not have to share a class for the screen above to stay accurate.
- */
-function codeOf(reason: Error | null): string | null {
-  const code = (reason as { code?: unknown } | null)?.code;
+const codeOf = (error: unknown): string | null => {
+  const code = (error as { code?: unknown } | null)?.code;
   return typeof code === "string" ? code : null;
-}
+};
+const messageOf = (error: unknown): string => (error instanceof Error ? error.message : String(error));
 
-async function boot(): Promise<void> {
-  /*
-   * A NON-DEMO BUILD NEVER RENDERS DEMO DATA.
-   *
-   * This used to fall through: no client, or a failed snapshot, and the seam
-   * kept its `demoSource` default — so a real deployment whose backend was
-   * unreachable painted a plausible clinic full of invented appointments, for
-   * real patients, with no error. Falling back to fiction is the failure the
-   * build-time split exists to remove, so it is a hard stop here instead.
-   */
-  if (!DEMO) {
-    /*
-     * The transport is chosen at BUILD time, and the two are not
-     * interchangeable. Hosted staff talks to this same origin with the
-     * operator's session — no key, no scope, no CORS. Everything else goes
-     * through the public API with a publishable key. `HOSTED` folds to a
-     * literal, so each build contains only the transport it uses.
-     */
-    /*
-     * The staff surface asks WHICH DATABASE it belongs to before it reads one
-     * (29 D9). Null — unbound, or an Adminium too old to answer — keeps the old
-     * inference, so this is additive for every instance that has one connection.
-     */
-    const boundConnection =
-      HOSTED && SURFACE_SIDE === "staff" ? await resolveStaffConnectionId() : null;
-
-    const client =
-      HOSTED && SURFACE_SIDE === "staff"
-        ? createSessionTransport({
-            tableOfRef: TABLE_OF_REF,
-            connectionId: boundConnection ?? undefined,
-          }).port
-        : // Baked vars first, then — hosted customer — the SERVED config
-          // (surface-config.json, 29 D10): the key an operator bound in Studio,
-          // fetched at boot, so rotation is Studio + reload with no rebuild.
-          await clientFromConfig();
-    const failure =
-      client === null
-        ? "This build has no backend configured. A hosted customer surface needs " +
-          "a key bound to it in Studio (or baked VITE_ vars); a standalone build " +
-          "needs VITE_ADMINIUM_API_BASE_URL and VITE_ADMINIUM_PUBLISHABLE_KEY."
-        : null;
-
-    const snap = failure === null && client !== null ? await loadSnapshot(client) : null;
-    if (snap === null) {
-      const reason = failure === null ? snapshotFailure() : null;
-      showStartupFailure(
-        container as HTMLElement,
-        reason !== null
-          ? // The server said WHY. Repeating a generic sentence over the top of a
-            // specific one is how an operator ends up checking a key that does not
-            // exist in a build that never had one.
-            reason.message
-          :
-        failure ??
-          "Could not load data from Adminium. The server may be unreachable, the " +
-            "key may be wrong, or this clinic's tables may not match what it reads.",
-        // `failure` is set only on the no-backend path, which throws nothing and
-        // so carries no code of its own.
-        failure === null ? codeOf(reason) : "NO_BACKEND",
-      );
-      return;
-    }
-    // Before `App` mounts, so the first paint formats in the tenant's
-    // currency rather than flashing dollars and correcting itself.
-    setTenantCurrency(snap.currency);
-    // Same timing, same reason: the zone notice must be there on the first
-    // paint, not appear after one.
-    setTimezoneClaim(snap.timezone, snap.timezoneSource);
-    setDataSource(snapshotSource(snap));
-    console.info(
-      `[adminium] connected: ${String(snap.visitTypes.length)} visit types, ` +
-        `${String(snap.clinicians.length)} clinicians, ` +
-        `${String(snap.appointments.length)} appointments`,
-    );
-  }
-
-  const { default: App } = await import("./app/App.tsx");
-
-  /*
-   * ── REGISTERING THE ADD-ONS, AND WHY THE CONDITION IS NOT `true` ──────────
-   *
-   * The store boots an EMPTY registry and is told what exists here, at
-   * bootstrap. That ordering is what let this seam land before an add-on
-   * existed — with nothing registered every slot draws its fallback and the app
-   * is unchanged on screen — and it is what keeps `state/store.ts` from
-   * importing an add-on bundle, which every screen would then carry.
-   *
-   * THE CONDITION IS A BUNDLE DECISION AND CHANGES NO BEHAVIOUR. `register()`
-   * builds a React settings panel, and `SURFACE_SIDE` folds to a literal, so a
-   * hosted-CUSTOMER build with this branch eliminated does not contain that
-   * panel, its eight-locale bundle, or the add-on's day-set data.
-   *
-   * Nothing is lost, and the reason is worth stating rather than assuming: an
-   * add-on's days live in this app's own in-memory settings for that add-on,
-   * written by a staff-only panel. A hosted customer surface is a separate page
-   * load with no panel and no way to have imported anything, so it could never
-   * have had a day to apply. Where its closing days actually come from is the
-   * `closures` table, over the transport, which `data/adminiumSource.ts` reads
-   * on every side. In the DEMO build both personas share one store, so the
-   * booking strip does see what the desk imported — which is why `DEMO` is on
-   * the left of the `||` rather than the branch being staff-only.
-   */
-  if (DEMO || SURFACE_SIDE === "staff") {
-    const { useStore } = await import("./state/store.ts");
-    const { demoAddOns } = await import("./add-ons/registry.ts");
-    useStore.getState().registerAddOns(demoAddOns());
-  }
-
-  /*
-   * The side→persona map is the ONE app-specific line here, which is why it is
-   * not in `surface.ts`: every app names its personas differently, and a shared
-   * module that knew those names could not be shared.
-   */
-  const persona = SURFACE_SIDE === "staff" ? "clinic" : SURFACE_SIDE === "customer" ? "patient" : null;
-  if (persona !== null) {
-    const { useStore } = await import("./state/store.ts");
-    useStore.getState().setPersona(persona);
-  }
-
-  /*
-   * URL ⇄ SCREEN, and the host bridge — both hosted-only, both before the first
-   * paint (29-app-surfaces.md D6/D8).
-   *
-   * Order matters and is not obvious:
-   *
-   *  1. `attachUrlSync` reads the CURRENT path and applies it, so a reload of
-   *     `/apps/clinic/staff/patients` renders patients rather than the day
-   *     sheet and then correcting itself.
-   *  2. `connectToHost` handshakes with the dashboard, if there is one. It is
-   *     AWAITED so `isEmbedded()` is settled before any component renders;
-   *     un-framed it returns immediately and costs nothing.
-   *  3. The store subscription reflects later screen changes into the URL and
-   *     tells the host, so the dashboard's address bar follows the app.
-   *
-   * `HOSTED` folds to a literal, so a demo or standalone build contains none of
-   * this — not the bridge, not the sync, not the subscription.
-   */
-  if (HOSTED) {
-    const { useStore } = await import("./state/store.ts");
-    const { attachUrlSync } = await import("./urlSync.ts");
-    const { connectToHost } = await import("./embed.ts");
-    const { SURFACE_NAV, APP_KEY } = await import("./surface-nav.ts");
-    const { setHostLocale } = await import("./i18n/index.tsx");
-
-    // Forward reference on purpose: the sync reports paths TO the bridge, and
-    // the bridge applies paths THROUGH the sync. Nothing fires before both
-    // exist — `attachUrlSync`'s own boot read does not call `onPath`.
-    let bridge: { navigated: (path: string) => void } | null = null;
-
-    const sync = attachUrlSync({
-      nav: SURFACE_NAV,
-      side: SURFACE_SIDE,
-      go: (view) => useStore.getState().go(view),
-      current: () => useStore.getState().view,
-      onPath: (path) => bridge?.navigated(path),
-    });
-
-    bridge = await connectToHost(APP_KEY, SURFACE_SIDE as "staff" | "customer", sync.path(), {
-      onTheme: (theme) => useStore.getState().setHostTheme(theme),
-      onLocale: setHostLocale,
-      onPath: (path) => sync.applyPath(path),
-    });
-
-    useStore.subscribe(sync.reflect);
-  }
-
-  /*
-   * THE BROWSER TAB carries the operator's name too.
-   *
-   * Everything on screen resolves through `useBrand()`, but the tab is not on
-   * screen — it is the static `<title>` in index.html, which is the name this
-   * app was BUILT with. Rename the app in Adminium and every heading changes
-   * while the tab still says "Client Portal", which is the same half-applied
-   * rename this whole change exists to remove.
-   *
-   * Only when an override is set: with none, index.html's own title is already
-   * the right answer and rewriting it with the same string is noise.
-   */
+function render(App: () => React.JSX.Element | null): void {
   const named = appName();
   if (named !== null) document.title = named;
-
-  createRoot(container as HTMLElement).render(
+  createRoot(mount).render(
     <StrictMode>
       <I18nProvider>
         <App />
       </I18nProvider>
     </StrictMode>,
+  );
+}
+
+/** The theme the operating system asks for, until a host or the demo says otherwise. */
+function systemTheme(): "light" | "dark" {
+  return typeof matchMedia === "function" && matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+/**
+ * THE PATIENTS' PAGES — the customer side: finding a time, booking, a
+ * patient's own visits and reminders. No desk, no staff session: only the
+ * public API through the practice's browser key, which Adminium serves beside
+ * the bundle. `SURFACE_SIDE` folds to a literal, so nothing of the desk is in
+ * this bundle, and nothing of this in the desk's.
+ */
+async function bootPatients(): Promise<void> {
+  const { resolveSurfaceConfig } = await import("./publicConfig.ts");
+  const config = await resolveSurfaceConfig();
+  if (config === null) {
+    showStartupFailure(
+      "Adminium served no booking key for this page. Allow the public access when installing the app, or check that its browser key is still live on the API keys page.",
+      "NO_BACKEND",
+    );
+    return;
+  }
+  const { createPublicClient } = await import("@adminiumjs/public-client");
+  // Every write this page makes (a claim, a booking, a registration) asks for the
+  // human check: solve it first rather than be refused once and try again.
+  const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true });
+  if (client === null) {
+    showStartupFailure("This page has no server to talk to.", "NO_BACKEND");
+    return;
+  }
+  const [{ publicPatientsPort }, { setPatientsPort, loadCatalogue }] = await Promise.all([import("./data/publicPatients.ts"), import("./state/patients.ts")]);
+  try {
+    const port = await publicPatientsPort(client, config.tables ?? {});
+    setPatientsPort(port);
+    setZone(port.timeZone());
+    setTimezoneClaim(port.timeZone(), "operator");
+  } catch (error) {
+    showStartupFailure(messageOf(error), codeOf(error));
+    return;
+  }
+  useUi.setState({ persona: "patient", view: "find", theme: systemTheme() });
+  void loadCatalogue();
+
+  const [{ attachUrlSync }, { connectToHost }, { SURFACE_NAV, APP_KEY }, { go }] = await Promise.all([
+    import("./urlSync.ts"),
+    import("./embed.ts"),
+    import("./surface-nav.ts"),
+    import("./state/ui.ts"),
+  ]);
+  let bridge: { navigated: (path: string) => void } | null = null;
+  const sync = attachUrlSync({
+    nav: SURFACE_NAV,
+    side: "customer",
+    go: (view) => go(view),
+    current: () => useUi.getState().view,
+    onPath: (path) => bridge?.navigated(path),
+  });
+  bridge = await connectToHost(APP_KEY, "customer", sync.path(), {
+    onTheme: (theme) => useUi.setState({ theme: theme === "dark" ? "dark" : "light" }),
+    onLocale: setHostLocale,
+    onPath: (path) => sync.applyPath(path),
+  });
+  useUi.subscribe(sync.reflect);
+
+  const { default: App } = await import("./app/App.tsx");
+  render(App);
+}
+
+/**
+ * THE DESK — the staff side, served by Adminium to the signed-in person.
+ *
+ * It boots from the staff config alone: the database, the tables' real names,
+ * the practice's clock and currency, who is signed in (and what they may do),
+ * and the token their saves carry. Every read and write is that person's,
+ * under their grants and the audit trail.
+ */
+async function bootDesk(): Promise<void> {
+  const [{ loadStaffConfig }, { createSessionTransport }, { realTables }, { REQUIRED, sessionDeskReads }, { sessionSink }] = await Promise.all([
+    import("./staffConnection.ts"),
+    import("./data/sessionSource.ts"),
+    import("./data/tableOfRef.ts"),
+    import("./data/adminiumSource.ts"),
+    import("./data/sink.ts"),
+  ]);
+  const staff = await loadStaffConfig();
+  if (staff === null) {
+    showStartupFailure("Adminium did not send this desk its configuration. Open it from Adminium, signed in.", "NO_BACKEND");
+    return;
+  }
+  // The kiosk's sign-in reads no table: it never loads the desk, only the kiosk's own key.
+  // Only when the kiosk is all the person is: a manager who also holds the kiosk
+  // role (and so is handed its key) still opens the desk. A server that did not
+  // say which roles someone holds sends the key only to a kiosk sign-in.
+  const desk = await import("./state/desk.ts");
+  if (desk.roleOf(staff.access).role === "kiosk" || (staff.access === null && staff.publicKeys["kiosk"] !== undefined)) {
+    await bootKiosk(staff);
+    return;
+  }
+  if (staff.serverTimezone !== null) setServerZone(staff.serverTimezone);
+  const tables = realTables(staff.tables);
+  const transport = createSessionTransport({
+    tableOfRef: tables,
+    ...(staff.connectionId === null ? {} : { connectionId: staff.connectionId }),
+    ...(staff.csrfToken === null
+      ? {}
+      : {
+          staff: {
+            csrfToken: staff.csrfToken,
+            timezone: staff.timezone,
+            timezoneSource: staff.timezoneSource,
+            serverTimezone: staff.serverTimezone,
+            currency: staff.currency,
+          },
+          refreshToken: async () => (await loadStaffConfig())?.csrfToken ?? null,
+        }),
+  });
+  let zone = "UTC";
+  try {
+    const config = await transport.port.config();
+    zone = config.timezone;
+    setTimezoneClaim(config.timezone, config.timezoneSource ?? null);
+    setTenantCurrency(config.currency ?? staff.currency ?? "USD");
+    await transport.port.assertRefs(REQUIRED);
+  } catch (error) {
+    showStartupFailure(messageOf(error), codeOf(error));
+    return;
+  }
+  setZone(zone);
+  setClockSource(() => Date.now());
+
+  const [{ setDeskReads, loadDesk, roleOf, useDesk, can }, { setSink }] = await Promise.all([import("./state/desk.ts"), import("./state/writes.ts")]);
+  const { role, roleName } = roleOf(staff.access);
+  useDesk.setState({
+    me: { name: staff.user?.name ?? "", email: staff.user?.email ?? null, role, roleName, access: staff.access },
+  });
+  setDeskReads(sessionDeskReads(transport, tables, (ref) => can(ref, "read")));
+  setSink(sessionSink(transport, tables));
+  useUi.setState({ persona: "clinic", view: "daysheet", theme: systemTheme() });
+  await loadDesk();
+  if (useDesk.getState().load === "failed") {
+    showStartupFailure(useDesk.getState().loadError ?? "The desk could not read its data.", null);
+    return;
+  }
+  const settings = useDesk.getState().settings;
+  if (settings !== null) setTenantCurrency(settings.currency || staff.currency || "USD");
+
+  /*
+   * LIVE UPDATES: other desks, the clinicians' screens and patients booking
+   * online. Off (with a warning) if the stream cannot start: the desk still
+   * works, it just follows other computers only when it reads again.
+   */
+  const [{ startLive }, { applyFrame, resync }] = await Promise.all([import("./data/live.ts"), import("./state/live.ts")]);
+  void startLive({ transport, tables, readable: (ref) => can(ref, "read"), onFrame: applyFrame, onReconnect: () => void resync() }).catch((error: unknown) =>
+    console.warn("[clinic] live updates are off:", error),
+  );
+
+  await wireAddOns();
+  await wireHost("staff");
+  startTicking();
+  const { default: App } = await import("./app/App.tsx");
+  render(App);
+}
+
+/**
+ * THE ARRIVALS KIOSK — the tablet in the waiting room, signed in with the
+ * kiosk role. That role may read no table, so nothing of the desk loads: the
+ * kiosk works through its own browser key, which the staff config hands only
+ * to this sign-in and which the server honours only beside it (the sign-in's
+ * cookie and its token on every write). The screen is the kiosk and nothing
+ * else, whatever the address asks for.
+ */
+async function bootKiosk(staff: import("./staffConnection.ts").StaffConfig): Promise<void> {
+  const [{ createPublicClient }, { publicKioskPort, setKioskPort, staffSignOut, unavailableKioskPort }, { useDesk, roleOf }, { surfaceBase }] = await Promise.all([
+    import("@adminiumjs/public-client"),
+    import("./data/kiosk.ts"),
+    import("./state/desk.ts"),
+    import("./urlSync.ts"),
+  ]);
+  // The practice's clock: "today" and the times the kiosk says are the practice's, not the tablet's.
+  const zone = staff.timezone ?? "UTC";
+  setZone(zone);
+  const source = staff.timezoneSource;
+  setTimezoneClaim(zone, staff.timezone === null ? "fallback" : source === "host" || source === "fallback" ? source : "operator");
+  setClockSource(() => Date.now());
+
+  const csrfToken = staff.csrfToken;
+  // Whoever signs in after "Staff" comes back to this app: a member of staff lands on the desk.
+  const leave = () => staffSignOut({ csrfToken, next: surfaceBase(window.location.pathname, import.meta.env.BASE_URL) });
+  const key = staff.publicKeys["kiosk"];
+  const client = () =>
+    createPublicClient({ baseUrl: window.location.origin, publishableKey: key ?? "", csrfToken: () => csrfToken });
+  const first = key === undefined ? null : client();
+  setKioskPort(first === null ? unavailableKioskPort(leave) : publicKioskPort(() => client() ?? first, staff.tables, leave));
+
+  const { roleName } = roleOf(staff.access);
+  useDesk.setState({ me: { name: staff.user?.name ?? "", email: staff.user?.email ?? null, role: "kiosk", roleName, access: staff.access } });
+  useUi.setState({ persona: "clinic", view: "kiosk", theme: systemTheme() });
+  await wireHost("staff");
+  useUi.setState({ view: "kiosk" });
+  const { default: App } = await import("./app/App.tsx");
+  render(App);
+}
+
+/**
+ * THE DEMO — the website's card, with no server: the sample practice in
+ * memory, on a pinned Tuesday morning, run by the same screens and the same
+ * rules. `DEMO` folds to a literal, so no other build contains any of it.
+ */
+async function bootDemo(): Promise<void> {
+  const [{ demoClock, DEMO_ZONE, DEMO_START }, { resolveSample }, bundle, { createDemoDb, scanReminders }, ports, { DEMO_DESK }] = await Promise.all([
+    import("./lib/clock.ts"),
+    import("./data/sampleRows.ts"),
+    import("../seeds/clinic.sample.json"),
+    import("./demo/db.ts"),
+    import("./demo/ports.ts"),
+    import("./data/demo.ts"),
+  ]);
+  const clock = demoClock();
+  setZone(DEMO_ZONE);
+  setClockSource(clock.now);
+  setTimezoneClaim(DEMO_ZONE, "operator");
+  setTenantCurrency("GBP");
+  const resolve = (locale: string) => resolveSample(bundle.default as never, { now: DEMO_START, zone: DEMO_ZONE, locale });
+  const db = createDemoDb(resolve("en-US") as never, clock.now, DEMO_ZONE);
+  const { relabeller } = await import("./demo/relabel.ts");
+  const relabel = relabeller(db, resolve, "en-US");
+  // The reminders already due on the pinned morning have gone, as they would have on a real install.
+  scanReminders(db);
+
+  const [{ setDeskReads, loadDesk, useDesk }, { setSink }, { setPatientsPort, loadCatalogue }] = await Promise.all([
+    import("./state/desk.ts"),
+    import("./state/writes.ts"),
+    import("./state/patients.ts"),
+  ]);
+  setDeskReads(ports.demoDeskReads(db));
+  setSink(ports.demoSink(db, () => ({ origin: "desk", name: DEMO_DESK.name })));
+  setPatientsPort(ports.demoPatientsPort(db));
+  // The demo's kiosk keeps the real one's rules; its "Staff" goes straight back to the desk (there is no sign-in to leave).
+  const [{ setKioskPort }, { demoKioskPort }, { go }] = await Promise.all([import("./data/kiosk.ts"), import("./demo/kiosk.ts"), import("./state/ui.ts")]);
+  setKioskPort(demoKioskPort(db, async () => go("daysheet")));
+  useDesk.setState({
+    me: {
+      name: DEMO_DESK.name,
+      email: DEMO_DESK.email,
+      role: "manager",
+      roleName: DEMO_DESK.roleName,
+      access: null,
+    },
+  });
+  useUi.setState({ persona: "patient", view: "find", theme: systemTheme() });
+  /*
+   * The demo on its own (no card around it) opens where its address says:
+   * `?persona=clinic&view=waiting&theme=dark&lang=ar-EG`. It is how a
+   * screenshot, a test or a reviewer reaches one screen directly.
+   */
+  const asked = new URLSearchParams(window.location.search);
+  const persona = asked.get("persona");
+  if (persona === "patient" || persona === "clinic") useUi.setState({ persona, view: persona === "patient" ? "find" : "daysheet" });
+  const view = asked.get("view");
+  if (view !== null && view !== "") useUi.setState({ view: view as never });
+  const theme = asked.get("theme");
+  if (theme === "light" || theme === "dark") useUi.setState({ theme });
+  const lang = asked.get("lang");
+  if (lang !== null) setHostLocale(lang);
+  // The practice's words in the page's language, before anything reads them.
+  relabel(initialLocale());
+  await Promise.all([loadDesk(), loadCatalogue()]);
+  // The demo's database announces its changes as the live stream would: a
+  // booking made on the patients' side is on the day sheet when you switch.
+  const { applyFrame } = await import("./state/live.ts");
+  db.subscribe((table, change) => applyFrame({ table, kind: change.kind, id: change.id }));
+  await wireAddOns();
+
+  const { startDemoBridge } = await import("./demoBridge.ts");
+  startDemoBridge({ db, clock, relabel });
+  const { default: App } = await import("./app/App.tsx");
+  render(App);
+}
+
+/** The add-ons this build carries, registered once (their days suggest closures on Hours & closures). */
+async function wireAddOns(): Promise<void> {
+  const [{ demoAddOns }, { useAddOns }] = await Promise.all([import("./add-ons/registry.ts"), import("./state/addOns.ts")]);
+  useAddOns.getState().registerAddOns(demoAddOns());
+}
+
+/**
+ * URL ⇄ screen and the dashboard bridge (hosted builds only): a reload of
+ * `/apps/clinic/staff/waiting` opens the waiting room, the dashboard's address
+ * bar follows the desk, and its theme and language reach the desk.
+ */
+async function wireHost(side: "staff" | "customer"): Promise<void> {
+  if (!HOSTED) return;
+  const [{ attachUrlSync }, { connectToHost }, { SURFACE_NAV, APP_KEY }, { go }] = await Promise.all([
+    import("./urlSync.ts"),
+    import("./embed.ts"),
+    import("./surface-nav.ts"),
+    import("./state/ui.ts"),
+  ]);
+  let bridge: { navigated: (path: string) => void } | null = null;
+  const sync = attachUrlSync({
+    nav: SURFACE_NAV,
+    side,
+    go: (view) => go(view),
+    current: () => useUi.getState().view,
+    onPath: (path) => bridge?.navigated(path),
+  });
+  bridge = await connectToHost(APP_KEY, side, sync.path(), {
+    onTheme: (theme) => useUi.setState({ theme: theme === "dark" ? "dark" : "light" }),
+    onLocale: setHostLocale,
+    onPath: (path) => sync.applyPath(path),
+  });
+  useUi.subscribe(sync.reflect);
+}
+
+/** The real clock ticks on screen every 30 seconds: waits, "hasn't arrived", the now line. */
+function startTicking(): void {
+  setInterval(() => {
+    import("./lib/clock.ts").then(({ clockJumped }) => clockJumped()).catch(() => undefined);
+  }, 30_000);
+}
+
+async function boot(): Promise<void> {
+  if (SURFACE_SIDE === "customer") {
+    await bootPatients();
+    return;
+  }
+  if (DEMO) {
+    await bootDemo();
+    return;
+  }
+  if (HOSTED && SURFACE_SIDE === "staff") {
+    await bootDesk();
+    return;
+  }
+  showStartupFailure(
+    "The desk saves as the person signed in to Adminium, so it runs only inside Adminium. Build it with `npm run build:surface` and open it from the Clinic section.",
+    "NO_BACKEND",
   );
 }
 

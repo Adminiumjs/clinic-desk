@@ -24,7 +24,7 @@ import {
   mergeClosures,
   type DaySource,
 } from "./closures.ts";
-import type { Closure } from "../data/types.ts";
+import type { Closure } from "./closures.ts";
 
 /** A source that answers with whatever its values say, in the add-on's shape. */
 const fake = (key: string): DaySource => ({

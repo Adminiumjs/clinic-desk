@@ -1,130 +1,154 @@
 /**
- * The app shell.
+ * The app: the patients' pages or the desk, the screen on show, and what can
+ * open over it (a sheet, the visit panel, a toast).
  *
- * Routing is a plain state switch over `store.view` — no react-router. Every
- * member of the `View` union is mapped to a screen below, so no nav item, link
- * or search hit can land on a route that does not exist; anything the union
- * does not cover falls through to the 404.
- *
- * The chrome — both shells, the dock, the toasts, the visit panel, the cancel
- * confirm and the card sheet — is mounted once around the switch, so a view
- * change never remounts it and a toast survives the navigation that raised it.
+ * The two sides' screens are two separate records ON PURPOSE. `SURFACE_SIDE`
+ * folds to a literal at build time, so the patients' bundle — served to
+ * anyone on the internet — does not contain a single desk screen, and the
+ * desk's bundle contains no patients' page. Building one record by filtering
+ * at runtime would be tidier and would ship the desk to every visitor
+ * (`testing/surfaceBuild.test.ts` checks it does not).
  */
+import { useEffect, type ComponentType } from "react";
 
-import { useEffect } from "react";
-import type { ComponentType } from "react";
-
-import DemoDock from "../components/DemoDock.tsx";
-import { DEMO, SURFACE_SIDE } from "../surface.ts";
-import { CancelDialog, CardSheet, ToastLayer, VisitPanel } from "../components/Overlays.tsx";
-import Shell from "../components/Shell.tsx";
-import type { View } from "../data/types.ts";
-import { setAmbient } from "../i18n/ambient.ts";
 import { useI18n } from "../i18n/index.tsx";
-import { useStore } from "../state/store.ts";
+import { setAmbient } from "../i18n/ambient.ts";
+import { SURFACE_SIDE } from "../surface.ts";
+import type { CustomerView, StaffView } from "../surface-nav.ts";
+import { useUi } from "../state/ui.ts";
+import { usePatients } from "../state/patients.ts";
+import { useDesk } from "../state/desk.ts";
 
-import { Accounts, DaySheet, Patients, Recalls, Waiting } from "../screens/Clinic.tsx";
+import DeskShell from "../components/DeskShell.tsx";
+import PatientShell from "../components/PatientShell.tsx";
+import SheetHost from "../components/SheetHost.tsx";
+import { DeskOverlays } from "../components/Overlays.tsx";
+import { toastIcon } from "../components/desk/icons.ts";
+import { Toasts } from "../components/ui.tsx";
+import { PatientOverlays } from "../components/PatientOverlays.tsx";
+
+import Daysheet from "../screens/Daysheet.tsx";
+import Waiting from "../screens/Waiting.tsx";
+import Patients from "../screens/Patients.tsx";
+import Registrations from "../screens/Registrations.tsx";
+import Week from "../screens/Week.tsx";
+import Waitlist from "../screens/Waitlist.tsx";
+import Kiosk from "../screens/Kiosk.tsx";
+import Accounts from "../screens/Accounts.tsx";
+import Recalls from "../screens/Recalls.tsx";
+import Hours from "../screens/Hours.tsx";
+import Outbox from "../screens/Outbox.tsx";
+import Endofday from "../screens/Endofday.tsx";
 import Settings from "../screens/Settings.tsx";
 import NotFound from "../screens/NotFound.tsx";
-import { Confirm, Details, Find, MyVisits } from "../screens/Patient.tsx";
 
-const CLINIC_SCREENS = {
-  daysheet: DaySheet,
+import Find from "../screens/patient/Find.tsx";
+import Details from "../screens/patient/Details.tsx";
+import Confirm from "../screens/patient/Confirm.tsx";
+import MyVisits from "../screens/patient/MyVisits.tsx";
+import Team from "../screens/patient/Team.tsx";
+import FindUs from "../screens/patient/FindUs.tsx";
+import Prices from "../screens/patient/Prices.tsx";
+import Sooner from "../screens/patient/Sooner.tsx";
+import Prefs from "../screens/patient/Prefs.tsx";
+import Register from "../screens/patient/Register.tsx";
+import Faq from "../screens/patient/Faq.tsx";
+import PatientNotFound from "../screens/patient/NotFound.tsx";
+import BookingClosed from "../screens/patient/BookingClosed.tsx";
+
+const DESK_SCREENS = {
+  daysheet: Daysheet,
   waiting: Waiting,
   patients: Patients,
+  registrations: Registrations,
+  week: Week,
+  waitlist: Waitlist,
   accounts: Accounts,
   recalls: Recalls,
-  /*
-   * STAFF ONLY, and that is a build-time fact rather than a hidden route. The
-   * practice's settings — its closing days, and the add-ons that supply some of
-   * them — are the desk's, so this component is referenced from the clinic
-   * record and from nowhere else. `SURFACE_SIDE` folds to a literal, so the
-   * public patient bundle does not contain this screen, the add-on shelf, or
-   * the settings panel any add-on draws inside it.
-   */
+  hours: Hours,
+  outbox: Outbox,
+  endofday: Endofday,
   settings: Settings,
-} satisfies Partial<Record<View, ComponentType>>;
+  kiosk: Kiosk,
+  notfound: NotFound,
+} satisfies Record<StaffView, ComponentType>;
 
 const PATIENT_SCREENS = {
   find: Find,
   details: Details,
   confirm: Confirm,
-  myvisits: MyVisits,
-} satisfies Partial<Record<View, ComponentType>>;
+  visits: MyVisits,
+  team: Team,
+  findus: FindUs,
+  prices: Prices,
+  sooner: Sooner,
+  prefs: Prefs,
+  register: Register,
+  faq: Faq,
+  notfound: PatientNotFound,
+} satisfies Record<CustomerView, ComponentType>;
 
-/*
- * A surface build ships ONE side's screens. `SURFACE_SIDE` folds to a literal,
- * so the branch not taken is eliminated and every screen only it referenced
- * goes with it — which is what stops the PUBLIC patient bundle from carrying
- * the day sheet, the accounts ledger and the recall list.
- *
- * The two screen files import nothing from each other here, so the cut is
- * clean; `notfound` is in every build because an unknown view must land
- * somewhere.
+/**
+ * The arrivals kiosk stands alone: no sidebar, no sheets, no visit panel —
+ * a tablet in the waiting room shows a patient nothing of the desk. Someone
+ * signed in with the kiosk role reaches only this, whatever the address asks
+ * for; the toasts stay for the demo card's words.
  */
-const SCREENS: Partial<Record<View, ComponentType>> =
-  SURFACE_SIDE === "staff"
-    ? { ...CLINIC_SCREENS, notfound: NotFound }
-    : SURFACE_SIDE === "customer"
-      ? { ...PATIENT_SCREENS, notfound: NotFound }
-      : { ...CLINIC_SCREENS, ...PATIENT_SCREENS, notfound: NotFound };
+function KioskAlone() {
+  return (
+    <>
+      <Kiosk />
+      <Toasts icons={toastIcon} />
+    </>
+  );
+}
 
-function CurrentScreen() {
-  const view = useStore((s) => s.view);
-  /* Unknown values can only arrive from injected state — 404 them. */
-  const Screen = SCREENS[view] ?? NotFound;
-  return <Screen />;
+function Desk() {
+  const view = useUi((s) => s.view);
+  const kioskOnly = useDesk((s) => s.me.role === "kiosk");
+  if (kioskOnly || view === "kiosk") return <KioskAlone />;
+  const Screen = (DESK_SCREENS as Partial<Record<string, ComponentType>>)[view] ?? NotFound;
+  return (
+    <>
+      <DeskShell>
+        <Screen />
+      </DeskShell>
+      <SheetHost />
+      <DeskOverlays />
+    </>
+  );
+}
+
+function PatientSide() {
+  const view = useUi((s) => s.view);
+  const closed = usePatients((s) => s.catalogue?.settings?.online_booking_on === false);
+  // Online booking switched off at the desk: the whole side is one page saying so.
+  if (closed) return <BookingClosed />;
+  const Screen = (PATIENT_SCREENS as Partial<Record<string, ComponentType>>)[view] ?? PatientNotFound;
+  return (
+    <>
+      <PatientShell>
+        <Screen />
+      </PatientShell>
+      <PatientOverlays />
+    </>
+  );
 }
 
 export default function App() {
-  const initTheme = useStore((s) => s.initTheme);
-  const escape = useStore((s) => s.escape);
-
-  /*
-   * Publish the live locale to the module-level bridge before anything below
-   * renders. `lib/format.ts` builds its `Intl` instances from it, and the store
-   * and the engine call those formatters from outside React where no hook can
-   * reach the provider. Assigning during render rather than in an effect
-   * matters: children render after this line, so the first paint after a locale
-   * switch is already in the new locale instead of one frame behind.
-   */
   const { locale, t, money, number } = useI18n();
+  // Publish the live locale before anything renders, so the formatters called
+  // outside React are already in the new language on the first paint.
   setAmbient(locale, t, money, number);
+  const theme = useUi((s) => s.theme);
+  const persona = useUi((s) => s.persona);
 
   useEffect(() => {
-    initTheme();
-  }, [initTheme]);
+    document.documentElement.dataset["theme"] = theme;
+  }, [theme]);
 
-  /* Document-level Escape. The store closes overlays outermost-first. */
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent): void => {
-      if (e.key === "Escape") escape();
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [escape]);
-
-  return (
-    <>
-      <a className="rh-sr-only" href="#main">
-        {t("chrome.skipToContent")}
-      </a>
-      <Shell>
-        <CurrentScreen />
-      </Shell>
-      {/* §5.2 item 8 — the dock resets and advances seeded fiction. Against
-          real rows those controls either lie or do damage. */}
-      {/*
-        Build-time, not runtime. `DEMO` folds to a literal, so a hosted or
-        connected build does not CONTAIN the dock — it is not merely hidden.
-        The old guard was `!isConnected()`, a runtime comparison against a
-        mutable module binding, which no bundler can eliminate.
-      */}
-      {DEMO && <DemoDock />}
-      <ToastLayer />
-      <VisitPanel />
-      <CancelDialog />
-      <CardSheet />
-    </>
-  );
+  if (SURFACE_SIDE === "staff") return <Desk />;
+  if (SURFACE_SIDE === "customer") return <PatientSide />;
+  // The demo: both sides, switched by the card's persona.
+  return persona === "patient" ? <PatientSide /> : <Desk />;
 }

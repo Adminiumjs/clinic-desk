@@ -120,17 +120,15 @@ export const hostKit: HostKitConfig<HostedSlotId> = {
   localeTags: LOCALE_TAGS,
 
   /**
-   * ONE stylesheet, and it is `components.css` rather than `screens.css`.
+   * ONE stylesheet: `rh.css`, the design's shared interaction rules.
    *
-   * `main.tsx` fixes the cascade order — tokens, base, components, screens — so
-   * screens always wins a tie. The slot rule pair must not be something a
-   * screen rule can tie with and beat, and it is shared UI rather than
-   * view-specific, so it belongs in the third layer. The guard requires the
-   * pair in EXACTLY ONE of the files named here, which is stricter than
-   * "somewhere": two copies of a cascade rule is how one gets edited and the
-   * other does not.
+   * Screens draw with inline styles, so no screen rule can tie with this pair
+   * and beat it; the slot's rules are shared UI, and belong beside the other
+   * shared rules. The guard requires the pair in EXACTLY ONE of the files named
+   * here, which is stricter than "somewhere": two copies of a cascade rule is
+   * how one gets edited and the other does not.
    */
-  stylesheets: [`${root}/src/styles/components.css`],
+  stylesheets: [`${root}/src/styles/rh.css`],
 
   /**
    * EMPTY, AND THAT IS THE CLAIM RATHER THAN THE DEFAULT.

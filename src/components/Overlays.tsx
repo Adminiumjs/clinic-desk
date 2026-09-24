@@ -1,404 +1,319 @@
 /**
- * The overlay layer: toasts, the visit panel, the cancel confirm and the card
- * sheet.
+ * What opens over the desk's pages: the visit panel, the cancel dialog, the
+ * toasts, and the notice that the session has ended.
  *
- * All four are mounted once at the root, outside the view switch, so a view
- * change never remounts them and a toast raised by an action survives the
- * navigation that action triggered. Each of them sets `overlayOpen`, which is
- * what moves the demo dock to the opposite corner (house layout rule 1).
- *
- * The record-payment popover is NOT here: it is anchored to the row it belongs
- * to and lives in the accounts screen, because a popover that opens in the
- * middle of the screen is a dialog wearing the wrong clothes.
+ * The visit panel shows one visit — who, when, what for, what it costs, where
+ * the patient is in their visit — and the moves open to it now, as the person
+ * looking may make them: a clinician sees only the steps into a room, in with
+ * them and ready to go; the front desk checks in, moves, cancels and sends
+ * people off. Buttons follow what the server lets the person do.
  */
+import { useEffect, useId, useRef, useState } from "react";
+import type { LucideIcon } from "lucide-react";
+import { CalendarSync, CalendarX, Check, CheckCheck, Circle, DoorOpen, HandHeart, LogIn, Receipt, ShieldAlert, TriangleAlert, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
 
-import { useEffect, useState } from "react";
-import { Check, CreditCard, TriangleAlert, X } from "lucide-react";
-
-import type { VisitStatus } from "../data/types.ts";
+import type { Appointment, AppointmentStatus } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
-import {
-  clock,
-  dateLong,
-  duration,
-  label,
-  money,
-  span,
-  statusLabel,
-} from "../lib/format.ts";
-import {
-  endOf,
-  isLateCancel,
-  isQueueStatus,
-  nextStatus,
-  visitTypeById,
-} from "../lib/schedule.ts";
-import {
-  CLINICIANS,
-  VISIT_TYPES,
-  clinicianById,
-  patientName,
-  useStore,
-} from "../state/store.ts";
-import { Avatar, Button, Field, Mono } from "./Primitives.tsx";
+import { now } from "../lib/clock.ts";
+import { clinicianOf, patientOf, typeOf, visitName } from "../lib/desk.ts";
+import { dayOf, dayShort, money, num, timeRange } from "../lib/format.ts";
+import { cancelVisit, onSignedOut } from "../state/actions.ts";
+import { useCan, useDesk } from "../state/desk.ts";
+import { closePanel, go, openSheet, startPlacing, toast, useUi, type Sheet } from "../state/ui.ts";
+import { Btn, btnGhost, btnPrimary, iconBtnStyle, kicker, mono, monoPill, pill, STATUS_META, Tile, Toasts, Dialog, useModal } from "./ui.tsx";
+import { toastIcon } from "./desk/icons.ts";
+import { advanceVisit, checkInVisit, noShowVisit } from "./desk/moves.ts";
+import { insideWindow, panelActions, type PanelAction } from "../screens/daysheet/model.ts";
 
-export function ToastLayer() {
-  const { t } = useI18n();
-  const toasts = useStore((s) => s.toasts);
-  const dismiss = useStore((s) => s.dismissToast);
+const CHAIN: AppointmentStatus[] = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
+const CHAIN_ICON: Record<string, LucideIcon> = { booked: Circle, checked_in: LogIn, roomed: DoorOpen, with_clinician: UserRoundCheck, ready: CheckCheck, seen: Check };
+const ADVANCE: Partial<Record<AppointmentStatus, { key: "waiting.step.room" | "waiting.step.with" | "waiting.step.ready"; icon: LucideIcon }>> = {
+  checked_in: { key: "waiting.step.room", icon: DoorOpen },
+  roomed: { key: "waiting.step.with", icon: UserRoundCheck },
+  with_clinician: { key: "waiting.step.ready", icon: CheckCheck },
+};
 
-  return (
-    <div className="rh-toasts" role="status" aria-live="polite">
-      {toasts.map((toast) => (
-        <div key={toast.id} className={`rh-toast rh-toast--${toast.tone}`}>
-          {toast.tone === "pos" && <Check size={15} aria-hidden="true" />}
-          <span>{toast.text}</span>
-          <button
-            type="button"
-            className="rh-toast__x"
-            onClick={() => dismiss(toast.id)}
-            aria-label={t("chrome.toast.dismiss")}
-          >
-            <X size={14} aria-hidden="true" />
-          </button>
-        </div>
-      ))}
-    </div>
-  );
+/** Start moving a visit: the day sheet opens on its day, showing where it could go. */
+function startMove(visit: Appointment, name: string, minutes: number): void {
+  startPlacing({
+    what: "moving",
+    patientName: name,
+    typeId: visit.visit_type_id,
+    minutes,
+    clinicianId: null,
+    exclude: visit.id,
+    ref: visit.ref,
+    day: dayOf(visit.starts_at),
+    place: (at) => openSheet({ kind: "move", visitId: visit.id, to: at }),
+  });
 }
 
-/** The four steps the panel draws, in the order a visit moves through them. */
-const CHAIN = ["checked_in", "roomed", "with_clinician", "ready"] as const;
-
-/** How far along the chain a visit has got. `-1` means it has not started. */
-function chainReached(status: VisitStatus): number {
-  if (isQueueStatus(status)) return CHAIN.indexOf(status);
-  /* Somebody already seen has been through every step, even though the board
-   * no longer shows them. */
-  return status === "done" ? CHAIN.length - 1 : -1;
-}
-
-/**
- * The visit panel: everything the desk needs about one appointment, and the
- * four things it can do about it. The status chain is drawn as steps rather
- * than a dropdown so a receptionist can see at a glance how far along someone
- * is without opening anything.
- */
-export function VisitPanel() {
+function Chain({ status }: { status: AppointmentStatus }) {
   const { t } = useI18n();
-  const panelRef = useStore((s) => s.panelRef);
-  const appts = useStore((s) => s.appts);
-  const walkIns = useStore((s) => s.walkIns);
-  const openPanel = useStore((s) => s.openPanel);
-  const advanceVisit = useStore((s) => s.advanceVisit);
-  const checkIn = useStore((s) => s.checkIn);
-  const markNoShow = useStore((s) => s.markNoShow);
-  const askCancel = useStore((s) => s.askCancel);
-  const openPatient = useStore((s) => s.openPatient);
-
-  if (panelRef === null) return null;
-  const appt = appts.find((a) => a.id === panelRef);
-  if (!appt) return null;
-
-  const clinician = clinicianById(appt.clinician);
-  const type = visitTypeById(VISIT_TYPES, appt.type);
-  const name = patientName(appt.patient, walkIns[appt.patient] ?? null);
-  const onward = nextStatus(appt.status);
-  const closed =
-    appt.status === "done" || appt.status === "no_show" || appt.status === "cancelled";
-
+  const at = CHAIN.indexOf(status);
   return (
-    <div
-      className="rh-modal-scrim"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) openPanel(null);
-      }}
-    >
-      <div
-        className="rh-modal rh-panelsheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("panel.title", { ref: appt.id })}
-      >
-        <div className="rh-panelsheet__head">
-          <div style={{ minWidth: 0 }}>
-            <h2 className="rh-modal__title">
-              <Mono>{appt.id}</Mono>
-            </h2>
-            <p className="rh-panel__sub">
-              {label(type.label)} · {duration(type.minutes)}
-            </p>
-          </div>
-          <button
-            type="button"
-            className="rh-iconbtn rh-btn"
-            style={{ marginInlineStart: "auto" }}
-            onClick={() => openPanel(null)}
-            aria-label={t("panel.close")}
-          >
-            <X size={17} aria-hidden="true" />
-          </button>
-        </div>
-
-        <div className="rh-facts">
-          <div className="rh-fact">
-            <span className="rh-fact__k">{t("panel.patient")}</span>
-            <span className="rh-fact__v">{name}</span>
-          </div>
-          <div className="rh-fact">
-            <span className="rh-fact__k">{t("panel.when")}</span>
-            <span className="rh-fact__v rh-mono">
-              {span(appt.start, endOf(appt, VISIT_TYPES))}
-            </span>
-          </div>
-          <div className="rh-fact">
-            <span className="rh-fact__k">{t("confirm.clinician")}</span>
-            <span className="rh-fact__v">
-              {clinician !== null && (
-                <Avatar name={clinician.name} tint={clinician.tint} ini={clinician.ini} />
-              )}
-              {clinician?.name}
-            </span>
-          </div>
-          <div className="rh-fact">
-            <span className="rh-fact__k">{t("panel.reason")}</span>
-            <span className="rh-fact__v">{label(appt.reason)}</span>
-          </div>
-          {appt.deskNote !== null && (
-            <div className="rh-fact">
-              <span className="rh-fact__k">{t("panel.desknote")}</span>
-              <span className="rh-fact__v">{label(appt.deskNote)}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="rh-label" style={{ marginBlockStart: 16, marginBlockEnd: 8 }}>
-          {t("panel.status")}
-        </div>
-        <div className="rh-chain">
-          {CHAIN.map((step, i) => (
+    <ol style={{ listStyle: "none", margin: "12px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 9 }}>
+      {CHAIN.map((step, i) => {
+        const meta = STATUS_META[step];
+        const done = at >= 0 && i <= at;
+        const current = i === at;
+        const Icon = CHAIN_ICON[step]!;
+        return (
+          <li key={step} aria-current={current ? "step" : undefined} style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span
-              key={step}
-              className={`rh-chain__step${i <= chainReached(appt.status) ? " rh-chain__step--on" : ""}`}
+              aria-hidden="true"
+              style={{
+                width: 24,
+                height: 24,
+                flexShrink: 0,
+                borderRadius: 8,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                ...(current ? { background: meta.fg, color: "var(--surface)" } : done ? { background: meta.bg, color: meta.fg } : { background: "var(--surface-3)", color: "var(--fg-subtle)" }),
+              }}
             >
-              {statusLabel(step)}
+              <Icon size={13} />
             </span>
-          ))}
-        </div>
-
-        {closed && (
-          <p className="rh-honest" style={{ marginBlockStart: 14 }}>
-            {statusLabel(appt.status)}
-          </p>
-        )}
-
-        <div className="rh-panelsheet__actions">
-          {appt.status === "booked" && (
-            <Button onClick={() => checkIn(appt.id)}>{t("panel.checkIn")}</Button>
-          )}
-          {isQueueStatus(appt.status) && (
-            <Button onClick={() => advanceVisit(appt.id)}>
-              {t("panel.advance", { status: statusLabel(onward) })}
-            </Button>
-          )}
-          <Button tone="ghost" onClick={() => openPatient(appt.patient)}>
-            {t("panel.openPatient")}
-          </Button>
-          {appt.status === "booked" && (
-            <>
-              <Button tone="ghost" onClick={() => markNoShow(appt.id)}>
-                {t("panel.noShow")}
-              </Button>
-              <Button tone="danger" onClick={() => askCancel(appt.id)}>
-                {t("panel.cancel")}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+            <span style={{ fontSize: 12.5, fontWeight: current ? 800 : 700, color: current ? "var(--fg)" : done ? "var(--fg-muted)" : "var(--fg-subtle)" }}>{t(`status.${step}`)}</span>
+            {i < CHAIN.length - 1 && <span aria-hidden="true" style={{ flex: 1, height: 1.5, background: done ? "var(--border-strong)" : "var(--border)" }} />}
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
-/**
- * The cancel confirm. Inside 24 hours it changes character rather than changing
- * behaviour: the same button still cancels, but the dialog says plainly what it
- * costs the patient. Refusing the cancellation would only mean they do not turn
- * up, which is worse for everyone.
- */
-export function CancelDialog() {
+function VisitPanel({ visit }: { visit: Appointment }) {
   const { t } = useI18n();
-  const cancelRef = useStore((s) => s.cancelRef);
-  const appts = useStore((s) => s.appts);
-  const now = useStore((s) => s.now);
-  const askCancel = useStore((s) => s.askCancel);
-  const confirmCancel = useStore((s) => s.confirmCancel);
+  const titleId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  useModal(root, closePanel);
+  const name = useDesk((s) => visitName(s, visit));
+  const clinician = useDesk((s) => clinicianOf(s, visit.clinician_id));
+  const type = useDesk((s) => typeOf(s, visit.visit_type_id));
+  const allergies = useDesk((s) => patientOf(s, visit.patient_id)?.allergies_note ?? null);
+  const role = useDesk((s) => s.me.role);
+  const update = useCan("appointments", "update");
+  const pay = useCan("payments", "create");
+  const seePatients = useCan("patients", "read");
+  const [busy, setBusy] = useState<PanelAction | null>(null);
 
-  if (cancelRef === null) return null;
-  const appt = appts.find((a) => a.id === cancelRef);
-  if (!appt) return null;
+  const fee = visit.fee ?? type?.fee ?? 0;
+  const note = visit.status === "seen" ? (visit.balance > 0 ? t("panel.owing", { amount: money(visit.balance) }) : t("panel.settled")) : t("panel.atDesk");
+  const actions = panelActions(visit, { role, update, pay, seePatients });
 
-  const late = isLateCancel(appt, now);
-  const clinician = clinicianById(appt.clinician);
+  const run = (action: PanelAction, work: () => Promise<unknown>) => {
+    setBusy(action);
+    void work().finally(() => setBusy(null));
+  };
+  const button = (action: PanelAction) => {
+    const ghost = { ...btnGhost, width: "100%" } as const;
+    const primary = { ...btnPrimary, width: "100%" } as const;
+    switch (action) {
+      case "checkIn":
+        return (
+          <Btn key={action} icon={LogIn} busy={busy === action} disabled={busy !== null} style={primary} onClick={() => run(action, () => checkInVisit(visit, name, t))}>
+            {t("panel.checkIn")}
+          </Btn>
+        );
+      case "advance": {
+        const step = ADVANCE[visit.status];
+        if (step === undefined) return null;
+        return (
+          <Btn key={action} icon={step.icon} busy={busy === action} disabled={busy !== null} style={primary} onClick={() => run(action, () => advanceVisit(visit, name, t))}>
+            {t(step.key)}
+          </Btn>
+        );
+      }
+      case "sendOff":
+        return (
+          <Btn key={action} icon={HandHeart} style={primary} onClick={() => openSheet({ kind: "sendOff", visitId: visit.id })}>
+            {t("waiting.step.sendOff")}
+          </Btn>
+        );
+      case "move":
+        return (
+          <Btn key={action} kind="ghost" icon={CalendarSync} disabled={busy !== null} style={ghost} onClick={() => startMove(visit, name, visit.minutes)}>
+            {t("panel.move")}
+          </Btn>
+        );
+      case "noShow":
+        return (
+          <Btn key={action} kind="ghost" icon={UserRoundX} busy={busy === action} disabled={busy !== null} style={{ ...ghost, color: "var(--danger)" }} onClick={() => run(action, () => noShowVisit(visit, name, t))}>
+            {t("waiting.noShow")}
+          </Btn>
+        );
+      case "cancel":
+        return (
+          <Btn key={action} kind="ghost" icon={CalendarX} disabled={busy !== null} style={{ ...ghost, color: "var(--danger)" }} onClick={() => openSheet({ kind: "cancel", visitId: visit.id })}>
+            {t("panel.cancel")}
+          </Btn>
+        );
+      case "patient":
+        return (
+          <Btn
+            key={action}
+            kind="ghost"
+            icon={UserRound}
+            disabled={busy !== null}
+            style={ghost}
+            onClick={() => {
+              go("patients");
+              useUi.setState({ patientId: visit.patient_id });
+            }}
+          >
+            {t("panel.patient")}
+          </Btn>
+        );
+      case "payment":
+        return (
+          <Btn key={action} kind="ghost" icon={Receipt} disabled={busy !== null} style={ghost} onClick={() => openSheet({ kind: "payment", visitId: visit.id, amount: visit.balance })}>
+            {t("panel.payment")}
+          </Btn>
+        );
+    }
+  };
 
   return (
-    <div
-      className="rh-modal-scrim"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) askCancel(null);
-      }}
-    >
+    <div onClick={closePanel} style={{ position: "fixed", inset: 0, zIndex: 700, background: "var(--scrim)", backdropFilter: "blur(3px)", animation: "rh-scrim .16s ease", display: "flex", alignItems: "stretch", justifyContent: "flex-end", padding: 14 }}>
       <div
-        className="rh-modal"
+        ref={root}
         role="dialog"
         aria-modal="true"
-        aria-label={t("cancel.title", { ref: appt.id })}
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}
+        className="rh-scroll"
+        style={{ position: "relative", width: "min(420px,100%)", boxSizing: "border-box", maxHeight: "100%", overflowY: "auto", padding: 20, borderRadius: 18, border: "1px solid var(--border)", background: "var(--surface)", boxShadow: "0 40px 90px -30px rgba(10,10,25,.6)", animation: "rh-sheet .2s cubic-bezier(.2,.7,.3,1)", outline: "none" }}
       >
-        <h2 className="rh-modal__title">{t("cancel.title", { ref: appt.id })}</h2>
-        <p className="rh-panel__sub">
-          {t("cancel.body", {
-            when: `${dateLong(appt.date)}, ${clock(appt.start)}`,
-            clinician: clinician?.name ?? "",
-          })}
-        </p>
-
-        {late && (
-          <div className="rh-warnbox">
-            <TriangleAlert size={16} aria-hidden="true" />
-            <div>
-              <strong>{t("cancel.late.title")}</strong>
-              <p>{t("cancel.late.body")}</p>
-            </div>
+        <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+          <Tile name={clinician?.name ?? name} color={clinician?.color ?? "#3b6fbd"} size={42} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h2 id={titleId} style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: "-.028em", lineHeight: "normal", textWrap: "pretty" }}>
+              {name}
+            </h2>
+            <div style={{ ...mono(12, 600, "var(--fg-subtle)"), direction: "inherit", whiteSpace: "normal" }}>{clinician === undefined ? "" : `${clinician.short_name} · ${clinician.role_label}`}</div>
           </div>
-        )}
-
-        <div className="rh-modal__actions">
-          <Button tone="ghost" onClick={() => askCancel(null)}>
-            {t("chrome.action.keep")}
-          </Button>
-          <Button tone="danger" onClick={confirmCancel}>
-            {t("cancel.confirm")}
-          </Button>
+          <button type="button" data-close className="rh-gi" onClick={closePanel} aria-label={t("common.close")} style={iconBtnStyle}>
+            <X size={15} aria-hidden="true" />
+          </button>
         </div>
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 13 }}>
+          <span style={monoPill("var(--surface-3)", "var(--fg-subtle)")}>{visit.ref}</span>
+          {allergies !== null && allergies.trim() !== "" && (
+            <span style={pill("var(--warn-soft)", "var(--warn)")}>
+              <ShieldAlert size={11} aria-hidden="true" />
+              {t("panel.allergies", { what: allergies })}
+            </span>
+          )}
+        </div>
+        <div style={{ marginBlockStart: 14, padding: 14, borderRadius: 14, background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 7 }}>
+          <span style={{ ...mono(12.5, 600, "var(--fg)"), direction: "inherit", whiteSpace: "normal" }}>
+            {t("panel.when", { day: dayShort(dayOf(visit.starts_at)), range: timeRange(visit.starts_at, visit.minutes), minutes: num(visit.minutes) })}
+          </span>
+          <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.02em", color: "var(--fg)", textWrap: "pretty" }}>{visit.reason ?? type?.name ?? ""}</span>
+          <span style={{ display: "flex", alignItems: "baseline", gap: 9, marginBlockStart: 4 }}>
+            <span style={mono(13.5, 600, "var(--fg)")}>{money(fee)}</span>
+            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{note}</span>
+          </span>
+        </div>
+        <div style={{ marginBlockStart: 18 }}>
+          <h3 style={{ ...kicker, margin: 0 }}>{t("panel.where")}</h3>
+          <Chain status={visit.status} />
+        </div>
+        {actions.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBlockStart: 18 }}>{actions.map(button)}</div>}
       </div>
     </div>
   );
 }
 
 /**
- * The card sheet. Every field is decorative — nothing is validated, nothing is
- * sent — which is exactly why the callout at the top says so in as many words
- * before a reader types a digit.
+ * Cancel a visit, as the desk: outside the cancellation window it is a plain
+ * question; inside it the dialog says the cancellation is logged as late.
+ * Either way the time goes back on the board. It speaks as the desk, not to
+ * the patient.
  */
-export function CardSheet() {
+export function CancelDialog({ sheet, onClose }: { sheet: Extract<Sheet, { kind: "cancel" }>; onClose: () => void }) {
   const { t } = useI18n();
-  const cardFor = useStore((s) => s.cardFor);
-  const openCard = useStore((s) => s.openCard);
-  const payCard = useStore((s) => s.payCard);
-  const charges = useStore((s) => s.charges);
-  const payments = useStore((s) => s.payments);
-  const appts = useStore((s) => s.appts);
-  const confirmedRef = useStore((s) => s.confirmedRef);
-
-  const [number, setNumber] = useState("");
-  const [expiry, setExpiry] = useState("");
-  const [cvc, setCvc] = useState("");
-
-  useEffect(() => {
-    if (cardFor !== null) {
-      setNumber("");
-      setExpiry("");
-      setCvc("");
+  const visit = useDesk((s) => s.visits[sheet.visitId]);
+  const name = useDesk((s) => (visit === undefined ? "" : visitName(s, visit)));
+  const clinician = useDesk((s) => clinicianOf(s, visit?.clinician_id ?? null));
+  const hours = useDesk((s) => s.settings?.cancel_hours ?? 24);
+  const [busy, setBusy] = useState(false);
+  if (visit === undefined) return null;
+  const late = insideWindow(visit.starts_at, now(), hours);
+  const confirm = async () => {
+    setBusy(true);
+    const out = await cancelVisit(visit.id);
+    setBusy(false);
+    if (!out.ok) {
+      toast(t(`refusal.${out.reason}`), { icon: "circle-alert", tone: "danger" });
+      return;
     }
-  }, [cardFor]);
-
-  if (cardFor === null) return null;
-
-  const amount = (() => {
-    if (cardFor === "booking") {
-      const appt = appts.find((a) => a.id === confirmedRef);
-      return appt ? visitTypeById(VISIT_TYPES, appt.type).fee : 0;
-    }
-    const charge = charges.find((c) => c.id === cardFor);
-    if (!charge) return 0;
-    return charge.amount - payments.filter((p) => p.charge === charge.id).reduce((s, p) => s + p.amount, 0);
-  })();
-
+    onClose();
+    if (late) toast(t("cancel.toast.late", { ref: visit.ref }), { icon: "triangle-alert", tone: "warn" });
+    else toast(t("cancel.toast.done", { ref: visit.ref }), { icon: "circle-check" });
+  };
   return (
-    <div
-      className="rh-modal-scrim"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) openCard(null);
-      }}
+    <Dialog
+      icon={late ? TriangleAlert : CalendarX}
+      tone={late ? "warn" : "neutral"}
+      onClose={onClose}
+      title={late ? t("cancel.lateTitle", { n: num(hours) }, hours) : t("cancel.title")}
+      body={late ? t("cancel.lateBody", { n: num(hours) }, hours) : t("cancel.body")}
     >
-      <div
-        className="rh-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t("card.title", { amount: money(amount) })}
-      >
-        <h2 className="rh-modal__title">{t("card.title", { amount: money(amount) })}</h2>
-
-        <div className="rh-demobox">
-          <CreditCard size={16} aria-hidden="true" />
-          <span>{t("card.demo")}</span>
-        </div>
-
-        <div className="rh-cardform">
-          <Field label={t("card.number")}>
-            <input
-              className="rh-input rh-fld rh-mono"
-              value={number}
-              inputMode="numeric"
-              placeholder="4242 4242 4242 4242"
-              onChange={(e) => setNumber(e.target.value)}
-            />
-          </Field>
-          <div className="rh-cardform__row">
-            <Field label={t("card.expiry")}>
-              <input
-                className="rh-input rh-fld rh-mono"
-                value={expiry}
-                placeholder="04/29"
-                onChange={(e) => setExpiry(e.target.value)}
-              />
-            </Field>
-            <Field label={t("card.cvc")}>
-              <input
-                className="rh-input rh-fld rh-mono"
-                value={cvc}
-                placeholder="123"
-                onChange={(e) => setCvc(e.target.value)}
-              />
-            </Field>
-          </div>
-        </div>
-
-        <div className="rh-modal__actions">
-          <Button tone="ghost" onClick={() => openCard(null)}>
-            {t("card.cancel")}
-          </Button>
-          <Button onClick={payCard}>{t("card.pay", { amount: money(amount) })}</Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/**
- * The clinician legend. A reader learns the four tints once here and then reads
- * the day sheet's columns and the waiting cards without a second look.
- */
-export function ClinicianLegend() {
-  return (
-    <div className="rh-legend">
-      {CLINICIANS.map((c) => (
-        <span key={c.id} className="rh-legend__item">
-          <span className="rh-legend__dot" style={{ background: c.tint }} aria-hidden="true" />
-          {c.name}
-          <span className="rh-legend__role">{label(c.role)}</span>
+      <div style={{ display: "flex", alignItems: "center", gap: 11, marginBlockStart: 15, padding: 13, borderRadius: 13, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        <Tile name={clinician?.name ?? name} color={clinician?.color ?? "#3b6fbd"} size={36} />
+        <span style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+          <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.02em" }}>{clinician === undefined ? name : t("cancel.who", { name, clinician: clinician.short_name })}</span>
+          <span style={{ ...mono(12, 600, "var(--fg-muted)"), direction: "inherit", whiteSpace: "normal" }}>
+            {t("cancel.when", { day: dayShort(dayOf(visit.starts_at)), range: timeRange(visit.starts_at, visit.minutes), ref: visit.ref })}
+          </span>
         </span>
-      ))}
-    </div>
+      </div>
+      <div style={{ display: "flex", gap: 10, marginBlockStart: 16 }}>
+        <Btn kind="ghost" onClick={onClose} style={{ flex: 1 }}>
+          {t("cancel.keep")}
+        </Btn>
+        <Btn busy={busy} onClick={() => void confirm()} style={{ flex: 1, background: late ? "var(--warn)" : "var(--danger)", color: "var(--accent-fg)" }}>
+          {late ? t("cancel.anyway") : t("cancel.confirm")}
+        </Btn>
+      </div>
+    </Dialog>
+  );
+}
+
+/** The session ended: nothing more saves until the person signs in again. */
+function SignedOut() {
+  const { t } = useI18n();
+  const close = () => useUi.setState({ signedOut: false });
+  return (
+    <Dialog icon={LogIn} tone="warn" alert onClose={close} title={t("signedOut.title")} body={t("signedOut.body")}>
+      <div style={{ display: "flex", gap: 10, marginBlockStart: 16 }}>
+        <Btn kind="ghost" onClick={close} style={{ flex: 1 }}>
+          {t("common.close")}
+        </Btn>
+        <Btn icon={LogIn} onClick={() => window.location.reload()} style={{ flex: 1 }}>
+          {t("signedOut.action")}
+        </Btn>
+      </div>
+    </Dialog>
+  );
+}
+
+export function DeskOverlays() {
+  const panel = useUi((s) => s.panel);
+  const visit = useDesk((s) => (panel === null ? undefined : s.visits[panel]));
+  const signedOut = useUi((s) => s.signedOut);
+  const sheet = useUi((s) => s.sheet);
+  // A save that finds the session ended says so once, here, whichever screen made it.
+  useEffect(() => onSignedOut(() => useUi.setState({ signedOut: true })), []);
+  return (
+    <>
+      {visit !== undefined && <VisitPanel key={visit.id} visit={visit} />}
+      {signedOut && sheet === null && <SignedOut />}
+      <Toasts icons={toastIcon} />
+    </>
   );
 }
