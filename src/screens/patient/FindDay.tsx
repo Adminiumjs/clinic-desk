@@ -134,7 +134,15 @@ export function DayStep({
         </div>
       ) : (
         <>
-          <div className="rh-hide" role="group" aria-label={t("find.days")} style={{ display: "flex", gap: 7, marginBlockStart: 14, overflowX: "auto", paddingBlockEnd: 4 }}>
+          <div
+            className="rh-hide"
+            role="group"
+            aria-label={t("find.days")}
+            // Every day shut leaves nothing in the strip to focus, and a strip that
+            // scrolls must still be reachable from the keyboard.
+            tabIndex={days !== null && days.length > 0 && days.every((d) => d.state === "closed") ? 0 : undefined}
+            style={{ display: "flex", gap: 7, marginBlockStart: 14, overflowX: "auto", paddingBlockEnd: 4 }}
+          >
             {days === null
               ? Array.from({ length: Math.min(span, 10) }, (_, i) => <div key={i} className="rh-skel" style={{ minWidth: 62, height: 68 }} />)
               : days.map((d) => <DayButton key={d.date} d={d} on={d.date === day} onPick={() => onDay(d.date)} />)}

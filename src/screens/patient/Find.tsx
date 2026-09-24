@@ -28,9 +28,15 @@ import { atInstant, clockLabel, rangeLabel } from "./when.ts";
 import { useTodayDay } from "./useToday.ts";
 import { nearestFor } from "./nearest.ts";
 
-/** The visit types a patient may pick now: new-patient ones only while a first visit is possible. */
+/**
+ * The visit types a patient may pick now: new-patient ones only while a first
+ * visit is possible, and only a type some clinician who can be booked online
+ * does — one nobody does would open on a strip of days with nothing in them.
+ */
 export function typesOffered(cat: Catalogue, firstVisitPossible: boolean): VisitType[] {
-  return cat.visitTypes.filter((t) => t.active && t.bookable_online && (!t.new_patients_only || firstVisitPossible));
+  return cat.visitTypes.filter(
+    (t) => t.active && t.bookable_online && (!t.new_patients_only || firstVisitPossible) && cliniciansFor(cat, t.id).length > 0,
+  );
 }
 
 /** The clinicians who do a type and can be booked online, in order. */

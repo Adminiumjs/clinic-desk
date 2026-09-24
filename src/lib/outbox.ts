@@ -11,6 +11,7 @@
  */
 import type { Appointment, Id, Message, Patient, Settings } from "../data/types.ts";
 import type { DeskState } from "../state/desk.ts";
+import { HOSTED } from "../surface.ts";
 
 /** The largest lead a patient may choose; the scan looks no further ahead. */
 export const MAX_LEAD_HOURS = 48;
@@ -22,6 +23,21 @@ export interface Upcoming {
   goesAt: number;
   /** Where it would go; null when there is no address (it would be logged "No email on file"). */
   to: string | null;
+}
+
+/**
+ * Whether an address is on a domain reserved for examples and tests (RFC 2606,
+ * RFC 6761): `example.<anything>`, or a `.test`, `.invalid`, `.localhost` or
+ * `.example` name. Adminium's sender never mails one (it logs it "skipped"),
+ * and every sample patient has one — so in a hosted desk a reminder to one is
+ * not coming, and listing it as "goes now" would promise it forever. The same
+ * rule as the server's `reservedAddress`.
+ */
+export function reservedAddress(address: string): boolean {
+  const domain = address.trim().toLowerCase().split("@").pop()?.replace(/\.$/, "") ?? "";
+  const labels = domain.split(".");
+  const top = labels[labels.length - 1] ?? "";
+  return labels[0] === "example" || ["test", "invalid", "localhost", "example"].includes(top);
 }
 
 /** Whether a logged reminder is this visit's, for the start it has now. */
@@ -37,8 +53,13 @@ export function upcomingReminders(input: {
   messages: readonly Message[];
   settings: Settings | null;
   now: number;
+  /**
+   * Whether a reserved address gets nothing. True where Adminium sends (a
+   * hosted desk); the demo's stand-in world "sends" to its sample addresses.
+   */
+  reservedGoNowhere?: boolean;
 }): Upcoming[] {
-  const { visits, patients, messages, settings, now } = input;
+  const { visits, patients, messages, settings, now, reservedGoNowhere = HOSTED } = input;
   // Switched off: the scan queues nothing, so nothing is coming.
   if (settings !== null && !settings.reminders_on) return [];
   const fallback = settings?.default_lead_hours ?? 24;
@@ -54,6 +75,7 @@ export function upcomingReminders(input: {
     if (messages.some((m) => remindsThisStart(m, visit))) continue;
     const lead = Math.min(patient?.remind_lead_hours ?? fallback, MAX_LEAD_HOURS);
     const address = (patient === undefined ? visit.new_email : patient.email)?.trim() ?? "";
+    if (reservedGoNowhere && address !== "" && reservedAddress(address)) continue;
     out.push({ visit, goesAt: start - lead * HOUR, to: address === "" ? null : address });
   }
   return out.sort((a, b) => a.goesAt - b.goesAt || a.visit.id - b.visit.id);

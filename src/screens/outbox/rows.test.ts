@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { Appointment, Message, Patient, Settings } from "../../data/types.ts";
 import { outboxRows, reasonKey, upcomingReminders, waitingCount } from "./rows.ts";
+import { reservedAddress } from "../../lib/outbox.ts";
 
 const NOW = Date.parse("2026-07-28T08:20:00.000Z");
 const H = 3_600_000;
@@ -82,5 +83,27 @@ describe("reasonKey — the sender's English, in the page's words", () => {
     expect(reasonKey("Email is not set up on this server")).toBe("outbox.why.notSetUp");
     expect(reasonKey("Not delivered: the mailbox is full.")).toBeNull();
     expect(reasonKey(null)).toBeNull();
+  });
+});
+
+describe("a reserved address in a hosted desk", () => {
+  it("promises nothing: Adminium never mails one, and every sample patient has one", () => {
+    const hosted = (email: string | null) =>
+      upcomingReminders({ visits: [visit(7)], patients: { 1: patient({ email }) }, messages: [], settings: settings(), now: NOW, reservedGoNowhere: true });
+    expect(hosted("leila@example.com")).toEqual([]);
+    expect(hosted("desk@clinic.test")).toEqual([]);
+    expect(hosted("leila@rowan.example")).toEqual([]);
+    expect(hosted("leila@rowanhealth.co.uk").map((u) => u.to)).toEqual(["leila@rowanhealth.co.uk"]);
+    // No address at all is still listed, as "No email on file" — that one the desk can fix.
+    expect(hosted(null).map((u) => u.to)).toEqual([null]);
+  });
+
+  it("the demo's stand-in world still lists them", () => {
+    expect(upcomingReminders({ visits: [visit(7)], patients: { 1: patient() }, messages: [], settings: settings(), now: NOW, reservedGoNowhere: false })).toHaveLength(1);
+  });
+
+  it("matches the server's rule for what is reserved", () => {
+    for (const a of ["x@example.com", "x@example.org", "x@EXAMPLE.net.", "x@a.test", "x@a.invalid", "x@a.localhost", "x@a.example"]) expect(reservedAddress(a), a).toBe(true);
+    for (const a of ["x@myexample.com", "x@example-clinic.com", "x@test.com", "x@a.co.uk"]) expect(reservedAddress(a), a).toBe(false);
   });
 });
