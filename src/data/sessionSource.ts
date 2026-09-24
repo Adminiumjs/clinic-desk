@@ -99,6 +99,27 @@ export interface SessionPortOptions {
   refreshToken?: () => Promise<string | null>;
   /** Test seam. */
   fetchImpl?: typeof fetch;
+  /** Test seam: how a read waits out a rate limit. */
+  sleep?: (ms: number) => Promise<void>;
+}
+
+/*
+ * A READ REFUSED FOR RATE is read again. Adminium answers 429 before it runs
+ * anything, so repeating a GET is safe, and the desk opening needs a burst of
+ * them: a desk that meets the limit while it starts must wait and go on, not
+ * stop on a screen that says "try again in 15 seconds" and never does. Twice,
+ * after what `Retry-After` asks (capped), then the refusal stands. A write is
+ * never repeated here: the person sees it refused and decides.
+ */
+const RATE_RETRIES = 2;
+const RATE_WAIT_CAP_MS = 30_000;
+const RATE_WAIT_DEFAULT_MS = 5_000;
+
+/** How long a 429 asks to wait, from `Retry-After` in seconds; a default when it says nothing usable. */
+export function rateLimitWait(retryAfter: string | null): number {
+  const seconds = retryAfter === null ? Number.NaN : Number(retryAfter);
+  if (!Number.isFinite(seconds) || seconds < 0) return RATE_WAIT_DEFAULT_MS;
+  return Math.min(Math.ceil(seconds * 1000), RATE_WAIT_CAP_MS);
 }
 
 /*
@@ -222,6 +243,7 @@ export function sessionPort(opts: SessionPortOptions): SnapshotPort {
 
 function buildTransport(opts: SessionPortOptions): SessionTransport {
   const doFetch = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
+  const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   let csrfToken: string | null = null;
   let connectionId: string | null = opts.connectionId ?? null;
   /** Adminium's own zone, for the fallback below. Null on an older Adminium. */
@@ -242,16 +264,22 @@ function buildTransport(opts: SessionPortOptions): SessionTransport {
 
   async function call<T>(path: string, init?: RequestInit): Promise<T> {
     const mutating = (init?.method ?? "GET").toUpperCase() !== "GET";
-    const response = await doFetch(path, {
-      credentials: "same-origin",
-      ...init,
-      headers: {
-        accept: "application/json",
-        ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
-        ...(mutating && csrfToken !== null ? { [CSRF_HEADER]: csrfToken } : {}),
-        ...init?.headers,
-      },
-    });
+    const send = () =>
+      doFetch(path, {
+        credentials: "same-origin",
+        ...init,
+        headers: {
+          accept: "application/json",
+          ...(init?.body !== undefined ? { "content-type": "application/json" } : {}),
+          ...(mutating && csrfToken !== null ? { [CSRF_HEADER]: csrfToken } : {}),
+          ...init?.headers,
+        },
+      });
+    let response = await send();
+    for (let retry = 0; !mutating && response.status === 429 && retry < RATE_RETRIES; retry += 1) {
+      await sleep(rateLimitWait(response.headers.get("retry-after")));
+      response = await send();
+    }
 
     let body: unknown = null;
     try {

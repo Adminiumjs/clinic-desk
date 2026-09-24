@@ -16,7 +16,7 @@
  */
 import { describe, expect, it, vi } from "vitest";
 
-import { createSessionTransport, SessionPortError, sessionPort } from "./sessionSource.ts";
+import { createSessionTransport, rateLimitWait, SessionPortError, sessionPort } from "./sessionSource.ts";
 
 interface Call {
   url: string;
@@ -317,5 +317,62 @@ describe("writes", () => {
     await t.refresh();
     await t.mutate("/api/v1/data/conn-1/payments", "POST", { values: {} });
     expect(calls.at(-1)!.headers["x-adminium-csrf"]).toBe("csrf-new");
+  });
+});
+
+describe("a request refused for rate (429)", () => {
+  /** The harness, with the first `times` requests to `path` refused for rate. */
+  function limited(path: string, times: number, retryAfter: string | null = "3") {
+    const inner = harness({ "/api/v1/data/conn-1/payments": { data: { id: 7 } } });
+    let refused = 0;
+    const fetchImpl = (async (input: unknown, init?: RequestInit) => {
+      const url = String(input).split("?")[0];
+      if (url === path && refused < times) {
+        refused += 1;
+        inner.calls.push({ url, method: (init?.method ?? "GET").toUpperCase(), headers: {}, body: undefined, credentials: undefined });
+        return new Response(JSON.stringify({ error: { code: "RATE_LIMITED", message: "Too many requests. Try again in 3 seconds." } }), {
+          status: 429,
+          headers: retryAfter === null ? {} : { "retry-after": retryAfter },
+        });
+      }
+      return inner.fetchImpl(input as RequestInfo, init);
+    }) as typeof fetch;
+    const waits: number[] = [];
+    const sleep = async (ms: number) => {
+      waits.push(ms);
+    };
+    return { calls: inner.calls, fetchImpl, sleep, waits };
+  }
+
+  it("reads again after what Retry-After asks, and the desk opens", async () => {
+    const { fetchImpl, sleep, waits, calls } = limited("/api/v1/connections", 1);
+    const port = sessionPort({ tableOfRef: MAP, fetchImpl, sleep });
+    await expect(port.config()).resolves.toMatchObject({ timezone: "Europe/Lisbon" });
+    expect(waits).toEqual([3000]);
+    expect(calls.filter((c) => c.url === "/api/v1/connections")).toHaveLength(2);
+  });
+
+  it("gives up after two more tries, with the server's own refusal", async () => {
+    const { fetchImpl, sleep, waits } = limited("/api/v1/connections", 5, null);
+    const port = sessionPort({ tableOfRef: MAP, fetchImpl, sleep });
+    await expect(port.config()).rejects.toMatchObject({ status: 429, code: "RATE_LIMITED" });
+    // No usable Retry-After: the default wait, twice.
+    expect(waits).toEqual([5000, 5000]);
+  });
+
+  it("never repeats a write: the person sees it refused and decides", async () => {
+    const { fetchImpl, sleep, waits, calls } = limited("/api/v1/data/conn-1/payments", 1);
+    const t = createSessionTransport({ tableOfRef: MAP, fetchImpl, sleep });
+    await t.port.config();
+    await expect(t.mutate("/api/v1/data/conn-1/payments", "POST", { values: {} })).rejects.toMatchObject({ status: 429 });
+    expect(waits).toEqual([]);
+    expect(calls.filter((c) => c.url === "/api/v1/data/conn-1/payments")).toHaveLength(1);
+  });
+
+  it("caps a long Retry-After, and reads a bad one as the default", () => {
+    expect(rateLimitWait("15")).toBe(15_000);
+    expect(rateLimitWait("3600")).toBe(30_000);
+    expect(rateLimitWait("soon")).toBe(5_000);
+    expect(rateLimitWait(null)).toBe(5_000);
   });
 });

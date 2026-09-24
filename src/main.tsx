@@ -11,50 +11,15 @@ import { DEMO, HOSTED, SURFACE_SIDE } from "./surface.ts";
 import { setClockSource, setZone } from "./lib/clock.ts";
 import { setServerZone } from "./data/venueTime.ts";
 import { useUi } from "./state/ui.ts";
+import { showStartupFailure as drawStartupFailure, type StartupDetail } from "./startupFailure.ts";
 
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing #root — check index.html");
 const mount: HTMLElement = container;
 
-/** This app's name as a failure screen says it: the product's, never a practice's. */
-const PRODUCT = "Clinic Desk";
-
-/** The headline for a startup failure, chosen by cause. */
-function titleFor(code: string | null): string {
-  switch (code) {
-    case "NO_CONNECTION":
-      return `${PRODUCT} is not connected`;
-    case "NO_BACKEND":
-      return `${PRODUCT} has no backend configured`;
-    case "SCHEMA_MISMATCH":
-      return `${PRODUCT}'s tables do not match what it reads`;
-    default:
-      return `${PRODUCT} could not load its data`;
-  }
-}
-
-/**
- * The smallest honest "this is not configured" surface: plain DOM and English,
- * because it has to work when the data layer, and maybe the locale bundle,
- * did not.
- */
-function showStartupFailure(detail: string, code: string | null): void {
-  const title = titleFor(code);
-  console.error(`[adminium] ${title}: ${detail}`);
-  mount.innerHTML = "";
-  const box = document.createElement("div");
-  box.setAttribute("role", "alert");
-  box.style.cssText =
-    "max-width:34rem;margin:12vh auto;padding:1.5rem;font:400 15px/1.6 system-ui,sans-serif;" +
-    "border:1px solid #d4d4d8;border-radius:12px;color:#18181b;background:#fff";
-  const h = document.createElement("h1");
-  h.textContent = title;
-  h.style.cssText = "margin:0 0 .5rem;font-size:1.05rem;font-weight:600";
-  const p = document.createElement("p");
-  p.textContent = detail;
-  p.style.cssText = "margin:0;color:#52525b;white-space:pre-wrap";
-  box.append(h, p);
-  mount.append(box);
+/** A startup that failed: the card, in the page's language, in place of the app. */
+function showStartupFailure(detail: StartupDetail, code: string | null): void {
+  drawStartupFailure(mount, detail, code, initialLocale());
 }
 
 const codeOf = (error: unknown): string | null => {
@@ -91,10 +56,7 @@ async function bootPatients(): Promise<void> {
   const { resolveSurfaceConfig } = await import("./publicConfig.ts");
   const config = await resolveSurfaceConfig();
   if (config === null) {
-    showStartupFailure(
-      "Adminium served no booking key for this page. Allow the public access when installing the app, or check that its browser key is still live on the API keys page.",
-      "NO_BACKEND",
-    );
+    showStartupFailure({ key: "startup.noBookingKey" }, "NO_BACKEND");
     return;
   }
   const { createPublicClient } = await import("@adminiumjs/public-client");
@@ -102,7 +64,7 @@ async function bootPatients(): Promise<void> {
   // human check: solve it first rather than be refused once and try again.
   const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true });
   if (client === null) {
-    showStartupFailure("This page has no server to talk to.", "NO_BACKEND");
+    showStartupFailure({ key: "startup.noServer" }, "NO_BACKEND");
     return;
   }
   const [{ publicPatientsPort }, { setPatientsPort, loadCatalogue }] = await Promise.all([import("./data/publicPatients.ts"), import("./state/patients.ts")]);
@@ -112,7 +74,7 @@ async function bootPatients(): Promise<void> {
     setZone(port.timeZone());
     setTimezoneClaim(port.timeZone(), "operator");
   } catch (error) {
-    showStartupFailure(messageOf(error), codeOf(error));
+    showStartupFailure({ text: messageOf(error) }, codeOf(error));
     return;
   }
   useUi.setState({ persona: "patient", view: "find", theme: systemTheme() });
@@ -161,7 +123,7 @@ async function bootDesk(): Promise<void> {
   ]);
   const staff = await loadStaffConfig();
   if (staff === null) {
-    showStartupFailure("Adminium did not send this desk its configuration. Open it from Adminium, signed in.", "NO_BACKEND");
+    showStartupFailure({ key: "startup.noConfig" }, "NO_BACKEND");
     return;
   }
   // The kiosk's sign-in reads no table: it never loads the desk, only the kiosk's own key.
@@ -199,7 +161,7 @@ async function bootDesk(): Promise<void> {
     setTenantCurrency(config.currency ?? staff.currency ?? "USD");
     await transport.port.assertRefs(REQUIRED);
   } catch (error) {
-    showStartupFailure(messageOf(error), codeOf(error));
+    showStartupFailure({ text: messageOf(error) }, codeOf(error));
     return;
   }
   setZone(zone);
@@ -215,7 +177,8 @@ async function bootDesk(): Promise<void> {
   useUi.setState({ persona: "clinic", view: "daysheet", theme: systemTheme() });
   await loadDesk();
   if (useDesk.getState().load === "failed") {
-    showStartupFailure(useDesk.getState().loadError ?? "The desk could not read its data.", null);
+    const loadError = useDesk.getState().loadError;
+    showStartupFailure(loadError === null ? { key: "startup.deskUnread" } : { text: loadError }, null);
     return;
   }
   const settings = useDesk.getState().settings;
@@ -409,8 +372,11 @@ async function boot(): Promise<void> {
     await bootDesk();
     return;
   }
+  // A developer's mistake, not an operator's: said once, in English.
   showStartupFailure(
-    "The desk saves as the person signed in to Adminium, so it runs only inside Adminium. Build it with `npm run build:surface` and open it from the Clinic section.",
+    {
+      text: "The desk saves as the person signed in to Adminium, so it runs only inside Adminium. Build it with `npm run build:surface` and open it from the Clinic section.",
+    },
     "NO_BACKEND",
   );
 }
