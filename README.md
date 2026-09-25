@@ -42,22 +42,24 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
   waiting on the desk, and the week — drawn by Adminium's own dashboard widgets
   from your tables.
 - **Emails**: a confirmation, a reminder at each patient's own lead time, a
-  missed-visit note, a recall and a closure's cancellation, each in the
-  patient's language (eight languages). Adminium sends them from the app's
-  outbox table; the desk shows what went, what failed and what is coming.
+  missed-visit note, a recall, a closure's cancellation and — with Invoices &
+  Receipts — a receipt for an insurer, each in the patient's language (eight
+  languages). Adminium sends them from the app's outbox table; the desk shows
+  what went, what failed and what is coming.
 - **Eight languages**, including Arabic right to left: English, German, French,
   Danish, Czech, Egyptian Arabic, Simplified and Traditional Chinese. Light and
   dark, desktop and phone width.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.0 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.2 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
    ([Installing apps](https://docs.adminium.dev/self-hosting/installing-apps/)).
    It creates its eighteen `clinic_*` tables, the Clinic section's pages, four
-   roles and two browser keys, and asks nothing.
+   roles and two browser keys. It offers two add-ons, neither needed
+   ([Add-ons](#add-ons)): tick them, or add them later.
 2. Optionally tick **Add sample data** (or add it later from the app's settings
    page) — Rowan Health's clinicians, patients and a busy day, with statuses
    that match the clock when you add it, on working days (added on a Saturday,
@@ -112,6 +114,38 @@ confirmed only once the desk has checked it (an address nobody has proved gets
 no mail). Sample rows never produce a message, and addresses on reserved
 domains (`example.com`) are never sent to.
 
+## Add-ons
+
+Clinic Desk runs a practice's day on its own. Two add-ons are offered when
+you install it; you may leave out either, and add it later from Adminium's
+add-ons.
+
+- **Holiday calendars** — *Mark public holidays as closures.* A country's
+  public holidays, shown on **Hours & closures** as suggestions. **Add as a
+  closure** writes the practice's own closure for that day (from and to the
+  same date, labelled with the holiday's name), because only a closure shuts
+  the diary: a day in the add-on's list never does by itself.
+- **Invoices & Receipts** — *Email or print a receipt a patient can claim
+  with.* With it connected, a payment's receipt on the desk gains **For their
+  insurer**: the payment on the practice's letterhead, with the patient's name,
+  address and policy number, the kind of visit (never the reason typed for
+  it), the day of the visit and the clinician who saw them, the amount, how
+  and when it was paid, and what the visit still owes. **Email it** queues an
+  email to the patient with that receipt attached; **Open to print** opens it
+  in a new tab, in the patient's language, ready for the browser's print
+  dialog. The letterhead is Invoices & Receipts' own: fill its
+  business name and address lines in its settings. Every payment on a
+  patient's page opens its receipt again, so a receipt can be sent long after
+  the visit.
+
+  Without it, **For their insurer** is not there, and an email already queued
+  fails with the reason rather than going without its receipt. The desk's
+  own receipt — the slip it prints on the spot — needs no add-on and does not
+  change. A payment taken before 0.2.1 prints without the patient's name,
+  address, policy number and clinician: the receipt reads them from links a
+  payment has carried since. Clinic Desk 0.2.1 needs Invoices & Receipts 1.0.4
+  or later for this.
+
 ## The demo
 
 The demo is the same screens on an in-browser copy of the sample practice,
@@ -147,8 +181,18 @@ Open the address Vite prints. One screen directly:
 
 `manifest.json` — the tables and their rules (the booking rule, stamps, the
 capped balance), pages, roles, public access, the outbox and the email
-templates — is generated from typed modules in `src/manifest/`, with every
-label in eight languages; the drift test fails when the two disagree.
+templates, the add-ons it offers and the receipt it ships — is generated from
+typed modules in `src/manifest/`, with every label in eight languages; the
+drift test fails when the two disagree.
+
+`src/contract/` installs this manifest on a built Adminium, with the add-ons
+packed from a checkout of the add-ons repository, and drives it over HTTP on
+SQLite, Postgres and MySQL: the install with both add-ons, the sample, a
+receipt drawn from the desk's door and one emailed with its receipt attached,
+the feature switched off, and an update from 0.2.0. It skips unless
+`ADMINIUM_REPO` points at a built Adminium checkout (`ADD_ONS_REPO` at the
+add-ons, `../add-ons` by default); `TEST_POSTGRES_URL` and `TEST_MYSQL_URL`
+add the other two engines.
 
 ## Self-host stack
 

@@ -36,6 +36,9 @@ marketplace demos keep working with no server behind them. Do not add a second f
 | `GET /api/v1/public/records/:ref/:id` | One row. |
 | `POST /api/v1/public/records/:ref` | Create. |
 | `PATCH /api/v1/public/records/:ref/:id` | Update. |
+| `PUT /api/v1/public/records/:ref/:id` | Replace: every `writable` column must be present. *(0.3.0+)* |
+| `DELETE /api/v1/public/records/:ref/:id` | Delete one row. Answers `{ "data": {} }`. *(0.3.0+)* |
+| `POST /api/v1/public/records/:ref/batch` | 1–500 rows, all or none: `{ "rows": [ … ] }` → `{ "data": { "count": n } }`. A row without its primary key is inserted; a row with it updates that row. *(0.3.0+)* |
 | `POST /api/v1/public/claim` | Prove who you are; get a session. |
 | `DELETE /api/v1/public/session` | Sign out. |
 
@@ -86,6 +89,15 @@ page cannot half-succeed. Three kinds of value are set by the server and are not
 - anything the scope's filter constrains.
 
 A create returns only the `expose` columns — never more than a read of the same row would.
+
+A ref grants each of these only if `/config` lists its action: `read`, `create`, `update`,
+`replace`, `delete`, `batch`. Check `refs[ref].actions` before you draw a button — never
+assume a delete is allowed because an update is.
+
+From the client: `replace(ref, id, values)`, `remove(ref, id)` and `batch(ref, rows)` beside
+`create` and `update`. `list()` returns `{ data, cursor }` whatever response shape the operator
+chose for the ref (`refs[ref].response.shape`: `wrapped`, `array` or `single`), so a page never
+branches on it.
 
 ## Claims — knowing who the visitor is
 

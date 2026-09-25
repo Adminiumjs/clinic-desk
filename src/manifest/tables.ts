@@ -72,6 +72,10 @@ function money(ref: string, label: string, more: Partial<Column> = {}): Column {
 function fk(ref: string, references: string, label: string, nullable = false): Column {
   return { ref, type: "fk", references, label: l(label), ...(nullable ? opt : {}) };
 }
+/** A link kept equal to the one on the row `via` points at (its `from` column, same name by default). */
+function copied(ref: string, references: string, label: string, via: string, from = ref): Column {
+  return { ref, type: "fk", references, label: l(label), nullable: true, rules: { copy: { via, from, mode: "always" } } };
+}
 function date(ref: string, label: string, more: Partial<Column> = {}): Column {
   return { ref, type: "date", label: l(label), ...more };
 }
@@ -296,7 +300,8 @@ export const TABLES: Table[] = [
       text("emergency_contact", 200, "Someone to ring", opt),
       text("allergies_note", 200, "Allergies", { ...opt, rules: { personal: true } }),
       text("insurer", 80, "Insurer", opt),
-      text("policy_ref", 60, "Policy number", opt),
+      // Printed on a receipt for their insurer: personal, like the address beside it.
+      text("policy_ref", 60, "Policy number", { ...opt, rules: { personal: true } }),
       text("language", 16, "Language", opt),
       bool("remind_email", "Remind me by email", true),
       picked("remind_lead_hours", "Remind (hours before)", [12, 24, 48], 24),
@@ -432,6 +437,12 @@ export const TABLES: Table[] = [
     columns: [
       id,
       fk("appointment_id", "appointments", "Appointment"),
+      // Who paid, for what kind of visit and with whom, copied from the visit
+      // whenever the payment is written: a receipt reads them one step away,
+      // and a document can follow only one link.
+      copied("patient_id", "patients", "Patient", "appointment_id"),
+      copied("visit_type_id", "visit_types", "Visit type", "appointment_id"),
+      copied("clinician_id", "clinicians", "Clinician", "appointment_id"),
       money("amount", "Amount", { rules: { validation: { min: 0.01 } } }),
       choice("method", "Method", { card: "Card", cash: "Cash", transfer: "Transfer" }, { default: "card" }),
       text("taken_by", 120, "Taken by", { ...opt, rules: stampWho }),
@@ -519,11 +530,13 @@ export const TABLES: Table[] = [
     labelPlural: l("Messages"),
     columns: [
       id,
-      choice("kind", "Kind", { confirmation: "Confirmation", reminder: "Reminder", missed: "Missed visit", recall: "Recall", cancelled: "Closure" }),
+      choice("kind", "Kind", { confirmation: "Confirmation", reminder: "Reminder", missed: "Missed visit", recall: "Recall", cancelled: "Closure", receipt: "Receipt" }),
       fk("patient_id", "patients", "Patient", true),
       fk("appointment_id", "appointments", "Appointment", true),
       fk("recall_id", "recalls", "Recall", true),
       fk("closure_id", "closures", "Closure", true),
+      // A receipt emailed for a payment carries that payment's receipt.
+      fk("payment_id", "payments", "Payment", true),
       text("to_address", 254, "Sent to", opt),
       text("language", 16, "Language", opt),
       choice(

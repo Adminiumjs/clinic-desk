@@ -99,4 +99,24 @@ describe("the session sink", () => {
     expect(await sink.update("appointments", 1, { status: "roomed" })).toMatchObject({ status: "roomed" });
     expect(t.refresh).toHaveBeenCalledTimes(1);
   });
+
+  it("asks the app's own document door by the manifest's names, never the real table's", async () => {
+    const mutate = vi.fn(async () => ({ id: "doc-1", printUrl: "/api/v1/documents/doc-1/print", contentUrl: "/api/v1/documents/doc-1/content", reused: false }));
+    const sink = sessionSink(transport(mutate as never), TABLE_OF_REF);
+    expect(await sink.renderDocument!({ kind: "receipt", ref: "payments", id: 12, locale: "fr-FR" })).toEqual({
+      id: "doc-1",
+      printUrl: "/api/v1/documents/doc-1/print",
+      contentUrl: "/api/v1/documents/doc-1/content",
+    });
+    expect(mutate).toHaveBeenCalledWith("/api/v1/apps/clinic/documents/render", "POST", { kind: "receipt", ref: "payments", pk: { id: 12 }, locale: "fr-FR" });
+  });
+
+  it("hands a switched-off feature and an undrawable document back as refusals, with the server's code", async () => {
+    const off = sessionSink(transport(vi.fn(async () => Promise.reject(fail(409, "FEATURE_OFF", { addOn: "invoices", feature: "insurer-receipts" }))) as never), TABLE_OF_REF);
+    await expect(off.renderDocument!({ kind: "receipt", ref: "payments", id: 1 })).rejects.toMatchObject({ kind: "refused", status: 409, code: "FEATURE_OFF", details: { addOn: "invoices" } });
+    const undrawn = sessionSink(transport(vi.fn(async () => Promise.reject(fail(422, "DOCUMENT_NOT_DRAWN"))) as never), TABLE_OF_REF);
+    await expect(undrawn.renderDocument!({ kind: "receipt", ref: "payments", id: 1 })).rejects.toMatchObject({ kind: "refused", code: "DOCUMENT_NOT_DRAWN" });
+    const empty = sessionSink(transport(vi.fn(async () => ({})) as never), TABLE_OF_REF);
+    await expect(empty.renderDocument!({ kind: "receipt", ref: "payments", id: 1 })).rejects.toBeInstanceOf(SinkError);
+  });
 });

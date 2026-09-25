@@ -17,7 +17,7 @@ import { CalendarX, DoorClosed, Pencil, TriangleAlert } from "lucide-react";
 
 import type { CatalogueSample } from "../add-ons/vendor/host/index.ts";
 import { AddOnSlot } from "../add-ons/slot.tsx";
-import { DAY_SOURCES, addOnClosures, dormantDayCounts } from "../add-ons/closures.ts";
+import { DAY_SOURCES, addOnClosures, closureFor, dormantDayCounts } from "../add-ons/closures.ts";
 import { AddOnAttributions, Affiliation, SourceChip } from "../components/Affiliation.tsx";
 import type { Closure, Weekday } from "../data/types.ts";
 import { addDays } from "../data/venueTime.ts";
@@ -302,7 +302,7 @@ function AddOnDays() {
                     <button
                       type="button"
                       className="rh-btn"
-                      onClick={() => openSheet({ kind: "closure", prefill: { clinicianId: null, from: d.date, to: d.date, label: d.reason, note: null } })}
+                      onClick={() => openSheet({ kind: "closure", prefill: closureFor(d) })}
                       aria-label={t("hours.addOns.addAsFor", { name: d.reason })}
                       style={{ ...btnGhostSm, height: 34 }}
                     >

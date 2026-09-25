@@ -294,9 +294,16 @@ function RecallLine({ recall, day }: { recall: Recall | undefined; day: string }
 function HistoryItem({ visit: v, line, dark }: { visit: Appointment; line: boolean; dark: boolean }) {
   const { t } = useI18n();
   const desk = useDesk();
+  const canSeeMoney = useCan("payments", "read");
   const type = typeOf(desk, v.visit_type_id);
   const clinician = clinicianOf(desk, v.clinician_id);
   const inBuilding = IN_THE_BUILDING.includes(v.status);
+  // Each payment that stands opens its receipt again: to print it once more, or for their insurer.
+  const paid = canSeeMoney
+    ? Object.values(desk.payments)
+        .filter((p) => p.appointment_id === v.id && !p.voided)
+        .sort((a, b) => a.paid_at.localeCompare(b.paid_at))
+    : [];
   return (
     <li style={{ display: "flex", gap: 13 }}>
       <div aria-hidden="true" style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0, width: 12 }}>
@@ -314,6 +321,23 @@ function HistoryItem({ visit: v, line, dark }: { visit: Appointment; line: boole
         <div style={{ marginBlockStart: 3, fontSize: 12, fontWeight: 700, color: "var(--fg-subtle)" }}>
           {[clinician?.short_name, clinician?.role_label, v.ref].filter(Boolean).join(" · ")}
         </div>
+        {paid.length > 0 && (
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBlockStart: 8 }}>
+            {paid.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                className="rh-gi"
+                onClick={() => openSheet({ kind: "receipt", paymentId: p.id })}
+                aria-label={t("patients.receiptLabel", { amount: amountText(p.amount), day: dayMonthNear(dayOf(p.paid_at), today()) })}
+                style={{ display: "inline-flex", alignItems: "center", gap: 6, minHeight: 30, paddingInline: 10, borderRadius: 9, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--fg-muted)", fontSize: 12, fontWeight: 700, cursor: "pointer" }}
+              >
+                <Receipt size={13} aria-hidden="true" />
+                {t("patients.receipt", { amount: amountText(p.amount) })}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
     </li>
   );

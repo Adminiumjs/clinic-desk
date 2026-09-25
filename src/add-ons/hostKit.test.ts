@@ -53,7 +53,10 @@ import { DAY_SOURCES } from "./daySources.ts";
  * Filled in below, per key, with the argument being made — see
  * `testing/kit/delivery-claims.ts` for the three that are legitimate.
  */
-const DELIVERY_CLAIMS: Record<string, string> = {};
+const DELIVERY_CLAIMS: Record<string, string> = {
+  "receipt.insurer.sent":
+    "BACKED: shown only for an outbox row of kind `receipt` whose `status` Adminium has set to `sent` — `sheets/receipt/ForInsurer.tsx` Status reads the message row the live stream keeps current, and the time is its `sent_at`.",
+};
 
 
 /*

@@ -201,6 +201,9 @@ CREATE TABLE clinic_appointments (
 CREATE TABLE clinic_payments (
   id SERIAL PRIMARY KEY,
   appointment_id INTEGER NOT NULL REFERENCES clinic_appointments (id),
+  patient_id INTEGER REFERENCES clinic_patients (id),
+  visit_type_id INTEGER REFERENCES clinic_visit_types (id),
+  clinician_id INTEGER REFERENCES clinic_clinicians (id),
   amount NUMERIC(12, 2) NOT NULL,
   method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'cash', 'transfer')),
   taken_by VARCHAR(120),
@@ -262,11 +265,12 @@ CREATE TABLE clinic_waiting_list (
 
 CREATE TABLE clinic_messages (
   id SERIAL PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled')),
+  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled', 'receipt')),
   patient_id INTEGER REFERENCES clinic_patients (id),
   appointment_id INTEGER REFERENCES clinic_appointments (id),
   recall_id INTEGER REFERENCES clinic_recalls (id),
   closure_id INTEGER REFERENCES clinic_closures (id),
+  payment_id INTEGER REFERENCES clinic_payments (id),
   to_address VARCHAR(254),
   language VARCHAR(16),
   status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'sent', 'failed', 'skipped')),
@@ -298,6 +302,9 @@ CREATE INDEX idx_appointments_patient_id ON clinic_appointments (patient_id);
 CREATE INDEX idx_appointments_clinician_id ON clinic_appointments (clinician_id);
 CREATE INDEX idx_appointments_visit_type_id ON clinic_appointments (visit_type_id);
 CREATE INDEX idx_payments_appointment_id ON clinic_payments (appointment_id);
+CREATE INDEX idx_payments_patient_id ON clinic_payments (patient_id);
+CREATE INDEX idx_payments_visit_type_id ON clinic_payments (visit_type_id);
+CREATE INDEX idx_payments_clinician_id ON clinic_payments (clinician_id);
 CREATE INDEX idx_write_offs_appointment_id ON clinic_write_offs (appointment_id);
 CREATE INDEX idx_check_notes_registration_id ON clinic_check_notes (registration_id);
 CREATE INDEX idx_check_notes_appointment_id ON clinic_check_notes (appointment_id);
@@ -314,3 +321,4 @@ CREATE INDEX idx_messages_patient_id ON clinic_messages (patient_id);
 CREATE INDEX idx_messages_appointment_id ON clinic_messages (appointment_id);
 CREATE INDEX idx_messages_recall_id ON clinic_messages (recall_id);
 CREATE INDEX idx_messages_closure_id ON clinic_messages (closure_id);
+CREATE INDEX idx_messages_payment_id ON clinic_messages (payment_id);

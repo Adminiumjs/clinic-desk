@@ -23,6 +23,8 @@ import { actionKey } from "../lib/keys.ts";
 import * as act from "./actions.ts";
 import { ensureDays, loadDesk, setDeskReads, useDesk } from "./desk.ts";
 import { setSink } from "./writes.ts";
+import { isFeatureOn, setConnectedAddOns } from "./features.ts";
+import { INSURER_RECEIPTS } from "../lib/features.ts";
 
 let db: DemoDb;
 let at = DEMO_START;
@@ -70,6 +72,11 @@ beforeEach(async () => {
 });
 
 const visit = (id: Id): Appointment => db.rows.appointments.find((a) => a.id === id)!;
+/** A payment as the desk holds it once a patient's page has read it. */
+function loadPayment(id: Id): void {
+  const payment = db.rows.payments.find((p) => p.id === id)!;
+  useDesk.setState((s) => ({ payments: { ...s.payments, [id]: payment } }));
+}
 const patientNamed = (name: string) => db.rows.patients.find((p) => p.name === name)!;
 const clinicianNamed = (name: string) => db.rows.clinicians.find((c) => c.short_name === name)!;
 const typeNamed = (minutes: number) => db.rows.visit_types.find((t) => t.minutes === minutes && !t.new_patients_only)!;
@@ -376,8 +383,68 @@ describe("recalls, hours and closures, the outbox, the end of the day", () => {
     expect((await act.sendReminderNow(first.id, actionKey())).ok).toBe(true);
     expect(db.rows.messages.find((m) => m.kind === "reminder" && m.appointment_id === first.id)).toMatchObject({ to_address: "rhian@example.com", language: "de-DE" });
     const failed = db.rows.messages.find((m) => m.status === "failed")!;
+    const why = failed.error;
     expect((await act.sendAgain(failed.id)).ok).toBe(true);
-    expect(db.rows.messages.find((m) => m.id === failed.id)).toMatchObject({ status: "queued", error: null });
+    // The status alone: why it failed is the server's to write, never the desk's.
+    expect(db.rows.messages.find((m) => m.id === failed.id)).toMatchObject({ status: "queued", error: why });
+  });
+
+  it("records a payment with its patient, kind of visit and clinician, copied from the visit as the server copies them", async () => {
+    const owing = db.rows.appointments.find((a) => a.status === "seen" && a.balance > 0 && a.patient_id !== null)!;
+    const paid = await act.recordPayment({ visitId: owing.id, amount: 1, method: "card", key: actionKey() });
+    expect(paid.ok && paid.value).toMatchObject({ patient_id: owing.patient_id, visit_type_id: owing.visit_type_id, clinician_id: owing.clinician_id });
+    // The sample's own payments carry them too: the loader copies as Adminium does.
+    const copied = (p: (typeof db.rows.payments)[number]) => [p.patient_id, p.visit_type_id, p.clinician_id];
+    const ofVisit = (p: (typeof db.rows.payments)[number]) => [visit(p.appointment_id).patient_id, visit(p.appointment_id).visit_type_id, visit(p.appointment_id).clinician_id];
+    expect(db.rows.payments.map(copied)).toEqual(db.rows.payments.map(ofVisit));
+  });
+
+  it("emails a payment's receipt for an insurer: one queued message per key, to the visit's patient, never for a voided payment", async () => {
+    const payment = db.rows.payments.find((p) => !p.voided && visit(p.appointment_id).patient_id !== null)!;
+    const patient = db.rows.patients.find((p) => p.id === visit(payment.appointment_id).patient_id)!;
+    loadPayment(payment.id);
+    const key = actionKey();
+    const sent = await act.emailInsurerReceipt(payment.id, key);
+    expect(sent.ok).toBe(true);
+    // The same key again (a double click, a retry): the one message it saved.
+    expect((await act.emailInsurerReceipt(payment.id, key)).ok).toBe(true);
+    const rows = db.rows.messages.filter((m) => m.kind === "receipt" && m.payment_id === payment.id);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ status: "queued", patient_id: patient.id, appointment_id: payment.appointment_id, to_address: patient.email, language: patient.language });
+    // A voided payment has no receipt to send.
+    const voided = db.rows.payments.find((p) => p.voided)!;
+    loadPayment(voided.id);
+    expect(await act.emailInsurerReceipt(voided.id, actionKey())).toMatchObject({ ok: false, reason: "gone" });
+  });
+
+  it("draws a receipt for an insurer through the app's document door, and takes the feature away when the server says it is off", async () => {
+    const payment = db.rows.payments.find((p) => !p.voided)!;
+    // The demo has no documents: the feature is off, and says so.
+    expect(await act.drawInsurerReceipt(payment.id)).toMatchObject({ ok: false, reason: "off" });
+
+    const asked: unknown[] = [];
+    const inner = demoSink(db, () => ({ origin: "desk", name: "Ivy Ferreira" }));
+    let answer: () => Promise<{ id: string; printUrl: string; contentUrl: string }> = async () => ({ id: "d1", printUrl: "/api/v1/documents/d1/print", contentUrl: "/api/v1/documents/d1/content" });
+    setSink({ ...inner, renderDocument: async (input) => (asked.push(input), answer()) });
+    setConnectedAddOns({ invoices: { version: "1.0.3", settings: { business_name: "Rowan Health" } } });
+    expect(isFeatureOn(INSURER_RECEIPTS)).toBe(true);
+    expect(await act.drawInsurerReceipt(payment.id, "de-DE")).toEqual({ ok: true, value: { id: "d1", printUrl: "/api/v1/documents/d1/print", contentUrl: "/api/v1/documents/d1/content" } });
+    expect(asked).toEqual([{ kind: "receipt", ref: "payments", id: payment.id, locale: "de-DE" }]);
+
+    // Someone disconnected Invoices & Receipts while this desk was open.
+    answer = async () => {
+      throw new SinkError("off", "refused", 409, "FEATURE_OFF", null, { addOn: "invoices", feature: "insurer-receipts" });
+    };
+    expect(await act.drawInsurerReceipt(payment.id)).toMatchObject({ ok: false, reason: "off" });
+    expect(isFeatureOn(INSURER_RECEIPTS)).toBe(false);
+    // A receipt the add-on could not draw says so, and leaves the feature on.
+    setConnectedAddOns({ invoices: { version: "1.0.3", settings: {} } });
+    answer = async () => {
+      throw new SinkError("not drawn", "refused", 422, "DOCUMENT_NOT_DRAWN");
+    };
+    expect(await act.drawInsurerReceipt(payment.id)).toMatchObject({ ok: false, reason: "not-drawn" });
+    expect(isFeatureOn(INSURER_RECEIPTS)).toBe(true);
+    setConnectedAddOns({});
   });
 
   it("closes the desk once: the never-arrived marked no-shows, the cash counted; a second close is refused", async () => {

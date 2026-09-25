@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, Send, UserRoundX } from "lucide-react";
+import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, Receipt, Send, UserRoundX } from "lucide-react";
 
 import type { Appointment, Id, MessageKind } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -27,6 +27,7 @@ import { sendAgain, sendReminderNow } from "../state/actions.ts";
 import { deskReads, ensureDays, ensurePatients, upsert, useCan, useDesk, type DeskState } from "../state/desk.ts";
 import { toast } from "../state/ui.ts";
 import { Btn, Tile, mono, monoPill, pill } from "../components/ui.tsx";
+import { amountText } from "../sheets/deskwork/money.ts";
 import { counted, dayMonthNear } from "./deskwork/dates.ts";
 import { Screen, ScreenHead, dashedNote, footNote, nameStyle } from "./deskwork/parts.tsx";
 import { outboxRows, reasonKey, remindsThisStart, upcomingReminders, waitingCount, type OutboxRow } from "./outbox/rows.ts";
@@ -37,6 +38,7 @@ const KINDS: Record<MessageKind, { bg: string; fg: string; icon: LucideIcon; key
   recall: { bg: "var(--accent-soft)", fg: "var(--accent)", icon: BellRing, key: "outbox.kind.recall" },
   cancelled: { bg: "var(--danger-soft)", fg: "var(--danger)", icon: DoorClosed, key: "outbox.kind.cancelled" },
   confirmation: { bg: "var(--pos-soft)", fg: "var(--pos)", icon: CalendarCheck, key: "outbox.kind.confirmation" },
+  receipt: { bg: "var(--surface-3)", fg: "var(--fg-muted)", icon: Receipt, key: "outbox.kind.receipt" },
 };
 
 /** A visit the desk may still remind: booked, and not started. */
@@ -340,6 +342,11 @@ function lineFor(row: OutboxRow, visit: Appointment | undefined, desk: DeskState
       const note = said === "" || /[.!?。．！？]$/.test(said) ? said : `${said}.`;
       const when = t("outbox.at.day", { day: dayShort(dayOf(start)), time: time(start) });
       return note === "" ? t("outbox.line.cancelled", { at: when }) : t("outbox.line.cancelledWhy", { at: when, why: note });
+    }
+    case "receipt": {
+      const payment = m?.payment_id == null ? undefined : desk.payments[m.payment_id];
+      if (payment === undefined) return "";
+      return t("outbox.line.receipt", { amount: amountText(payment.amount), day: dayMonthNear(dayOf(payment.paid_at), day) });
     }
   }
 }

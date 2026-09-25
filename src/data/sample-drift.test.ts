@@ -171,10 +171,15 @@ describe("the in-browser resolver knows the manifest's columns and rules", () =>
 
   it("copies and settles what the manifest says it does", () => {
     const visits = tables.get("appointments")!;
-    const rules = (column: string) => visits.columns.find((c) => c.ref === column)?.rules ?? {};
+    const rules = (column: string, table = visits) => table.columns.find((c) => c.ref === column)?.rules ?? {};
     for (const copy of COPIES) {
-      expect(rules(copy.column)["copy"], copy.column).toEqual({ via: copy.via, from: copy.from, ...(copy.always ? { mode: "always" } : {}) });
+      const table = tables.get(copy.table)!;
+      expect(rules(copy.column, table)["copy"], `${copy.table}.${copy.column}`).toEqual({ via: copy.via, from: copy.from, ...(copy.always ? { mode: "always" } : {}) });
+      expect(table.columns.find((c) => c.ref === copy.via)?.references, `${copy.table}.${copy.via}`).toBe(copy.to);
     }
+    // Every copy the manifest declares is one the demo's loader makes too.
+    const declared = [...tables.values()].flatMap((t) => t.columns.filter((c) => c.rules?.["copy"] !== undefined).map((c) => `${t.ref}.${c.ref}`));
+    expect(declared.sort()).toEqual(COPIES.map((c) => `${c.table}.${c.column}`).sort());
     expect(rules("paid")["rollup"]).toMatchObject({
       from: ROLLUPS.paid.from,
       via: ROLLUPS.paid.via,

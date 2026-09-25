@@ -10,9 +10,9 @@
  *
  * ── THE GUARD HAS TO BE THE RELEASE GREP, NOT A POLITER VERSION OF IT ───────
  *
- * The sweep (17 §2) reads BUILT OUTPUT case-insensitively for
- * `pricing|plan|tier|billing|upgrade|/mo|free` as SUBSTRINGS, and 24 D12 adds
- * `premium` and `pro` for add-ons. A `\b`-anchored version of that list is
+ * The release sweep reads BUILT OUTPUT case-insensitively for
+ * `pricing|plan|tier|billing|upgrade|/mo|free` as SUBSTRINGS, and the add-on
+ * rules add `premium` and `pro`. A `\b`-anchored version of that list is
  * strictly weaker than the thing it claims to enforce: "explanation",
  * "frontier", "freephone" and "flatplan" all pass a word boundary and all fail
  * the release. Substrings here, no anchors, and nobody may add anchors later
@@ -32,8 +32,9 @@
  * ── AND A HOST MAY ADD NOTHING TO ANY OF IT ─────────────────────────────────
  *
  * `config.ts` records the argument at length and it is not repeated here: a
- * host that must be edited before a portable add-on passes its gates makes
- * 24 D21 false by a route nobody would look down. What IS worth recording here
+ * host that must be edited before a portable add-on passes its gates breaks
+ * the promise that an add-on installs into any host unchanged, by a route
+ * nobody would look down. What IS worth recording here
  * is the one host-local list that was tried, because its shape is instructive.
  *
  * `maker-shop/src/testing/lexicon.ts` carries a seventh export the print works'
@@ -58,7 +59,7 @@
  * — or one it does not, in which case the list is short for EVERY host and the
  * word belongs here, in this file, where all twelve get it.
  *
- * ── THE NEW RULING: WHOSE COPY IS THIS GATE ABOUT? (31 D4) ──────────────────
+ * ── THE NEW RULING: WHOSE COPY IS THIS GATE ABOUT? ──────────────────────────
  *
  * Every earlier copy of this gate ran over a MERGED bundle and failed on any
  * hit anywhere. That was correct in the two repos it was written for, because
@@ -82,16 +83,16 @@
  * So an unscoped gate installed into the storefront is red before the retrofit
  * has contributed one string, on ninety-odd hits in copy the add-on did not
  * write and cannot fix. A gate that is red on arrival is a gate that gets an
- * exemption list, and an exemption list is where nine of wave 4b's holes came
- * from. A gate that is red on arrival and CANNOT be fixed by the person
- * installing it is worse: it gets deleted.
+ * exemption list, and an exemption list is where nine holes in an earlier
+ * release's gates came from. A gate that is red on arrival and CANNOT be fixed
+ * by the person installing it is worse: it gets deleted.
  *
- * D4 therefore splits the rule in two, and the split is by AUTHOR rather than
- * by severity:
+ * This file therefore splits the rule in two, and the split is by AUTHOR
+ * rather than by severity:
  *
  *   ADD-ON-CONTRIBUTED COPY FAILS. A registered add-on's own message bundle,
  *   and the slot-fill copy a retrofit writes at a mount site. This is the thing
- *   17 §2 is actually about — new words, going onto a screen, now.
+ *   the release sweep is actually about — new words, going onto a screen, now.
  *
  *   PRE-EXISTING HOST COPY IS REPORTED AS DEBT AND DOES NOT FAIL. It is a real
  *   finding about a real app and somebody has to pay it; it is not this
@@ -145,15 +146,15 @@ export const SUBSTRING_BANNED = [
 ] as const;
 
 /**
- * The one 24 D12 adds that is a WORD rather than a substring.
+ * The one the add-on rules add that is a WORD rather than a substring.
  *
- * "pro" is not in 17 §2's run of substrings and must not be turned into one: a
- * shop that makes things says "proof", "process", "product" and "properties" on
- * nearly every screen, and a substring rule over those would trade a real
- * defect for an imaginary one. What D12 forbids is the marketing word — a "Pro"
- * add-on, a "Pro" account — so it is checked as a standalone token, and the
- * places a translator legitimately wrote it are allowed by exact phrase in
- * `PRO_PHRASES`.
+ * "pro" is not in the release sweep's run of substrings and must not be turned
+ * into one: a shop that makes things says "proof", "process", "product" and
+ * "properties" on nearly every screen, and a substring rule over those would
+ * trade a real defect for an imaginary one. What the rule forbids is the
+ * marketing word — a "Pro" add-on, a "Pro" account — so it is checked as a
+ * standalone token, and the places a translator legitimately wrote it are
+ * allowed by exact phrase in `PRO_PHRASES`.
  */
 export const WORD_BANNED = ['pro'] as const;
 
@@ -296,7 +297,7 @@ export const PRO_PHRASES: readonly ProPhrase[] = [
  */
 
 /**
- * The ideas 17 §2 and 24 D12 forbid, named once.
+ * The ideas the release sweep and the add-on rules forbid, named once.
  *
  * `paid` ON ITS OWN IS DELIBERATELY NOT ONE OF THEM, and the attempt is worth
  * recording. It was in this list for one run and came straight back out: a shop
@@ -450,10 +451,11 @@ export const IDEA_IN_LANGUAGE: Record<OtherLanguage, Record<BannedIdea, RegExp[]
 /**
  * The per-locale view a message-bundle gate wants.
  *
- * `en-US` is the English substring ban's own job, so its only entry is what D12
- * adds on top plus the round-6 plant WRITTEN IN ENGLISH: 17 §2's substring run
- * covers `pricing plan tier billing upgrade free /mo` and none of them appears
- * in "switch to the paid version for more". The hole was in every language
+ * `en-US` is the English substring ban's own job, so its only entry is what the
+ * add-on rules add on top plus the phrase an adversarial review planted,
+ * WRITTEN IN ENGLISH: the sweep's substring run covers
+ * `pricing plan tier billing upgrade free /mo` and none of them appears in
+ * "switch to the paid version for more". The hole was in every language
  * including this one.
  */
 export const TIERING_WORDS: Readonly<Record<string, readonly RegExp[]>> = {
@@ -866,7 +868,7 @@ const show = (hit: CopyOffence): string =>
  * test file is the import, the config and one call.
  */
 export function lexiconGuard(config: HostFacts, scope: LexiconScope): void {
-  describe(`${config.appKey} · the vocabulary ban (17 §2, 24 D10, D12; scoped by 31 D4)`, () => {
+  describe(`${config.appKey} · the vocabulary ban (new copy fails; a host's own older copy is reported)`, () => {
     const contributed = scope.contributed ?? DEFAULT_CONTRIBUTED;
 
     it('has a bundle to read, in every locale this host ships', () => {
@@ -886,12 +888,12 @@ export function lexiconGuard(config: HostFacts, scope: LexiconScope): void {
 
     it('can see the difference between its own copy and the retrofit’s', () => {
       /*
-       * AND THE GUARD ON THE SPLIT, which is the thing D4 newly rests on. A
-       * `contributed` that answered `false` to everything would move the whole
-       * bundle onto the debt side and this suite would go green on any copy at
-       * all. Both sides have to be non-empty: a retrofit that contributed no
-       * strings has not been installed, and a host with no copy of its own is
-       * not a host.
+       * AND THE GUARD ON THE SPLIT, which is the thing the scoped rule
+       * newly rests on. A `contributed` that answered `false` to everything
+       * would move the whole bundle onto the debt side and this suite would go
+       * green on any copy at all. Both sides have to be non-empty: a retrofit
+       * that contributed no strings has not been installed, and a host with no
+       * copy of its own is not a host.
        */
       const [first] = config.localeTags;
       const keys = Object.keys(scope.bundleFor(first!));
@@ -934,7 +936,7 @@ export function lexiconGuard(config: HostFacts, scope: LexiconScope): void {
           ...HOMOGRAPH_TOKENS.map((h) => `  "${h.token}" · ${h.language} · ${h.means}`),
           'allowed "pro" phrases (exact phrase, from the "pro" onwards):',
           ...PRO_PHRASES.map((p) => `  "${p.phrase}" · ${p.language} · ${p.means}`),
-          `pre-existing host copy (31 D4: REPORTED, does not fail) — ${debt.length} offence(s)`,
+          `pre-existing host copy (REPORTED, does not fail) — ${debt.length} offence(s)`,
           ...[...byWord.entries()]
             .sort((a, b) => b[1] - a[1])
             .map(([word, n]) => `  ${word} · ${n}`),
@@ -959,8 +961,8 @@ export function lexiconGuard(config: HostFacts, scope: LexiconScope): void {
       expect(
         offences.map(show),
         '\nThese are strings the retrofit put in front of a reader, and they carry a word ' +
-          '17 §2 sweeps for. Pre-existing host copy is reported as debt and does not fail ' +
-          '(31 D4); this half does, because it is new copy going onto a screen now:\n' +
+          'the vocabulary ban sweeps for. Pre-existing host copy is reported as debt and does not fail; ' +
+          'this half does, because it is new copy going onto a screen now:\n' +
           offences.map(show).join('\n') +
           '\n',
       ).toEqual([]);
@@ -970,8 +972,8 @@ export function lexiconGuard(config: HostFacts, scope: LexiconScope): void {
       /*
        * AN ABSENCE PROVES NOTHING UNLESS THE CHECK IS SHOWN TO BITE — and this
        * is the case that would fail if somebody "repaired" the list with `\b`.
-       * Both traps 24 D10 names by name are here, plus the two words a
-       * shortened list once dropped.
+       * Both traps the add-on rules call out by name are here, plus the two
+       * words a shortened list once dropped.
        */
       const bites = (text: string) => bundleOffences(text).map((o) => o.word);
       expect(bites('a short explanation of the sizes')).toContain('plan');

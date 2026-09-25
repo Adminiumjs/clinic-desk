@@ -6,7 +6,7 @@
  * WHY A COPY. `@adminium/manifest` is not published to npm and this app is a
  * standalone repo that must build from a clean clone, so it cannot depend on
  * the monorepo. It lives under `testing/` because `zod` is a devDependency
- * here and a runtime dependency the host does not carry (24 D7) — nothing in
+ * here and a runtime dependency the host does not carry — nothing in
  * the shipped bundle's import graph may reach it, which sources.test.ts gates.
  *
  * The only edits are import specifiers: `.js` becomes `.ts`, and the
@@ -31,6 +31,16 @@
  * day 0 on a weekend is the Monday after — so "today's" busy day is never a
  * Saturday.
  *
+ *   `{"@month": -2, "@dom": 14}`   a date in the venue's own zone: that day of
+ *                               the month so many months from this one; with
+ *                               `"@time": "10:00"`, a wall time on it
+ *
+ * `@month` keeps a sample's history in calendar months whatever day it is
+ * added on: a figure "this month" or "in May" reads the same on the 3rd as on
+ * the 28th. A day past the month's end is its last day, and a day in this
+ * month or later that has not come yet is today (at a time not yet come, now):
+ * a month's history never runs into the future.
+ *
  * A row may carry, beside its `@label`, one ROW directive: `@byClock`
  * `{at, before, around, after}` merges one of three sets of columns into the
  * row, by where its time `at` (a column of the row, or a `@day`/`@time`)
@@ -38,6 +48,10 @@
  * half an hour, or later — so a sample day's statuses match the clock it is
  * added at. A set with `"@skip": true` leaves the row out (a payment for a
  * visit that has not happened yet).
+ *
+ * `"@onlyIfEmpty": true` is for a table that holds one row, the app's own
+ * settings: the row is added only when the table has none, and otherwise its
+ * `@label` names the row already there — the operator's own settings stay.
  *
  * Pure: a format and its checks, no I/O. The server resolves the directives.
  */
@@ -63,6 +77,13 @@ const directive = z.union([
     })
     .strict(),
   z.object({ '@day': z.number().int().min(-366).max(366), '@workdays': z.literal(true).optional() }).strict(),
+  z
+    .object({
+      '@month': z.number().int().min(-120).max(0),
+      '@dom': z.number().int().min(1).max(31),
+      '@time': z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'a time such as 09:30').optional(),
+    })
+    .strict(),
   z.object({ '@t': z.record(z.string().regex(/^[a-z]{2}(-[A-Z]{2})?$/), z.string()).refine((m) => Object.keys(m).length > 0) }).strict(),
   z.object({ '@asset': label }).strict(),
 ]);
@@ -90,7 +111,7 @@ export const byClockSchema = z
 export type ByClock = z.infer<typeof byClockSchema>;
 
 /** The keys of a row that are directives about the row, not columns. */
-export const ROW_DIRECTIVES: ReadonlySet<string> = new Set(['@label', '@byClock']);
+export const ROW_DIRECTIVES: ReadonlySet<string> = new Set(['@label', '@byClock', '@onlyIfEmpty']);
 
 export const sampleBundleSchema = z
   .object({
@@ -114,6 +135,7 @@ export function sampleDirective(value: unknown):
   | { kind: 'ago'; duration: string }
   | { kind: 'wall'; day: number; time: string; workdays: boolean }
   | { kind: 'date'; day: number; workdays: boolean }
+  | { kind: 'month'; months: number; dom: number; time: string | null }
   | { kind: 't'; texts: Record<string, string> }
   | { kind: 'asset'; label: string }
   | null {
@@ -125,6 +147,9 @@ export function sampleDirective(value: unknown):
     return { kind: 'wall', day: record['@day'], time: record['@time'], workdays: record['@workdays'] === true };
   }
   if (typeof record['@day'] === 'number') return { kind: 'date', day: record['@day'], workdays: record['@workdays'] === true };
+  if (typeof record['@month'] === 'number' && typeof record['@dom'] === 'number') {
+    return { kind: 'month', months: record['@month'], dom: record['@dom'], time: typeof record['@time'] === 'string' ? record['@time'] : null };
+  }
   if (typeof record['@t'] === 'object' && record['@t'] !== null) {
     return { kind: 't', texts: record['@t'] as Record<string, string> };
   }
@@ -153,7 +178,8 @@ export interface SampleIssue {
 /**
  * Everything wrong with a bundle for this manifest: a table it does not
  * declare, a column the table does not have, a label used twice, a `@ref` to
- * a row that comes later or not at all, an `@asset` it does not list.
+ * a row that comes later or not at all, an `@asset` it does not list, a
+ * number without gaps the row does not spell `null`.
  */
 export function sampleBundleIssues(bundle: SampleBundle, manifest: Manifest): SampleIssue[] {
   const issues: SampleIssue[] = [];
@@ -169,8 +195,15 @@ export function sampleBundleIssues(bundle: SampleBundle, manifest: Manifest): Sa
       continue;
     }
     const columns = new Set(shape.columns.map((column) => column.ref));
+    // A number Adminium gives without gaps: a sample row names it, empty, or the load numbers it into the real series.
+    const gapless = shape.columns.filter((column) => column.rules?.sequence?.gapless === true).map((column) => column.ref);
     for (const [r, row] of table.rows.entries()) {
       const at = `tables.${String(t)}.rows.${String(r)}`;
+      for (const column of gapless) {
+        if (row[column] !== null) {
+          issues.push({ path: `${at}.${column}`, message: `"${column}" is numbered without gaps: a sample row spells it null, so it stays off the real series.` });
+        }
+      }
       for (const [column, value] of Object.entries(row)) {
         if (column === '@label') {
           if (typeof value !== 'string' || !label.safeParse(value).success) {
@@ -178,6 +211,10 @@ export function sampleBundleIssues(bundle: SampleBundle, manifest: Manifest): Sa
           } else if (seen.has(value)) {
             issues.push({ path: `${at}.@label`, message: `The label "${value}" is used twice.` });
           }
+          continue;
+        }
+        if (column === '@onlyIfEmpty') {
+          if (value !== true) issues.push({ path: `${at}.@onlyIfEmpty`, message: '"@onlyIfEmpty" is true, or absent.' });
           continue;
         }
         if (column === '@byClock') {

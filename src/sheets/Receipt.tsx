@@ -13,6 +13,10 @@
  *
  * A manager can void the payment from here — where a payment taken twice by
  * mistake is first seen — with a reason; the balance comes back on the visit.
+ *
+ * With Invoices & Receipts connected to this app, the same payment can also be
+ * emailed or printed as a receipt the patient claims with (`receipt/ForInsurer`).
+ * This slip stays as it is either way: instant, and the desk's own.
  */
 import { useId, useState } from "react";
 import { CircleAlert, Printer, Undo2 } from "lucide-react";
@@ -28,6 +32,7 @@ import { Btn, btnGhost, btnGhostSm, btnPrimary, fieldStyle, MONO, Modal } from "
 import { amountText } from "./deskwork/money.ts";
 import { ErrorBox, labelStyle } from "./deskwork/dialogBits.tsx";
 import { useVisit } from "./deskwork/visit.ts";
+import ForInsurer from "./receipt/ForInsurer.tsx";
 
 const INK = "#191920";
 const QUIET = "#5a5a65";
@@ -133,6 +138,7 @@ export default function Receipt({ sheet, onClose }: { sheet: Extract<Sheet, { ki
           {t("receipt.print")}
         </button>
       </div>
+      <ForInsurer payment={payment} visit={visit} />
       {canVoid && !payment.voided && !voiding && (
         <button type="button" className="rh-btn" onClick={() => setVoiding(true)} style={{ ...btnGhostSm, alignSelf: "center", color: "var(--fg-muted)" }}>
           <Undo2 size={14} aria-hidden="true" />

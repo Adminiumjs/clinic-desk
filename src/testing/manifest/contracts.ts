@@ -6,7 +6,7 @@
  * WHY A COPY. `@adminium/manifest` is not published to npm and this app is a
  * standalone repo that must build from a clean clone, so it cannot depend on
  * the monorepo. It lives under `testing/` because `zod` is a devDependency
- * here and a runtime dependency the host does not carry (24 D7) — nothing in
+ * here and a runtime dependency the host does not carry — nothing in
  * the shipped bundle's import graph may reach it, which sources.test.ts gates.
  *
  * The only edits are import specifiers: `.js` becomes `.ts`, and the

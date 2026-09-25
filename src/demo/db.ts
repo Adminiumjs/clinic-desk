@@ -173,6 +173,14 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
     }
   }
 
+  /** A payment's patient, kind of visit and clinician, copied from its visit whenever the link is written (`copy`, `always`). */
+  function copyFromVisit(row: Row) {
+    const visit = find("appointments", row["appointment_id"] as Id);
+    row["patient_id"] = visit?.["patient_id"] ?? null;
+    row["visit_type_id"] = visit?.["visit_type_id"] ?? null;
+    row["clinician_id"] = visit?.["clinician_id"] ?? null;
+  }
+
   function stampStatus(ref: TableRef, row: Row, next: Row, before: Row | null, writer: Writer) {
     if (ref === "appointments" && "status" in next && next["status"] !== before?.["status"]) {
       const at = STAMP_TIME[String(next["status"])];
@@ -217,6 +225,7 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
         row["balance"] = Number(row["fee"] ?? 0);
       }
       if (ref === "registrations") row["ref"] = code(ref, "RG-");
+      if (ref === "payments") copyFromVisit(row);
       const who = STAMP_WHO[ref];
       if (who !== undefined && writer.origin === "desk") row[who] = writer.name;
       stampStatus(ref, row, row, null, writer);
@@ -241,6 +250,12 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
       if (row === undefined) throw new DemoRefusal(404, "NOT_FOUND", "That record is not there.");
       const before = { ...row };
       const next: Row = { ...patch };
+      // What only Adminium writes on a message: when it went, and why it did not.
+      if (ref === "messages") {
+        for (const column of ["error", "sent_at"]) {
+          if (column in next && next[column] !== before[column]) throw new DemoRefusal(409, "STATE_MOVE_REFUSED", `"${column}" is written by Adminium, not by hand.`, { column });
+        }
+      }
       if ("client_key" in next) unique(ref, "client_key", next["client_key"], id);
       if (ref === "appointments") {
         const moved = ["starts_at", "clinician_id", "visit_type_id"].some((c) => c in next && next[c] !== before[c]);
@@ -260,6 +275,7 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
       }
       stampStatus(ref, row, next, before, writer);
       Object.assign(row, next);
+      if (ref === "payments" && "appointment_id" in next) copyFromVisit(row);
       if (ref === "payments" && "voided" in next) settle(row["appointment_id"] as Id);
       if (ref === "appointments" && ("fee" in next || "visit_type_id" in next)) settle(id);
       tell(ref, "record.update", id);

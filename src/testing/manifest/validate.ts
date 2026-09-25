@@ -6,7 +6,7 @@
  * WHY A COPY. `@adminium/manifest` is not published to npm and this app is a
  * standalone repo that must build from a clean clone, so it cannot depend on
  * the monorepo. It lives under `testing/` because `zod` is a devDependency
- * here and a runtime dependency the host does not carry (24 D7) — nothing in
+ * here and a runtime dependency the host does not carry — nothing in
  * the shipped bundle's import graph may reach it, which sources.test.ts gates.
  *
  * The only edits are import specifiers: `.js` becomes `.ts`, and the
@@ -52,9 +52,39 @@ export interface ValidateManifestOptions {
   hostTables?: readonly string[];
 }
 
+/**
+ * A warning is advice, never a refusal: a manifest with warnings validates.
+ * Kept apart from `issues` on purpose — every app repo compares its vendored
+ * validator's issues with Adminium's, and a warning reported as an issue
+ * would fail them all on their next push.
+ */
 export type ValidateManifestResult =
-  | { ok: true; manifest: Manifest }
-  | { ok: false; issues: ManifestIssue[] };
+  | { ok: true; manifest: Manifest; warnings: ManifestIssue[] }
+  | { ok: false; issues: ManifestIssue[]; warnings: ManifestIssue[] };
+
+/** Rules that fill a column, so an insert may leave it out. */
+const FILLING_RULES = ['copy', 'sequence', 'code', 'rollup', 'stamp', 'formula', 'format', 'default'] as const;
+
+/**
+ * Advice about an app that validates: a column with no default that is not
+ * nullable is NOT NULL once installed, so every insert must give it a value —
+ * a draft saved half-filled is refused. Every app round has hit this once.
+ */
+export function manifestWarnings(manifest: Manifest): ManifestIssue[] {
+  if (manifest.kind !== 'app') return [];
+  const out: ManifestIssue[] = [];
+  (manifest.requiredSchema?.tables ?? []).forEach((table, t) => {
+    table.columns.forEach((column, c) => {
+      if (column.nullable === true || column.default !== undefined || column.role !== undefined) return;
+      if (FILLING_RULES.some((rule) => column.rules?.[rule] !== undefined)) return;
+      out.push({
+        path: `requiredSchema.tables.${String(t)}.columns.${String(c)}`,
+        message: `"${table.ref}.${column.ref}" has no default and is not nullable, so it will be required at install: every new row must give it a value`,
+      });
+    });
+  });
+  return out;
+}
 
 /**
  * Validate an untrusted manifest document. Returns the typed manifest on
@@ -72,6 +102,7 @@ export function validateManifest(
         path: issue.path.map(String).join('.'),
         message: issue.message,
       })),
+      warnings: [],
     };
   }
 
@@ -101,8 +132,9 @@ export function validateManifest(
     }),
   );
 
-  if (issues.length > 0) return { ok: false, issues };
-  return { ok: true, manifest };
+  const warnings = manifestWarnings(manifest);
+  if (issues.length > 0) return { ok: false, issues, warnings };
+  return { ok: true, manifest, warnings };
 }
 
 /** Throwing variant for trusted callers (build tooling); use the safe form at runtime. */

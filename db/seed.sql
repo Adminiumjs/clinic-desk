@@ -176,31 +176,31 @@ INSERT INTO clinic_appointments (id, ref, patient_id, new_name, new_born_on, new
   (75, 'RH-S5CF', 8, NULL, NULL, NULL, NULL, 3, 3, '2026-08-03T13:00:00.000Z'::timestamptz, 45, 60, 0, 0, 60, 'Shoulder follow-up', NULL, 'booked', 'phone', NULL, NULL, NULL, NULL, FALSE, NULL, NULL, NULL, 'Ivy Ferreira', NULL, NULL, '2026-07-20T10:25:00.000Z'::timestamptz),
   (76, 'RH-S1JX', NULL, 'Léa Moreau', '2002-03-14', '07700 900203', NULL, 1, 2, '2026-07-31T08:15:00.000Z'::timestamptz, 30, 70, 0, 0, 70, 'New patient registration', NULL, 'booked', 'online', NULL, NULL, NULL, NULL, FALSE, NULL, NULL, 'fr-FR', NULL, 'to_check', NULL, '2026-07-28T06:40:00.000Z'::timestamptz);
 
-INSERT INTO clinic_payments (id, appointment_id, amount, method, taken_by, paid_at, voided, void_reason, voided_by, client_key) VALUES
-  (1, 1, 45, 'card', 'Callum Reid', '2026-01-13T10:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (2, 2, 45, 'card', 'Callum Reid', '2026-01-27T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (3, 3, 45, 'cash', 'Callum Reid', '2026-02-03T09:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (4, 4, 45, 'cash', 'Callum Reid', '2026-02-24T14:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (5, 6, 45, 'card', 'Callum Reid', '2026-04-28T08:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (6, 7, 28, 'cash', 'Callum Reid', '2026-05-05T10:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (7, 12, 45, 'card', 'Ivy Ferreira', '2026-06-30T09:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (8, 13, 60, 'card', 'Ivy Ferreira', '2026-07-06T10:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (9, 14, 60, 'card', 'Ivy Ferreira', '2026-07-08T13:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (10, 15, 28, 'card', 'Ivy Ferreira', '2026-07-09T08:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (11, 16, 60, 'card', 'Ivy Ferreira', '2026-07-13T15:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (12, 18, 38, 'card', 'Ivy Ferreira', '2026-07-15T11:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (13, 20, 28, 'card', 'Ivy Ferreira', '2026-07-17T09:02:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (14, 22, 45, 'card', 'Ivy Ferreira', '2026-07-21T14:17:00.000Z'::timestamptz, TRUE, 'Taken twice by mistake.', 'Ivy Ferreira', NULL),
-  (15, 22, 45, 'card', 'Ivy Ferreira', '2026-07-21T14:20:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (16, 23, 35, 'card', 'Ivy Ferreira', '2026-07-22T08:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (17, 24, 28, 'card', 'Ivy Ferreira', '2026-07-23T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (18, 25, 45, 'card', 'Ivy Ferreira', '2026-07-27T08:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (19, 28, 45, 'cash', 'Ivy Ferreira', '2026-07-27T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (20, 29, 45, 'card', 'Ivy Ferreira', '2026-07-27T13:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (21, 30, 45, 'card', 'Ivy Ferreira', '2026-07-27T13:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (22, 31, 45, 'card', 'Ivy Ferreira', '2026-07-28T07:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (23, 32, 45, 'card', 'Ivy Ferreira', '2026-07-28T08:02:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
-  (24, 33, 28, 'cash', 'Ivy Ferreira', '2026-07-28T07:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL);
+INSERT INTO clinic_payments (id, appointment_id, patient_id, visit_type_id, clinician_id, amount, method, taken_by, paid_at, voided, void_reason, voided_by, client_key) VALUES
+  (1, 1, 14, 1, 1, 45, 'card', 'Callum Reid', '2026-01-13T10:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (2, 2, 29, 1, 2, 45, 'card', 'Callum Reid', '2026-01-27T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (3, 3, 23, 1, 1, 45, 'cash', 'Callum Reid', '2026-02-03T09:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (4, 4, 25, 1, 2, 45, 'cash', 'Callum Reid', '2026-02-24T14:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (5, 6, 1, 1, 1, 45, 'card', 'Callum Reid', '2026-04-28T08:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (6, 7, 18, 4, 4, 28, 'cash', 'Callum Reid', '2026-05-05T10:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (7, 12, 20, 1, 2, 45, 'card', 'Ivy Ferreira', '2026-06-30T09:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (8, 13, 12, 3, 3, 60, 'card', 'Ivy Ferreira', '2026-07-06T10:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (9, 14, 19, 3, 3, 60, 'card', 'Ivy Ferreira', '2026-07-08T13:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (10, 15, 24, 4, 4, 28, 'card', 'Ivy Ferreira', '2026-07-09T08:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (11, 16, 21, 3, 3, 60, 'card', 'Ivy Ferreira', '2026-07-13T15:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (12, 18, 12, 3, 3, 38, 'card', 'Ivy Ferreira', '2026-07-15T11:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (13, 20, 13, 4, 4, 28, 'card', 'Ivy Ferreira', '2026-07-17T09:02:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (14, 22, 5, 1, 1, 45, 'card', 'Ivy Ferreira', '2026-07-21T14:17:00.000Z'::timestamptz, TRUE, 'Taken twice by mistake.', 'Ivy Ferreira', NULL),
+  (15, 22, 5, 1, 1, 45, 'card', 'Ivy Ferreira', '2026-07-21T14:20:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (16, 23, 27, 2, 1, 35, 'card', 'Ivy Ferreira', '2026-07-22T08:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (17, 24, 22, 4, 4, 28, 'card', 'Ivy Ferreira', '2026-07-23T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (18, 25, 15, 1, 1, 45, 'card', 'Ivy Ferreira', '2026-07-27T08:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (19, 28, 25, 1, 1, 45, 'cash', 'Ivy Ferreira', '2026-07-27T10:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (20, 29, 16, 1, 2, 45, 'card', 'Ivy Ferreira', '2026-07-27T13:17:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (21, 30, 17, 1, 2, 45, 'card', 'Ivy Ferreira', '2026-07-27T13:32:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (22, 31, 1, 1, 1, 45, 'card', 'Ivy Ferreira', '2026-07-28T07:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (23, 32, 2, 1, 2, 45, 'card', 'Ivy Ferreira', '2026-07-28T08:02:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL),
+  (24, 33, 18, 4, 4, 28, 'cash', 'Ivy Ferreira', '2026-07-28T07:47:00.000Z'::timestamptz, FALSE, NULL, NULL, NULL);
 
 INSERT INTO clinic_write_offs (id, appointment_id, amount, reason, written_by, written_at, client_key) VALUES
   (1, 17, 28, 'Same wound as the week before — no second charge.', 'Ivy Ferreira', '2026-07-14T09:20:00.000Z'::timestamptz, NULL),
@@ -230,20 +230,20 @@ INSERT INTO clinic_waiting_list (id, patient_id, visit_type_id, clinician_id, pa
   (4, 30, 1, 1, 'any', 'waiting', 'desk', NULL, NULL, '2026-07-26T08:20:00.000Z'::timestamptz),
   (5, 10, 2, NULL, 'mornings', 'waiting', 'online', NULL, NULL, '2026-07-27T08:20:00.000Z'::timestamptz);
 
-INSERT INTO clinic_messages (id, kind, patient_id, appointment_id, recall_id, closure_id, to_address, language, status, error, due_at, sent_at, created_by, client_key, created_at) VALUES
-  (1, 'confirmation', 20, 54, NULL, NULL, 'leila@example.com', 'en-US', 'sent', NULL, '2026-07-17T07:00:00.000Z'::timestamptz, '2026-07-17T07:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T07:00:00.000Z'::timestamptz),
-  (2, 'confirmation', 29, 55, NULL, NULL, 'clara@example.com', 'en-US', 'sent', NULL, '2026-07-17T12:25:00.000Z'::timestamptz, '2026-07-17T12:25:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T12:25:00.000Z'::timestamptz),
-  (3, 'confirmation', 23, 56, NULL, NULL, 'hamid@example.com', 'ar-EG', 'sent', NULL, '2026-07-17T08:10:00.000Z'::timestamptz, '2026-07-17T08:10:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T08:10:00.000Z'::timestamptz),
-  (4, 'confirmation', 27, 70, NULL, NULL, 'odette@example.com', 'fr-FR', 'sent', NULL, '2026-07-23T10:45:00.000Z'::timestamptz, '2026-07-23T10:45:00.000Z'::timestamptz, NULL, NULL, '2026-07-23T10:45:00.000Z'::timestamptz),
-  (5, 'confirmation', 11, 74, NULL, NULL, 'priya@example.com', 'en-US', 'sent', NULL, '2026-07-16T15:00:00.000Z'::timestamptz, '2026-07-16T15:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-16T15:00:00.000Z'::timestamptz),
-  (6, 'reminder', 2, 32, NULL, NULL, 'ewan@example.com', 'en-US', 'sent', NULL, '2026-07-28T07:45:00.000Z'::timestamptz, '2026-07-27T07:45:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T07:45:00.000Z'::timestamptz),
-  (7, 'reminder', 13, 40, NULL, NULL, 'saoirse@example.com', 'en-US', 'sent', NULL, '2026-07-28T09:00:00.000Z'::timestamptz, '2026-07-27T09:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:00:00.000Z'::timestamptz),
-  (8, 'reminder', 5, 42, NULL, NULL, 'solveig@example.com', 'da-DK', 'sent', NULL, '2026-07-28T09:15:00.000Z'::timestamptz, '2026-07-27T09:15:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:15:00.000Z'::timestamptz),
-  (9, 'reminder', 7, 48, NULL, NULL, 'nour@example.com', 'ar-EG', 'sent', NULL, '2026-07-28T13:00:00.000Z'::timestamptz, '2026-07-27T13:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T13:00:00.000Z'::timestamptz),
-  (10, 'reminder', 10, 43, NULL, NULL, 'zofia@example.com', 'cs-CZ', 'failed', 'Not delivered: the mailbox is full.', '2026-07-28T09:30:00.000Z'::timestamptz, NULL, NULL, NULL, '2026-07-27T09:30:00.000Z'::timestamptz),
-  (11, 'missed', 28, 26, NULL, NULL, 'yusuf@example.com', 'de-DE', 'sent', NULL, '2026-07-27T09:20:00.000Z'::timestamptz, '2026-07-27T09:20:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:20:00.000Z'::timestamptz),
-  (12, 'recall', 26, NULL, 10, NULL, 'bram@example.com', 'en-US', 'sent', NULL, '2026-07-24T10:05:00.000Z'::timestamptz, '2026-07-24T10:05:00.000Z'::timestamptz, 'Ivy Ferreira', NULL, '2026-07-24T10:05:00.000Z'::timestamptz),
-  (13, 'confirmation', 6, 44, NULL, NULL, 'kofi@example.com', 'en-US', 'sent', NULL, '2026-07-22T08:20:00.000Z'::timestamptz, '2026-07-22T08:20:00.000Z'::timestamptz, NULL, NULL, '2026-07-22T08:20:00.000Z'::timestamptz);
+INSERT INTO clinic_messages (id, kind, patient_id, appointment_id, recall_id, closure_id, payment_id, to_address, language, status, error, due_at, sent_at, created_by, client_key, created_at) VALUES
+  (1, 'confirmation', 20, 54, NULL, NULL, NULL, 'leila@example.com', 'en-US', 'sent', NULL, '2026-07-17T07:00:00.000Z'::timestamptz, '2026-07-17T07:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T07:00:00.000Z'::timestamptz),
+  (2, 'confirmation', 29, 55, NULL, NULL, NULL, 'clara@example.com', 'en-US', 'sent', NULL, '2026-07-17T12:25:00.000Z'::timestamptz, '2026-07-17T12:25:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T12:25:00.000Z'::timestamptz),
+  (3, 'confirmation', 23, 56, NULL, NULL, NULL, 'hamid@example.com', 'ar-EG', 'sent', NULL, '2026-07-17T08:10:00.000Z'::timestamptz, '2026-07-17T08:10:00.000Z'::timestamptz, NULL, NULL, '2026-07-17T08:10:00.000Z'::timestamptz),
+  (4, 'confirmation', 27, 70, NULL, NULL, NULL, 'odette@example.com', 'fr-FR', 'sent', NULL, '2026-07-23T10:45:00.000Z'::timestamptz, '2026-07-23T10:45:00.000Z'::timestamptz, NULL, NULL, '2026-07-23T10:45:00.000Z'::timestamptz),
+  (5, 'confirmation', 11, 74, NULL, NULL, NULL, 'priya@example.com', 'en-US', 'sent', NULL, '2026-07-16T15:00:00.000Z'::timestamptz, '2026-07-16T15:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-16T15:00:00.000Z'::timestamptz),
+  (6, 'reminder', 2, 32, NULL, NULL, NULL, 'ewan@example.com', 'en-US', 'sent', NULL, '2026-07-28T07:45:00.000Z'::timestamptz, '2026-07-27T07:45:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T07:45:00.000Z'::timestamptz),
+  (7, 'reminder', 13, 40, NULL, NULL, NULL, 'saoirse@example.com', 'en-US', 'sent', NULL, '2026-07-28T09:00:00.000Z'::timestamptz, '2026-07-27T09:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:00:00.000Z'::timestamptz),
+  (8, 'reminder', 5, 42, NULL, NULL, NULL, 'solveig@example.com', 'da-DK', 'sent', NULL, '2026-07-28T09:15:00.000Z'::timestamptz, '2026-07-27T09:15:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:15:00.000Z'::timestamptz),
+  (9, 'reminder', 7, 48, NULL, NULL, NULL, 'nour@example.com', 'ar-EG', 'sent', NULL, '2026-07-28T13:00:00.000Z'::timestamptz, '2026-07-27T13:00:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T13:00:00.000Z'::timestamptz),
+  (10, 'reminder', 10, 43, NULL, NULL, NULL, 'zofia@example.com', 'cs-CZ', 'failed', 'Not delivered: the mailbox is full.', '2026-07-28T09:30:00.000Z'::timestamptz, NULL, NULL, NULL, '2026-07-27T09:30:00.000Z'::timestamptz),
+  (11, 'missed', 28, 26, NULL, NULL, NULL, 'yusuf@example.com', 'de-DE', 'sent', NULL, '2026-07-27T09:20:00.000Z'::timestamptz, '2026-07-27T09:20:00.000Z'::timestamptz, NULL, NULL, '2026-07-27T09:20:00.000Z'::timestamptz),
+  (12, 'recall', 26, NULL, 10, NULL, NULL, 'bram@example.com', 'en-US', 'sent', NULL, '2026-07-24T10:05:00.000Z'::timestamptz, '2026-07-24T10:05:00.000Z'::timestamptz, 'Ivy Ferreira', NULL, '2026-07-24T10:05:00.000Z'::timestamptz),
+  (13, 'confirmation', 6, 44, NULL, NULL, NULL, 'kofi@example.com', 'en-US', 'sent', NULL, '2026-07-22T08:20:00.000Z'::timestamptz, '2026-07-22T08:20:00.000Z'::timestamptz, NULL, NULL, '2026-07-22T08:20:00.000Z'::timestamptz);
 
 INSERT INTO clinic_day_closes (id, day, no_shows_marked, cash_expected, cash_counted, note, closed_by, closed_at) VALUES
   (1, '2026-07-27', 2, 45, 45, 'All square. Card terminal batch sent at 17:35.', 'Ivy Ferreira', '2026-07-27T16:40:00.000Z'::timestamptz);

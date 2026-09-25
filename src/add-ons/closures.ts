@@ -161,3 +161,13 @@ export function mergeClosures(
     return a.reason < b.reason ? -1 : a.reason > b.reason ? 1 : 0;
   });
 }
+
+/**
+ * A suggested day, as the closure "Add as a closure" writes for it — the
+ * mapping Holiday calendars' own README gives for this app: a public holiday
+ * is a closure of one day (`from_date` = `to_date` = the day), labelled with
+ * the day's own name, for the whole practice (no clinician), with no note.
+ */
+export function closureFor(day: Closure): { clinicianId: null; from: string; to: string; label: string; note: null } {
+  return { clinicianId: null, from: day.date, to: day.date, label: day.reason, note: null };
+}

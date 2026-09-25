@@ -134,7 +134,20 @@ export interface DocumentSubject {
   locale: string;
   /** ISO-4217. */
   currency: string;
-  business: { name: string; lines: readonly string[]; logoDataUrl?: string };
+  /**
+   * The letterhead, from the rendering add-on's own settings. The last three
+   * are optional and additive: a business's tax number, how to pay it, and a
+   * line for the foot of the page — an older server never sends them, and a
+   * provider draws each only when it is there.
+   */
+  business: {
+    name: string;
+    lines: readonly string[];
+    logoDataUrl?: string;
+    taxNumber?: string;
+    paymentInstructions?: string;
+    footer?: string;
+  };
   entity: RecordRef | null;
   /** `null` until minted; a re-render carries the number it already has. */
   number: string | null;

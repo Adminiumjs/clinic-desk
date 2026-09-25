@@ -16,6 +16,14 @@
  *                 or 48 hours; the practice's default when they chose none),
  *                 only to patients who asked for reminders.
  *
+ * And one the desk queues when a patient asks for it:
+ *
+ *   receipt       the receipt of one payment, for their insurer — the
+ *                 Invoices & Receipts document carried as an attachment
+ *                 (`attach` on the template). Only while that add-on is
+ *                 connected; without it the message fails with the reason,
+ *                 and never goes without its receipt.
+ *
  * The log is the dedupe: a kind already queued or sent for a visit is not
  * queued again, so the desk's early "Send now" is never followed by the
  * automatic one, and a moved visit gets a fresh reminder.
@@ -36,6 +44,7 @@ export const OUTBOX = {
     appointment: "appointment_id",
     recall: "recall_id",
     closure: "closure_id",
+    payment: "payment_id",
   },
   recipient: {
     via: "patient_id",
@@ -57,6 +66,7 @@ export const OUTBOX = {
     missed: "clinic-missed",
     recall: "clinic-recall",
     cancelled: "clinic-cancelled",
+    receipt: "clinic-receipt",
   },
   producers: [
     // A visit booked by the desk, or by a patient already on file.

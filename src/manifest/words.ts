@@ -243,9 +243,16 @@ export const WORDS: Record<string, Translation> = {
   // ── enum values: a message's kind and status ───────────────────────────────
   "Confirmation": { "de-DE": "Bestätigung", "fr-FR": "Confirmation", "da-DK": "Bekræftelse", "cs-CZ": "Potvrzení", "ar-EG": "تأكيد", "zh-CN": "预约确认", "zh-TW": "預約確認" },
   "Reminder": { "de-DE": "Erinnerung", "fr-FR": "Rappel", "da-DK": "Påmindelse", "cs-CZ": "Připomínka", "ar-EG": "تذكير", "zh-CN": "就诊提醒", "zh-TW": "看診提醒" },
+  "Receipt": { "de-DE": "Quittung", "fr-FR": "Reçu", "da-DK": "Kvittering", "cs-CZ": "Stvrzenka", "ar-EG": "إيصال", "zh-CN": "收据", "zh-TW": "收據" },
   "Missed visit": { "de-DE": "Verpasster Termin", "fr-FR": "Rendez-vous manqué", "da-DK": "Udeblivelse", "cs-CZ": "Zmeškaná návštěva", "ar-EG": "زيارة فائتة", "zh-CN": "错过就诊", "zh-TW": "錯過看診" },
   "Waiting to go": { "de-DE": "Wartet auf Versand", "fr-FR": "En attente d’envoi", "da-DK": "Venter på afsendelse", "cs-CZ": "Čeká na odeslání", "ar-EG": "بانتظار الإرسال", "zh-CN": "待发送", "zh-TW": "待寄出" },
   "Sent": { "de-DE": "Gesendet", "fr-FR": "Envoyé", "da-DK": "Sendt", "cs-CZ": "Odesláno", "ar-EG": "أُرسلت", "zh-CN": "已发送", "zh-TW": "已寄出" },
   "Couldn't send": { "de-DE": "Senden fehlgeschlagen", "fr-FR": "Échec de l’envoi", "da-DK": "Kunne ikke sendes", "cs-CZ": "Nepodařilo se odeslat", "ar-EG": "تعذّر الإرسال", "zh-CN": "发送失败", "zh-TW": "寄送失敗" },
   "Not sent": { "de-DE": "Nicht gesendet", "fr-FR": "Non envoyé", "da-DK": "Ikke sendt", "cs-CZ": "Neodesláno", "ar-EG": "لم تُرسل", "zh-CN": "未发送", "zh-TW": "未寄出" },
+
+  // ── the add-ons this app works with, and what each is for ─────────────────
+  "Mark public holidays as closures": { "de-DE": "Gesetzliche Feiertage als Schließtage eintragen", "fr-FR": "Marquer les jours fériés comme fermetures", "da-DK": "Markér helligdage som lukkedage", "cs-CZ": "Označit státní svátky jako dny, kdy je zavřeno", "ar-EG": "تحديد العطلات الرسمية كأيام إغلاق", "zh-CN": "把法定节假日标为停诊日", "zh-TW": "把國定假日標為休診日" },
+  "Email or print a receipt a patient can claim with": { "de-DE": "Eine Quittung mailen oder drucken, die Patienten bei ihrer Versicherung einreichen können", "fr-FR": "Envoyer par e-mail ou imprimer un reçu que le patient peut présenter à son assurance", "da-DK": "Send eller udskriv en kvittering, som patienten kan få refunderet hos sit forsikringsselskab", "cs-CZ": "Poslat e-mailem nebo vytisknout stvrzenku, kterou pacient uplatní u pojišťovny", "ar-EG": "إرسال إيصال بالبريد الإلكتروني أو طباعته ليقدّمه المريض إلى شركة التأمين", "zh-CN": "通过电子邮件发送或打印收据，供患者向保险公司报销", "zh-TW": "以電子郵件寄送或列印收據，讓病患向保險公司申請理賠" },
+  "Receipts for insurers": { "de-DE": "Quittungen für Versicherungen", "fr-FR": "Reçus pour les assurances", "da-DK": "Kvitteringer til forsikringsselskaber", "cs-CZ": "Stvrzenky pro pojišťovny", "ar-EG": "إيصالات لشركات التأمين", "zh-CN": "保险报销收据", "zh-TW": "保險理賠收據" },
+  "Receipt for an insurer": { "de-DE": "Quittung für die Versicherung", "fr-FR": "Reçu pour l’assurance", "da-DK": "Kvittering til forsikringen", "cs-CZ": "Stvrzenka pro pojišťovnu", "ar-EG": "إيصال لشركة التأمين", "zh-CN": "供保险报销的收据", "zh-TW": "供保險理賠的收據" },
 };

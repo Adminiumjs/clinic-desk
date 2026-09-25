@@ -28,6 +28,7 @@
  * because its only duplicate is a retried payment. Here a 409 is usually a
  * refusal the desk must show, so only a found action key counts as saved.
  */
+import { APP_KEY } from "../surface-nav.ts";
 import type { SessionTransport } from "./sessionSource.ts";
 import { normalise } from "./rows.ts";
 import type { TableRef } from "./types.ts";
@@ -39,6 +40,29 @@ export interface DataSink {
   insert(ref: TableRef, values: SinkRow): Promise<SinkRow>;
   update(ref: TableRef, id: RowId, patch: SinkRow): Promise<SinkRow>;
   remove(ref: TableRef, id: RowId): Promise<void>;
+  /**
+   * Draw one of the documents this app ships (`documents` in the manifest) for
+   * one of its rows, or hand back the one already drawn while the row is
+   * unchanged: where its print copy and its file are. Only the hosted desk has
+   * it — Adminium draws documents with an add-on, and the demo has neither.
+   */
+  renderDocument?(input: DocumentAsk): Promise<DrawnDocument>;
+}
+
+/** A document of the app's, asked for by its kind and the row it is for. */
+export interface DocumentAsk {
+  kind: string;
+  ref: TableRef;
+  id: RowId;
+  /** The document's language; the add-on's default when left out. */
+  locale?: string;
+}
+
+export interface DrawnDocument {
+  id: string;
+  /** Same-origin paths: the print copy (HTML) and the file (a PDF where the text allows it). */
+  printUrl: string;
+  contentUrl: string;
 }
 
 export type SinkErrorKind = "signed-out" | "saved" | "refused" | "offline";
@@ -101,7 +125,7 @@ export function asSinkError(error: unknown): SinkError {
 /** A key the desk holds as a number, as the URL wants it. */
 const keyOf = (id: RowId): string => encodeURIComponent(String(id));
 
-export function sessionSink(transport: SessionTransport, tableOf: Readonly<Record<TableRef, string>>): DataSink {
+export function sessionSink(transport: SessionTransport, tableOf: Readonly<Record<TableRef, string>>, appKey: string = APP_KEY): DataSink {
   const path = async (ref: TableRef, id?: RowId): Promise<string> => {
     const conn = await transport.connection();
     const base = `/api/v1/data/${encodeURIComponent(conn)}/${encodeURIComponent(tableOf[ref])}`;
@@ -148,6 +172,24 @@ export function sessionSink(transport: SessionTransport, tableOf: Readonly<Recor
     },
     async remove(ref, id) {
       await send<unknown>(`${await path(ref, id)}?confirm=true`, "DELETE");
+    },
+    /*
+     * The app's own door to its documents: by the manifest's names (`payments`,
+     * not the real table), under the signed-in person's grants — they must be
+     * able to read every table the document reads. A feature switched off is
+     * `409 FEATURE_OFF`; a document the add-on could not draw, `422`.
+     */
+    async renderDocument(input) {
+      const reply = await send<{ id?: string; printUrl?: string; contentUrl?: string }>(`/api/v1/apps/${encodeURIComponent(appKey)}/documents/render`, "POST", {
+        kind: input.kind,
+        ref: input.ref,
+        pk: { id: input.id },
+        ...(input.locale === undefined ? {} : { locale: input.locale }),
+      });
+      if (typeof reply.id !== "string" || typeof reply.printUrl !== "string" || typeof reply.contentUrl !== "string") {
+        throw new SinkError("The document came back without its address.", "refused", 502, "DOCUMENT_REPLY");
+      }
+      return { id: reply.id, printUrl: reply.printUrl, contentUrl: reply.contentUrl };
     },
   };
 }

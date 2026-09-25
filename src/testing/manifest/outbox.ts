@@ -6,7 +6,7 @@
  * WHY A COPY. `@adminium/manifest` is not published to npm and this app is a
  * standalone repo that must build from a clean clone, so it cannot depend on
  * the monorepo. It lives under `testing/` because `zod` is a devDependency
- * here and a runtime dependency the host does not carry (24 D7) — nothing in
+ * here and a runtime dependency the host does not carry — nothing in
  * the shipped bundle's import graph may reach it, which sources.test.ts gates.
  *
  * The only edits are import specifiers: `.js` becomes `.ts`, and the
@@ -28,22 +28,39 @@
  *
  * Templates are stored with the app as their owner. An operator who edits
  * one keeps the edit across the app's updates.
+ *
+ * A producer may HOLD what it queues: the row is written `held`, with the
+ * moment it becomes due, and nothing is sent until someone approves it (a
+ * reminder about an unpaid invoice, whose wording the sender may edit).
+ * Messages of one `supersede` group give way to a later one that comes due,
+ * `dropWhen` skips waiting ones once they are no longer needed (the invoice
+ * was paid), and `onSent` changes a linked row once the message has gone
+ * (the third reminder pauses the project).
  */
 import { z } from 'zod';
 
+import type { AddOnNeeds } from './add-ons.ts';
 import {
   bcp47TagSchema,
   refSchema,
   scalarSchema,
   settingRefSchema,
+  settingSourceSchema,
   textOrLabels,
   valueFits,
   type ReferenceIssue,
+  type SettingSource,
   type TableIndex,
 } from './refs.ts';
 
 /** The statuses an outbox table's status column must offer. */
 export const OUTBOX_STATUSES = ['queued', 'sent', 'failed', 'skipped'] as const;
+
+/** The status a held message waits in, when any producer holds. */
+export const OUTBOX_HELD = 'held';
+
+/** Why a waiting message was skipped. `overtaken` and `by-hand` are Adminium's and the desk's. */
+export const OUTBOX_SKIP_REASONS = ['overtaken', 'paid', 'void', 'no-longer-needed', 'by-hand'] as const;
 
 /** One condition on a row: equal to a value, one of several, or empty (or not). */
 const conditionSchema = z
@@ -59,20 +76,89 @@ const conditionSchema = z
   });
 type Condition = z.infer<typeof conditionSchema>;
 
+/** How many days after the source row's date a held message comes due. */
+const dueDaysSchema = z.union([
+  z.number().int().min(0).max(3650),
+  /** A number per value of a column of the source row (`ladder`: gentle 7, firm 1). */
+  z.object({ byColumn: refSchema, values: z.record(z.string().min(1), z.number().int().min(0).max(3650)) }).strict(),
+  /**
+   * Read from a setting when the message is made (and again when the date
+   * moves): a number, a list (`index` picks one), or lists per value of
+   * `byColumn` (`{gentle: [7, 21, 45], …}`).
+   */
+  z
+    .object({ setting: settingSourceSchema, byColumn: refSchema.optional(), index: z.number().int().min(0).max(9).optional() })
+    .strict(),
+]);
+
+const dropConditionSchema = z
+  .object({
+    column: refSchema,
+    eq: scalarSchema.optional(),
+    in: z.array(scalarSchema).min(1).max(32).optional(),
+    isNull: z.boolean().optional(),
+    lte: z.number().finite().optional(),
+    gte: z.number().finite().optional(),
+    reason: z.enum(['paid', 'void', 'no-longer-needed']),
+  })
+  .strict()
+  .refine((c) => [c.eq, c.in, c.isNull, c.lte, c.gte].filter((part) => part !== undefined).length === 1, {
+    message: 'a condition says one of eq, in, isNull, lte or gte',
+  });
+
 const producerBase = {
   /** The kind of row it queues (a key of `outbox.kinds`). */
   kind: z.string().min(1).max(40),
   /** The outbox column that links the queued row to the row that produced it. */
   link: refSchema,
-  /** Paused while the settings row's `enabled` column is false. */
-  gate: z.literal('enabled').optional(),
+  /**
+   * Paused while the settings row's `enabled` column is false — or, naming
+   * one, while that bool of the settings row is false (each of a studio's
+   * notices has its own switch).
+   */
+  gate: z.union([z.literal('enabled'), z.object({ setting: settingRefSchema }).strict()]).optional(),
   /** Skipped for a recipient whose `recipient.optIn` column is false. */
   optIn: z.literal(true).optional(),
+  /** Written `held`: sent only once someone approves it. */
+  hold: z.literal(true).optional(),
+  /** When it comes due: days after a date of the source row, at a time of day on the venue's clock (09:00 by default). */
+  due: z
+    .object({
+      date: refSchema,
+      days: dueDaysSchema,
+      at: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'a time such as 09:00').optional(),
+    })
+    .strict()
+    .optional(),
+  /** Messages of this group for one row: when one comes due, the earlier ones not yet sent are skipped as overtaken. */
+  supersede: z.string().regex(/^[a-z][a-z0-9-]{0,39}$/, 'a group name').optional(),
+  /** While the source row meets one of these, its waiting messages are skipped, with the reason. */
+  dropWhen: z.array(dropConditionSchema).min(1).max(4).optional(),
+  /** Sent to an address a setting holds (the studio's own) instead of the outbox's recipient. */
+  recipient: z.object({ setting: settingSourceSchema }).strict().optional(),
+  /** One message per linked row in each window of this many minutes. */
+  batchMinutes: z.number().int().min(1).max(240).optional(),
+  /**
+   * A change made once the message has gone, through the ordinary write: to
+   * the source row, or (with `via`) the row its foreign key points at.
+   */
+  onSent: z
+    .object({
+      table: refSchema,
+      via: refSchema.optional(),
+      set: z.record(refSchema, z.union([scalarSchema, z.null()])),
+    })
+    .strict()
+    .optional(),
 };
 
-const producerSchema = z.union([
+export const outboxProducerSchema = z.union([
   z
-    .object({ ...producerBase, onCreate: z.object({ table: refSchema, where: conditionSchema.optional() }).strict() })
+    .object({
+      ...producerBase,
+      /** `via`: the source is a child row, and the message links the row its foreign key points at. */
+      onCreate: z.object({ table: refSchema, via: refSchema.optional(), where: conditionSchema.optional() }).strict(),
+    })
     .strict(),
   z
     .object({
@@ -80,6 +166,7 @@ const producerSchema = z.union([
       onChange: z
         .object({
           table: refSchema,
+          via: refSchema.optional(),
           column: refSchema,
           to: z.union([scalarSchema, z.array(scalarSchema).min(1).max(16)]),
           where: conditionSchema.optional(),
@@ -112,7 +199,7 @@ const producerSchema = z.union([
     })
     .strict(),
 ]);
-export type OutboxProducer = z.infer<typeof producerSchema>;
+export type OutboxProducer = z.infer<typeof outboxProducerSchema>;
 
 const recipientSchema = z
   .object({
@@ -147,6 +234,16 @@ export const outboxSchema = z
         due: refSchema.optional(),
         sentAt: refSchema.optional(),
         error: refSchema.optional(),
+        /** Why a message was skipped (overtaken, paid, void, no-longer-needed, by-hand). */
+        skipReason: refSchema.optional(),
+        /** The wording a person approving a held message wrote instead of the template's. */
+        subjectOverride: refSchema.optional(),
+        bodyOverride: refSchema.optional(),
+        /** Who approved a held message. */
+        approvedBy: refSchema.optional(),
+        /** When `onSent`'s change was made, or why it was refused. */
+        effectAt: refSchema.optional(),
+        effectError: refSchema.optional(),
       })
       .strict(),
     /**
@@ -178,7 +275,7 @@ export const outboxSchema = z
       .optional(),
     /** Each value of the kind column, and the template it is sent with. */
     kinds: z.record(z.string().min(1).max(40), z.string().min(1).max(80)),
-    producers: z.array(producerSchema).max(16).optional(),
+    producers: z.array(outboxProducerSchema).max(24).optional(),
   })
   .strict();
 export type Outbox = z.infer<typeof outboxSchema>;
@@ -209,13 +306,34 @@ const emailContentSchema = z
   })
   .strict();
 
+/**
+ * A variable a template reads, spelled as the sender fills it: a column of the
+ * row or of a row it links (`patient.name`, `practice.phone`, a column with a
+ * number in its name), one of the sender's own (`appName`, `manage_url`), or
+ * an add-on's public setting (`addOn.<add-on key>.<setting>`). A template may
+ * use any of them, so the list may name any of them.
+ */
+const templateVariableSchema = z
+  .string()
+  .regex(
+    /^(?:appName|addOn\.[a-z][a-z0-9-]*\.[A-Za-z][A-Za-z0-9_]*|[a-z_][a-z0-9_]*(?:\.[a-z_][a-z0-9_]*)*)$/,
+    'a variable such as patient.name or appName',
+  );
+
 export const emailTemplateSchema = z
   .object({
     /** `<app key>-<name>`: an app names only its own templates. */
     key: z.string().regex(/^[a-z][a-z0-9-]{1,79}$/, 'a template key is kebab-case'),
     name: textOrLabels,
+    /**
+     * A document the email carries, drawn by an add-on for the row an
+     * outbox link names (a receipt for a sale): the PDF where its text allows,
+     * else the print copy. A message whose document cannot be drawn fails
+     * rather than going without it.
+     */
+    attach: z.object({ kind: z.string().regex(/^[a-z][a-z0-9-]*$/, 'a document kind'), link: z.string().min(1).max(40) }).strict().optional(),
     /** The variables it reads, for the editor's list. */
-    vars: z.array(z.string().regex(/^[a-z_]+(\.[a-z_]+)*$/, 'a variable such as patient.name')).max(60).optional(),
+    vars: z.array(templateVariableSchema).max(60).optional(),
     /** The template in each language it ships, US English always among them. */
     locales: z
       .record(bcp47TagSchema, emailContentSchema)
@@ -226,12 +344,20 @@ export type EmailTemplate = z.infer<typeof emailTemplateSchema>;
 
 /** Everything in `outbox` and `emailTemplates` that names something undeclared, or does not fit. */
 export function outboxIssues(
-  m: { key: string; outbox?: Outbox | undefined; emailTemplates?: readonly EmailTemplate[] | undefined },
+  m: {
+    key: string;
+    outbox?: Outbox | undefined;
+    emailTemplates?: readonly EmailTemplate[] | undefined;
+    addOns?: AddOnNeeds | undefined;
+  },
   index: TableIndex,
 ): ReferenceIssue[] {
   const out: ReferenceIssue[] = [];
   const templates = new Set<string>();
   (m.emailTemplates ?? []).forEach((template, i) => {
+    if (template.attach !== undefined && m.outbox?.links?.[template.attach.link] === undefined) {
+      out.push({ path: ['emailTemplates', i, 'attach', 'link'], message: `"${template.attach.link}" is not one of the outbox's links` });
+    }
     if (!template.key.startsWith(`${m.key}-`)) {
       out.push({ path: ['emailTemplates', i, 'key'], message: `an app's template key starts with "${m.key}-"` });
     }
@@ -293,6 +419,27 @@ export function outboxIssues(
   if (box.columns.due !== undefined) col(box.table, box.columns.due, ['timestamptz'], at('columns', 'due'), 'a timestamptz');
   if (box.columns.sentAt !== undefined) col(box.table, box.columns.sentAt, ['timestamptz'], at('columns', 'sentAt'), 'a timestamptz');
   if (box.columns.error !== undefined) col(box.table, box.columns.error, ['text'], at('columns', 'error'), 'a text column');
+  for (const name of ['skipReason', 'subjectOverride', 'bodyOverride', 'approvedBy', 'effectError'] as const) {
+    const ref = box.columns[name];
+    if (ref !== undefined) col(box.table, ref, name === 'skipReason' ? ['text', 'enum'] : ['text'], at('columns', name), 'a text column');
+  }
+  if (box.columns.effectAt !== undefined) col(box.table, box.columns.effectAt, ['timestamptz'], at('columns', 'effectAt'), 'a timestamptz');
+  const holds = (box.producers ?? []).some((producer) => producer.hold === true);
+  if (holds && status !== undefined && !(status.enum ?? []).includes(OUTBOX_HELD)) {
+    out.push({ path: at('columns', 'status'), message: `a producer holds its messages, so "${box.table}.${status.ref}" offers "${OUTBOX_HELD}"` });
+  }
+  if (holds && box.columns.due === undefined) {
+    out.push({ path: at('columns'), message: 'a held message waits for its due moment: name the outbox\'s due column' });
+  }
+  const setting = (source: SettingSource, path: (string | number)[]) => {
+    if ('addOn' in source) {
+      if (!(m.addOns?.requires ?? []).some((need) => need.key === source.addOn)) {
+        out.push({ path, message: `"${source.addOn}" is not required by the app (addOns.requires), so its setting may not be there` });
+      }
+    } else {
+      col(source.table, source.column, null, path, '');
+    }
+  };
 
   const linkTargets = new Map<string, string | undefined>();
   for (const [name, ref] of Object.entries(box.links ?? {})) {
@@ -335,6 +482,8 @@ export function outboxIssues(
     if (box.kinds[producer.kind] === undefined) out.push({ path: here('kind'), message: `"${producer.kind}" is not one of the outbox's kinds` });
     if (producer.gate === 'enabled' && box.settings?.enabled === undefined) {
       out.push({ path: here('gate'), message: 'the outbox names no settings column to be gated by' });
+    } else if (typeof producer.gate === 'object') {
+      col(producer.gate.setting.table, producer.gate.setting.column, ['bool'], here('gate', 'setting'), 'a bool');
     }
     if (producer.optIn === true && r.optIn === undefined) {
       out.push({ path: here('optIn'), message: 'the recipient names no opt-in column' });
@@ -344,12 +493,77 @@ export function outboxIssues(
       out.push({ path: here(), message: `"${source.table}" is not a table of this app` });
       return;
     }
+    // A child source links the row its foreign key points at.
+    const via = 'via' in source ? source.via : undefined;
+    let linked = source.table;
+    if (via !== undefined) {
+      const found = fk(source.table, via, undefined, here('via'));
+      if (found?.references !== undefined) linked = found.references;
+    }
     if (!linkTargets.has(producer.link)) {
       out.push({ path: here('link'), message: `"${producer.link}" is not one of the outbox's links` });
-    } else if (linkTargets.get(producer.link) !== undefined && linkTargets.get(producer.link) !== source.table) {
-      out.push({ path: here('link'), message: `"${box.table}.${producer.link}" does not point at "${source.table}"` });
+    } else if (linkTargets.get(producer.link) !== undefined && linkTargets.get(producer.link) !== linked) {
+      out.push({ path: here('link'), message: `"${box.table}.${producer.link}" does not point at "${linked}"` });
     }
     condition(source.table, source.where, here('where'));
+    if (producer.due !== undefined) {
+      const due = producer.due;
+      if (box.columns.due === undefined) out.push({ path: here('due'), message: 'a due moment is kept in the outbox\'s due column, and none is named' });
+      col(linked, due.date, ['date', 'timestamptz'], here('due', 'date'), 'a date');
+      if (typeof due.days === 'object') {
+        if ('setting' in due.days) setting(due.days.setting, here('due', 'days', 'setting'));
+        const by = due.days.byColumn;
+        if (by !== undefined) {
+          const found = col(linked, by, null, here('due', 'days', 'byColumn'), '');
+          if (found !== undefined && 'values' in due.days) {
+            const missing = (found.enum ?? []).filter((value) => (due.days as { values: Record<string, number> }).values[value] === undefined);
+            if (missing.length > 0) out.push({ path: here('due', 'days', 'values'), message: `each value of "${linked}.${by}" needs its days (${missing.join(', ')})` });
+          }
+        }
+      }
+      if ('before' in producer) out.push({ path: here('due'), message: 'a reminder before a moment is due by its lead, not by due' });
+    }
+    // A batch comes due when its window closes: that is its due, and it takes no other.
+    if (producer.batchMinutes !== undefined && producer.due !== undefined) {
+      out.push({ path: here('due'), message: 'a batch comes due when its window closes, so it takes no due of its own' });
+    }
+    if (producer.supersede !== undefined && producer.due === undefined && producer.batchMinutes === undefined) {
+      out.push({ path: here('supersede'), message: 'one message overtakes another when it comes due: name its due' });
+    }
+    (producer.dropWhen ?? []).forEach((drop, d) => {
+      const found = col(linked, drop.column, null, here('dropWhen', d, 'column'), '');
+      const values = drop.eq !== undefined ? [drop.eq] : (drop.in ?? []);
+      if (found !== undefined) for (const value of values) {
+        if (!valueFits(found, value)) out.push({ path: here('dropWhen', d), message: `${JSON.stringify(value)} is not a value of "${linked}.${drop.column}"` });
+      }
+    });
+    if (producer.dropWhen !== undefined && producer.hold !== true && producer.due === undefined && producer.batchMinutes === undefined) {
+      out.push({ path: here('dropWhen'), message: 'only a message that waits (held, or due later) can be dropped' });
+    }
+    if (producer.recipient !== undefined) setting(producer.recipient.setting, here('recipient', 'setting'));
+    if (producer.batchMinutes !== undefined && 'before' in producer) {
+      out.push({ path: here('batchMinutes'), message: 'a reminder before a moment is one per row already' });
+    }
+    if (producer.onSent !== undefined) {
+      const effect = producer.onSent;
+      if (index.table(effect.table) === undefined) {
+        out.push({ path: here('onSent', 'table'), message: `"${effect.table}" is not a table of this app` });
+      } else {
+        if (effect.via === undefined) {
+          if (effect.table !== linked) out.push({ path: here('onSent', 'table'), message: `the message is about "${linked}"; name the foreign key (via) that reaches "${effect.table}"` });
+        } else {
+          fk(linked, effect.via, effect.table, here('onSent', 'via'));
+        }
+        for (const [ref, value] of Object.entries(effect.set)) {
+          const found = col(effect.table, ref, null, here('onSent', 'set', ref), '');
+          if (found !== undefined && value === null && found.nullable !== true) {
+            out.push({ path: here('onSent', 'set', ref), message: `"${effect.table}.${ref}" is never empty` });
+          } else if (found !== undefined && value !== null && !valueFits(found, value)) {
+            out.push({ path: here('onSent', 'set', ref), message: `${JSON.stringify(value)} is not a value of "${effect.table}.${ref}"` });
+          }
+        }
+      }
+    }
     if ('onChange' in producer) {
       const change = producer.onChange;
       const watched = col(change.table, change.column, null, here('onChange', 'column'), '');

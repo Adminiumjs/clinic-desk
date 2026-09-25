@@ -1,5 +1,5 @@
 /**
- * The five emails the practice sends through its outbox, in the eight
+ * The six emails the practice sends through its outbox, in the eight
  * languages the app ships.
  *
  * Each email's words are a small table of sentences (`…Words`), and the
@@ -87,12 +87,28 @@ export interface CancelledWords {
   footer: string;
 }
 
+export interface ReceiptWords {
+  name: string;
+  subject: string;
+  preheader: string;
+  heading: string;
+  lead: string;
+  paid: string;
+  visit: string;
+  date: string;
+  clinician: string;
+  reference: string;
+  ask: string;
+  footer: string;
+}
+
 export interface EmailWords {
   confirmation: ConfirmationWords;
   reminder: ReminderWords;
   missed: MissedWords;
   recall: RecallWords;
   cancelled: CancelledWords;
+  receipt: ReceiptWords;
 }
 
 /** The practice's name, address and phone: the foot of every email. */
@@ -157,6 +173,20 @@ export const EMAIL_EN: EmailWords = {
     clinician: "Clinician: {{clinician.name}} · {{clinician.role_label}}",
     findTime: "Find a new time",
     ring: "Ring the desk on {{practice.phone}}.",
+    footer: FOOT,
+  },
+  receipt: {
+    name: "Receipt for an insurer",
+    subject: "Your receipt from {{appName}}",
+    preheader: "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+    heading: "Your receipt, {{recipient.first_name}}",
+    lead: "Here is the receipt for your visit, attached to this email. Send it to your insurer with your claim.",
+    paid: "Paid",
+    visit: "Visit: {{visit_type.name}}",
+    date: "Date: {{appointment.starts_at.date}}",
+    clinician: "Clinician: {{clinician.name}} · {{clinician.role_label}}",
+    reference: "Reference: {{appointment.ref}}",
+    ask: "A question about it? Ring the desk on {{practice.phone}}.",
     footer: FOOT,
   },
 };
@@ -240,13 +270,39 @@ function cancelled(w: CancelledWords): Content {
   };
 }
 
-const LAYOUTS = { confirmation, reminder, missed, recall, cancelled } as const;
+/**
+ * The receipt of one payment, for the patient's insurer. The receipt itself is
+ * the attachment (`attach` below); the email says what it is for. The visit is
+ * named by its kind, never by the reason typed for it.
+ */
+function receipt(w: ReceiptWords): Content {
+  return {
+    subject: w.subject,
+    preheader: w.preheader,
+    blocks: [
+      heading(w.heading),
+      para("lead", w.lead),
+      { block: "email.box", id: "paid", data: { label: w.paid, value: "{{payment.amount}}" } },
+      list("details", [w.visit, w.date, w.clinician, w.reference]),
+      para("ask", w.ask),
+    ],
+    footer: w.footer,
+  };
+}
+
+const LAYOUTS = { confirmation, reminder, missed, recall, cancelled, receipt } as const;
 const VARS: Record<keyof EmailWords, string[]> = {
   confirmation: ["recipient.first_name", "appointment.ref", "appointment.starts_at", "appointment.time_range", "appointment.minutes", "appointment.reason", "appointment.fee", "clinician.name", "clinician.short_name", "clinician.role_label", "visit_type.name", "practice.address", "practice.cancel_hours", "manage_url"],
   reminder: ["appointment.ref", "appointment.starts_at", "clinician.name", "clinician.short_name", "clinician.role_label", "practice.address", "practice.phone", "manage_url"],
   missed: ["appointment.starts_at", "clinician.short_name", "practice.phone", "booking_url"],
   recall: ["recall.clinician.short_name", "recall.due_on", "booking_url"],
   cancelled: ["appointment.starts_at", "appointment.time_range", "appointment.minutes", "clinician.name", "clinician.short_name", "clinician.role_label", "closure.note", "practice.phone", "booking_url"],
+  receipt: ["recipient.first_name", "payment.amount", "appointment.ref", "appointment.starts_at", "visit_type.name", "clinician.name", "clinician.role_label", "practice.phone"],
+};
+
+/** The document an email carries: the receipt of the payment the message links. */
+const ATTACH: Partial<Record<keyof EmailWords, { kind: string; link: string }>> = {
+  receipt: { kind: "receipt", link: "payment" },
 };
 
 /** Every language's words: English here, the other seven in `email-words.ts`. */
@@ -263,6 +319,7 @@ export function emailTemplates(): unknown[] {
       key: `clinic-${kind}`,
       name: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, w[kind].name])),
       vars: VARS[kind],
+      ...(ATTACH[kind] === undefined ? {} : { attach: ATTACH[kind] }),
       locales: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, layout(w[kind] as never)])),
     };
   });

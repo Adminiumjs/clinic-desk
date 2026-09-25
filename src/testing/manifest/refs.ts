@@ -6,7 +6,7 @@
  * WHY A COPY. `@adminium/manifest` is not published to npm and this app is a
  * standalone repo that must build from a clean clone, so it cannot depend on
  * the monorepo. It lives under `testing/` because `zod` is a devDependency
- * here and a runtime dependency the host does not carry (24 D7) — nothing in
+ * here and a runtime dependency the host does not carry — nothing in
  * the shipped bundle's import graph may reach it, which sources.test.ts gates.
  *
  * The only edits are import specifiers: `.js` becomes `.ts`, and the
@@ -39,6 +39,20 @@ export const textOrLabels = z.union([z.string().min(1).max(256), labelsSchema]);
 
 /** One column of the app's one-row settings table, read when the rule runs. */
 export const settingRefSchema = z.object({ table: refSchema, column: refSchema }).strict();
+
+/**
+ * A value read from a setting when a rule runs: a column of the app's own
+ * one-row settings table, or a setting of an add-on the app requires
+ * (`{addOn: "invoices", setting: "default_tax_rate"}`), kept by Adminium.
+ */
+export const addOnSettingRefSchema = z
+  .object({
+    addOn: z.string().regex(/^[a-z][a-z0-9-]{1,79}$/, 'an add-on key'),
+    setting: z.string().regex(/^[a-z][a-z0-9_]*$/, 'a setting key is snake_case'),
+  })
+  .strict();
+export const settingSourceSchema = z.union([settingRefSchema, addOnSettingRefSchema]);
+export type SettingSource = z.infer<typeof settingSourceSchema>;
 
 /**
  * A number the manifest states, or one the app's own settings row holds — so

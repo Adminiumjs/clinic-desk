@@ -70,6 +70,14 @@ const FILES = [
   ['packages/manifest/src/page-calendar.ts', 'page-calendar.ts'],
   ['packages/manifest/src/validate.ts', 'validate.ts'],
   ['packages/manifest/src/sample.ts', 'sample.ts'],
+  // What an invoicing app declares: worked-out values, states and locks, the
+  // add-ons it needs, the documents it ships, and tables built on an add-on's
+  // shape (with the pure check that a table really is one).
+  ['packages/manifest/src/formula.ts', 'formula.ts'],
+  ['packages/manifest/src/states.ts', 'states.ts'],
+  ['packages/manifest/src/add-ons.ts', 'add-ons.ts'],
+  ['packages/manifest/src/documents.ts', 'documents.ts'],
+  ['packages/manifest/src/shapes.ts', 'shapes.ts'],
   ['packages/add-on-contracts/src/add-on-block.ts', 'add-on-block.ts'],
   ['packages/add-on-contracts/src/contracts.ts', 'contracts.ts'],
   ['packages/add-on-contracts/src/slots.ts', 'slots.ts'],
@@ -170,7 +178,7 @@ function vendor(srcRel, base) {
     ` * WHY A COPY. \`@adminium/manifest\` is not published to npm and this app is a\n` +
     ` * standalone repo that must build from a clean clone, so it cannot depend on\n` +
     ` * the monorepo. It lives under \`testing/\` because \`zod\` is a devDependency\n` +
-    ` * here and a runtime dependency the host does not carry (24 D7) — nothing in\n` +
+    ` * here and a runtime dependency the host does not carry — nothing in\n` +
     ` * the shipped bundle's import graph may reach it, which sources.test.ts gates.\n` +
     ` *\n` +
     ` * The only edits are import specifiers: \`.js\` becomes \`.ts\`, and the\n` +

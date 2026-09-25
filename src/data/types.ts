@@ -236,6 +236,12 @@ export type PayMethod = "card" | "cash" | "transfer";
 export interface Payment {
   id: Id;
   appointment_id: Id;
+  /** Copied from the visit by the server whenever the payment is written; null on a payment older than the copy. */
+  patient_id: Id | null;
+  /** Copied from the visit, like `patient_id`. */
+  visit_type_id: Id | null;
+  /** Copied from the visit, like `patient_id`. */
+  clinician_id: Id | null;
   amount: number;
   method: PayMethod;
   taken_by: string | null;
@@ -299,7 +305,7 @@ export interface WaitingEntry {
   created_at: Instant | null;
 }
 
-export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled";
+export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled" | "receipt";
 export type MessageStatus = "queued" | "sent" | "failed" | "skipped";
 
 export interface Message {
@@ -309,6 +315,8 @@ export interface Message {
   appointment_id: Id | null;
   recall_id: Id | null;
   closure_id: Id | null;
+  /** The payment a receipt is for. */
+  payment_id: Id | null;
   to_address: string | null;
   language: string | null;
   status: MessageStatus;

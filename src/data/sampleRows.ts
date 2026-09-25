@@ -74,20 +74,27 @@ export const COLUMNS: Record<string, Record<string, Fill>> = {
   patients: { client_key: null, name: REQUIRED, born_on: REQUIRED, mobile: REQUIRED, email: null, address: null, emergency_contact: null, allergies_note: null, insurer: null, policy_ref: null, language: null, remind_email: true, remind_lead_hours: 24, status: "active", created_at: NOW },
   registrations: { ref: REQUIRED, name: REQUIRED, born_on: REQUIRED, mobile: REQUIRED, email: null, address: null, emergency_contact: null, language: null, status: "new", patient_id: null, outcome: null, note: null, handled_by: null, handled_at: null, created_at: NOW },
   appointments: { ref: REQUIRED, patient_id: null, new_name: null, new_born_on: null, new_mobile: null, new_email: null, clinician_id: null, visit_type_id: REQUIRED, starts_at: REQUIRED, minutes: 15, fee: null, waived: null, paid: null, balance: null, reason: null, desk_note: null, status: "booked", channel: "desk", checked_in_at: null, roomed_at: null, seen_at: null, cancelled_at: null, late_cancel: false, cancelled_by: null, recall_weeks: null, language: null, booked_by: null, check_status: null, client_key: null, created_at: NOW },
-  payments: { appointment_id: REQUIRED, amount: REQUIRED, method: "card", taken_by: null, paid_at: NOW, voided: false, void_reason: null, voided_by: null, client_key: null },
+  payments: { appointment_id: REQUIRED, patient_id: null, visit_type_id: null, clinician_id: null, amount: REQUIRED, method: "card", taken_by: null, paid_at: NOW, voided: false, void_reason: null, voided_by: null, client_key: null },
   write_offs: { appointment_id: REQUIRED, amount: REQUIRED, reason: REQUIRED, written_by: null, written_at: NOW, client_key: null },
   check_notes: { registration_id: null, appointment_id: null, note: REQUIRED, written_by: null, client_key: null, created_at: NOW },
   recalls: { patient_id: REQUIRED, from_appointment_id: null, visit_type_id: null, clinician_id: REQUIRED, client_key: null, weeks: REQUIRED, due_on: REQUIRED, status: "due", reason: null, dismiss_reason: null, booked_appointment_id: null, created_at: NOW },
   waiting_list: { patient_id: REQUIRED, visit_type_id: REQUIRED, clinician_id: null, part_of_day: "any", status: "waiting", channel: "desk", booked_appointment_id: null, note: null, created_at: NOW },
-  messages: { kind: REQUIRED, patient_id: null, appointment_id: null, recall_id: null, closure_id: null, to_address: null, language: null, status: "queued", error: null, due_at: null, sent_at: null, created_by: null, client_key: null, created_at: NOW },
+  messages: { kind: REQUIRED, patient_id: null, appointment_id: null, recall_id: null, closure_id: null, payment_id: null, to_address: null, language: null, status: "queued", error: null, due_at: null, sent_at: null, created_by: null, client_key: null, created_at: NOW },
   day_closes: { day: REQUIRED, no_shows_marked: 0, cash_expected: 0, cash_counted: null, note: null, closed_by: null, closed_at: NOW },
 };
 // ── end of the written part ──
 
-/** The manifest's `copy` rules: a visit's length always from its type, its fee unless the row names one. */
+/**
+ * The manifest's `copy` rules: a visit's length always from its type, its fee
+ * unless the row names one; a payment's patient, kind of visit and clinician
+ * always from its visit. `to` is the table `via` points at.
+ */
 export const COPIES = [
-  { table: "appointments", column: "minutes", via: "visit_type_id", from: "minutes", always: true },
-  { table: "appointments", column: "fee", via: "visit_type_id", from: "fee", always: false },
+  { table: "appointments", column: "minutes", via: "visit_type_id", to: "visit_types", from: "minutes", always: true },
+  { table: "appointments", column: "fee", via: "visit_type_id", to: "visit_types", from: "fee", always: false },
+  { table: "payments", column: "patient_id", via: "appointment_id", to: "appointments", from: "patient_id", always: true },
+  { table: "payments", column: "visit_type_id", via: "appointment_id", to: "appointments", from: "visit_type_id", always: true },
+  { table: "payments", column: "clinician_id", via: "appointment_id", to: "appointments", from: "clinician_id", always: true },
 ] as const;
 
 /** The manifest's `rollup` rules on a visit, and the balance they leave. */
@@ -253,7 +260,7 @@ export function resolveSample(bundle: SampleBundle, options: ResolveOptions): Re
       for (const copy of COPIES) {
         if (copy.table !== table.ref || (!copy.always && values[copy.column] !== undefined)) continue;
         const link = values[copy.via];
-        const source = out["visit_types"]?.find((candidate) => candidate["id"] === link);
+        const source = out[copy.to]?.find((candidate) => candidate["id"] === link);
         if (source !== undefined) values[copy.column] = source[copy.from];
       }
       const id = rows.length + 1;

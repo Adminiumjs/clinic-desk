@@ -25,6 +25,10 @@ field is absent and every time this skill tells you to render is the server's, s
 
 **On an older instance, stop and say so.** The page would look right and be wrong by hours.
 
+**Replace, delete and batch writes need 0.3.0 or later** (`PUT`, `DELETE` and `…/batch`, and
+the client's `replace`, `remove` and `batch`). Before 0.3.0 a key can only read, create and
+update. Draw a delete or bulk action only when `/config` lists the action for that ref.
+
 ## Before anything else
 
 **Run the surface compiler. Do not skip this and do not proceed if it fails.**

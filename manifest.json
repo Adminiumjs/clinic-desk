@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "key": "clinic",
   "name": "Clinic Desk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "publisher": {
     "id": "adminium",
     "name": "Adminium",
@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.0",
+    "minAdminiumVersion": "0.3.2",
     "engines": [
       "sqlite",
       "postgres",
@@ -119,6 +119,58 @@
       "order": 2
     }
   ],
+  "addOns": {
+    "suggests": [
+      {
+        "key": "holiday-calendars",
+        "range": ">=1.0.2",
+        "checked": true,
+        "reason": {
+          "en-US": "Mark public holidays as closures",
+          "de-DE": "Gesetzliche Feiertage als Schließtage eintragen",
+          "fr-FR": "Marquer les jours fériés comme fermetures",
+          "da-DK": "Markér helligdage som lukkedage",
+          "cs-CZ": "Označit státní svátky jako dny, kdy je zavřeno",
+          "ar-EG": "تحديد العطلات الرسمية كأيام إغلاق",
+          "zh-CN": "把法定节假日标为停诊日",
+          "zh-TW": "把國定假日標為休診日"
+        }
+      },
+      {
+        "key": "invoices",
+        "range": ">=1.0.4",
+        "checked": false,
+        "reason": {
+          "en-US": "Email or print a receipt a patient can claim with",
+          "de-DE": "Eine Quittung mailen oder drucken, die Patienten bei ihrer Versicherung einreichen können",
+          "fr-FR": "Envoyer par e-mail ou imprimer un reçu que le patient peut présenter à son assurance",
+          "da-DK": "Send eller udskriv en kvittering, som patienten kan få refunderet hos sit forsikringsselskab",
+          "cs-CZ": "Poslat e-mailem nebo vytisknout stvrzenku, kterou pacient uplatní u pojišťovny",
+          "ar-EG": "إرسال إيصال بالبريد الإلكتروني أو طباعته ليقدّمه المريض إلى شركة التأمين",
+          "zh-CN": "通过电子邮件发送或打印收据，供患者向保险公司报销",
+          "zh-TW": "以電子郵件寄送或列印收據，讓病患向保險公司申請理賠"
+        }
+      }
+    ],
+    "features": [
+      {
+        "id": "insurer-receipts",
+        "label": {
+          "en-US": "Receipts for insurers",
+          "de-DE": "Quittungen für Versicherungen",
+          "fr-FR": "Reçus pour les assurances",
+          "da-DK": "Kvitteringer til forsikringsselskaber",
+          "cs-CZ": "Stvrzenky pro pojišťovny",
+          "ar-EG": "إيصالات لشركات التأمين",
+          "zh-CN": "保险报销收据",
+          "zh-TW": "保險理賠收據"
+        },
+        "requires": [
+          "invoices"
+        ]
+      }
+    ]
+  },
   "requiredSchema": {
     "prefixed": true,
     "tables": [
@@ -1997,7 +2049,10 @@
               "zh-CN": "保单号",
               "zh-TW": "保單號碼"
             },
-            "nullable": true
+            "nullable": true,
+            "rules": {
+              "personal": true
+            }
           },
           {
             "ref": "language",
@@ -3525,6 +3580,75 @@
             }
           },
           {
+            "ref": "patient_id",
+            "type": "fk",
+            "references": "patients",
+            "label": {
+              "en-US": "Patient",
+              "de-DE": "Patient",
+              "fr-FR": "Patient",
+              "da-DK": "Patient",
+              "cs-CZ": "Pacient",
+              "ar-EG": "المريض",
+              "zh-CN": "患者",
+              "zh-TW": "病患"
+            },
+            "nullable": true,
+            "rules": {
+              "copy": {
+                "via": "appointment_id",
+                "from": "patient_id",
+                "mode": "always"
+              }
+            }
+          },
+          {
+            "ref": "visit_type_id",
+            "type": "fk",
+            "references": "visit_types",
+            "label": {
+              "en-US": "Visit type",
+              "de-DE": "Terminart",
+              "fr-FR": "Type de consultation",
+              "da-DK": "Konsultationstype",
+              "cs-CZ": "Typ návštěvy",
+              "ar-EG": "نوع الزيارة",
+              "zh-CN": "就诊类型",
+              "zh-TW": "看診類型"
+            },
+            "nullable": true,
+            "rules": {
+              "copy": {
+                "via": "appointment_id",
+                "from": "visit_type_id",
+                "mode": "always"
+              }
+            }
+          },
+          {
+            "ref": "clinician_id",
+            "type": "fk",
+            "references": "clinicians",
+            "label": {
+              "en-US": "Clinician",
+              "de-DE": "Behandler",
+              "fr-FR": "Praticien",
+              "da-DK": "Behandler",
+              "cs-CZ": "Zdravotník",
+              "ar-EG": "مقدّم الرعاية",
+              "zh-CN": "医护人员",
+              "zh-TW": "醫護人員"
+            },
+            "nullable": true,
+            "rules": {
+              "copy": {
+                "via": "appointment_id",
+                "from": "clinician_id",
+                "mode": "always"
+              }
+            }
+          },
+          {
             "ref": "amount",
             "type": "money",
             "label": {
@@ -4574,7 +4698,8 @@
               "reminder",
               "missed",
               "recall",
-              "cancelled"
+              "cancelled",
+              "receipt"
             ],
             "label": {
               "en-US": "Kind",
@@ -4638,6 +4763,16 @@
                     "ar-EG": "إغلاق",
                     "zh-CN": "停诊",
                     "zh-TW": "休診"
+                  },
+                  "receipt": {
+                    "en-US": "Receipt",
+                    "de-DE": "Quittung",
+                    "fr-FR": "Reçu",
+                    "da-DK": "Kvittering",
+                    "cs-CZ": "Stvrzenka",
+                    "ar-EG": "إيصال",
+                    "zh-CN": "收据",
+                    "zh-TW": "收據"
                   }
                 }
               }
@@ -4704,6 +4839,22 @@
               "ar-EG": "إغلاق",
               "zh-CN": "停诊",
               "zh-TW": "休診"
+            },
+            "nullable": true
+          },
+          {
+            "ref": "payment_id",
+            "type": "fk",
+            "references": "payments",
+            "label": {
+              "en-US": "Payment",
+              "de-DE": "Zahlung",
+              "fr-FR": "Paiement",
+              "da-DK": "Betaling",
+              "cs-CZ": "Platba",
+              "ar-EG": "دفعة",
+              "zh-CN": "付款",
+              "zh-TW": "付款"
             },
             "nullable": true
           },
@@ -8283,7 +8434,8 @@
       "patient": "patient_id",
       "appointment": "appointment_id",
       "recall": "recall_id",
-      "closure": "closure_id"
+      "closure": "closure_id",
+      "payment": "payment_id"
     },
     "recipient": {
       "via": "patient_id",
@@ -8314,7 +8466,8 @@
       "reminder": "clinic-reminder",
       "missed": "clinic-missed",
       "recall": "clinic-recall",
-      "cancelled": "clinic-cancelled"
+      "cancelled": "clinic-cancelled",
+      "receipt": "clinic-receipt"
     },
     "producers": [
       {
@@ -10425,6 +10578,511 @@
             }
           ],
           "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        }
+      }
+    },
+    {
+      "key": "clinic-receipt",
+      "name": {
+        "en-US": "Receipt for an insurer",
+        "de-DE": "Quittung für die Versicherung",
+        "fr-FR": "Reçu pour l’assurance",
+        "da-DK": "Kvittering til forsikringen",
+        "cs-CZ": "Stvrzenka pro pojišťovnu",
+        "ar-EG": "إيصال لشركة التأمين",
+        "zh-CN": "供保险报销的收据",
+        "zh-TW": "供保險理賠的收據"
+      },
+      "vars": [
+        "recipient.first_name",
+        "payment.amount",
+        "appointment.ref",
+        "appointment.starts_at",
+        "visit_type.name",
+        "clinician.name",
+        "clinician.role_label",
+        "practice.phone"
+      ],
+      "attach": {
+        "kind": "receipt",
+        "link": "payment"
+      },
+      "locales": {
+        "en-US": {
+          "subject": "Your receipt from {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Your receipt, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Here is the receipt for your visit, attached to this email. Send it to your insurer with your claim."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "Paid",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Visit: {{visit_type.name}}",
+                  "Date: {{appointment.starts_at.date}}",
+                  "Clinician: {{clinician.name}} · {{clinician.role_label}}",
+                  "Reference: {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "A question about it? Ring the desk on {{practice.phone}}."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "de-DE": {
+          "subject": "Ihre Quittung von {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Ihre Quittung, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Anbei die Quittung für Ihren Termin. Reichen Sie sie mit Ihrem Antrag bei Ihrer Versicherung ein."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "Bezahlt",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Termin: {{visit_type.name}}",
+                  "Datum: {{appointment.starts_at.date}}",
+                  "Behandler: {{clinician.name}} · {{clinician.role_label}}",
+                  "Buchungsnummer: {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "Fragen dazu? Rufen Sie die Anmeldung unter {{practice.phone}} an."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "fr-FR": {
+          "subject": "Votre reçu de {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Votre reçu, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Voici le reçu de votre consultation, joint à cet e-mail. Envoyez-le à votre assurance avec votre demande de remboursement."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "Payé",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Consultation : {{visit_type.name}}",
+                  "Date : {{appointment.starts_at.date}}",
+                  "Praticien : {{clinician.name}} · {{clinician.role_label}}",
+                  "Référence : {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "Une question ? Appelez l’accueil au {{practice.phone}}."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "da-DK": {
+          "subject": "Din kvittering fra {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Din kvittering, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Her er kvitteringen for dit besøg, vedhæftet denne e-mail. Send den til dit forsikringsselskab sammen med din anmodning om refusion."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "Betalt",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Besøg: {{visit_type.name}}",
+                  "Dato: {{appointment.starts_at.date}}",
+                  "Behandler: {{clinician.name}} · {{clinician.role_label}}",
+                  "Bookingnummer: {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "Spørgsmål? Ring til receptionen på {{practice.phone}}."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "cs-CZ": {
+          "subject": "Vaše stvrzenka od {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Vaše stvrzenka, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "V příloze najdete stvrzenku za vaši návštěvu. Pošlete ji své pojišťovně spolu se žádostí o proplacení."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "Zaplaceno",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Návštěva: {{visit_type.name}}",
+                  "Datum: {{appointment.starts_at.date}}",
+                  "Zdravotník: {{clinician.name}} · {{clinician.role_label}}",
+                  "Číslo rezervace: {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "Máte dotaz? Zavolejte na recepci na číslo {{practice.phone}}."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "ar-EG": {
+          "subject": "إيصالك من {{appName}}",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "إيصالك يا {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "مرفق بهذه الرسالة إيصال زيارتك. أرسله إلى شركة التأمين مع طلب الاسترداد."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "المدفوع",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "الزيارة: {{visit_type.name}}",
+                  "التاريخ: {{appointment.starts_at.date}}",
+                  "مقدّم الرعاية: {{clinician.name}} · {{clinician.role_label}}",
+                  "رقم الحجز: {{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "عندك سؤال؟ اتصلوا بالاستقبال على {{practice.phone}}."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-CN": {
+          "subject": "{{appName}} 给您的收据",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "{{recipient.first_name}}，这是您的收据"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "本次就诊的收据已附在这封邮件中。请连同报销申请一起寄给您的保险公司。"
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "已付",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "就诊：{{visit_type.name}}",
+                  "日期：{{appointment.starts_at.date}}",
+                  "医护人员：{{clinician.name}} · {{clinician.role_label}}",
+                  "预约编号：{{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "有疑问？请致电前台{{practice.phone}}。"
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-TW": {
+          "subject": "{{appName}} 給您的收據",
+          "preheader": "{{payment.amount}} · {{appointment.starts_at.date}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "{{recipient.first_name}}，這是您的收據"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "本次看診的收據已附在這封郵件中。請連同理賠申請一起寄給您的保險公司。"
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "paid",
+              "data": {
+                "label": "已付",
+                "value": "{{payment.amount}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "看診：{{visit_type.name}}",
+                  "日期：{{appointment.starts_at.date}}",
+                  "醫護人員：{{clinician.name}} · {{clinician.role_label}}",
+                  "預約編號：{{appointment.ref}}"
+                ]
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "ask",
+              "data": {
+                "paras": [
+                  "有疑問？請致電櫃台{{practice.phone}}。"
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        }
+      }
+    }
+  ],
+  "documents": [
+    {
+      "kind": "receipt",
+      "addOn": "invoices",
+      "table": "payments",
+      "name": {
+        "en-US": "Receipt for an insurer",
+        "de-DE": "Quittung für die Versicherung",
+        "fr-FR": "Reçu pour l’assurance",
+        "da-DK": "Kvittering til forsikringen",
+        "cs-CZ": "Stvrzenka pro pojišťovnu",
+        "ar-EG": "إيصال لشركة التأمين",
+        "zh-CN": "供保险报销的收据",
+        "zh-TW": "供保險理賠的收據"
+      },
+      "feature": "insurer-receipts",
+      "mapping": {
+        "issuedAt": {
+          "column": "paid_at"
+        },
+        "amount": {
+          "column": "amount"
+        },
+        "paidWith": {
+          "column": "method"
+        },
+        "voided": {
+          "column": "voided"
+        },
+        "customerName": {
+          "via": "patient_id",
+          "column": "name"
+        },
+        "customerLines": {
+          "via": "patient_id",
+          "column": "address"
+        },
+        "title": {
+          "via": "visit_type_id",
+          "column": "name"
+        },
+        "serviceDate": {
+          "via": "appointment_id",
+          "column": "starts_at"
+        },
+        "attendedBy": {
+          "via": "clinician_id",
+          "column": "name"
+        },
+        "reference": {
+          "via": "patient_id",
+          "column": "policy_ref"
+        },
+        "balanceAfter": {
+          "via": "appointment_id",
+          "column": "balance"
         }
       }
     }

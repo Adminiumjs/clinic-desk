@@ -61,7 +61,7 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     recall_weeks: "int",
     created_at: "instant",
   },
-  payments: { id: "int", appointment_id: "int", amount: "money", paid_at: "instant", voided: "bool" },
+  payments: { id: "int", appointment_id: "int", patient_id: "int", visit_type_id: "int", clinician_id: "int", amount: "money", paid_at: "instant", voided: "bool" },
   write_offs: { id: "int", appointment_id: "int", amount: "money", written_at: "instant" },
   check_notes: { id: "int", registration_id: "int", appointment_id: "int", created_at: "instant" },
   recalls: {
@@ -82,6 +82,7 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     appointment_id: "int",
     recall_id: "int",
     closure_id: "int",
+    payment_id: "int",
     due_at: "instant",
     sent_at: "instant",
     created_at: "instant",

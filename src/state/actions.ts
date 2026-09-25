@@ -19,7 +19,7 @@
  * LAST (the visit's "seen" after its payment and recall), except a closure,
  * which is written FIRST so no email ever names a closure that does not exist.
  */
-import type { SinkError } from "../data/sink.ts";
+import type { DrawnDocument, SinkError } from "../data/sink.ts";
 import type {
   AppointmentStatus,
   Appointment,
@@ -47,6 +47,7 @@ import { addDays, venueDay } from "../data/venueTime.ts";
 import { now, practiceZone } from "../lib/clock.ts";
 import { stepKey } from "../lib/keys.ts";
 import { deskReads, drop, ensurePatients, upsert, useDesk } from "./desk.ts";
+import { forgetAddOn } from "./features.ts";
 import { sink } from "./writes.ts";
 
 // ── outcomes ────────────────────────────────────────────────────────────────
@@ -75,7 +76,11 @@ export type Refusal =
   /** The session ended: sign in again. */
   | "signed-out"
   /** No answer: try again. */
-  | "offline";
+  | "offline"
+  /** The part of the desk that needs an add-on is off: the add-on is not connected to this app. */
+  | "off"
+  /** The add-on could not draw the document (a value it needs is empty). */
+  | "not-drawn";
 
 export type Outcome<T = void> = { ok: true; value: T } | { ok: false; reason: Refusal; field?: string | null; balance?: number };
 
@@ -101,6 +106,8 @@ export function refusalOf(error: unknown): Outcome<never> {
     return { ok: false, reason: "balance", ...(Number.isFinite(balance) ? { balance } : {}) };
   }
   if (code === "UNIQUE_VIOLATION") return { ok: false, reason: "duplicate", field: e.field ?? null };
+  if (code === "FEATURE_OFF") return { ok: false, reason: "off" };
+  if (code === "DOCUMENT_NOT_DRAWN") return { ok: false, reason: "not-drawn" };
   if (e.status === 403) return { ok: false, reason: "not-allowed" };
   if (e.status === 404) return { ok: false, reason: "gone" };
   return { ok: false, reason: "invalid", field: e.field ?? null };
@@ -618,9 +625,69 @@ export function sendReminderNow(visitId: Id, key: string): Promise<Outcome<Messa
   });
 }
 
-/** "Send again": a failed message back in the queue. */
+/**
+ * "Send again": a failed message back in the queue. The status alone: why it
+ * failed is Adminium's to write (and to clear when it sends), and a desk that
+ * sent `error` too would be refused outright.
+ */
 export function sendAgain(messageId: Id): Promise<Outcome<Message>> {
-  return attempt(async () => (await update("messages", messageId, { status: "queued", error: null })) as unknown as Message);
+  return attempt(async () => (await update("messages", messageId, { status: "queued" })) as unknown as Message);
+}
+
+// ── receipts for insurers (Invoices & Receipts) ─────────────────────────────
+
+/** The server said the feature is off: forget the add-on it named, so its buttons go. */
+function offWhenRefused(error: unknown): never {
+  const e = error as Partial<SinkError>;
+  if (e.code === "FEATURE_OFF") forgetAddOn(typeof e.details?.["addOn"] === "string" && e.details["addOn"] !== "" ? e.details["addOn"] : "invoices");
+  throw error;
+}
+
+/**
+ * The receipt of one payment for the patient's insurer, drawn by Invoices &
+ * Receipts — or the one already drawn while the payment is unchanged — and
+ * where to print it from. In the document's language when one is given.
+ */
+export function drawInsurerReceipt(paymentId: Id, locale?: string): Promise<Outcome<DrawnDocument>> {
+  return attempt(async () => {
+    const target = sink();
+    if (target.renderDocument === undefined) {
+      throw Object.assign(new Error("off"), { kind: "refused", status: 409, code: "FEATURE_OFF", details: { addOn: "invoices" } });
+    }
+    return await target.renderDocument({ kind: "receipt", ref: "payments", id: paymentId, ...(locale === undefined ? {} : { locale }) }).catch(offWhenRefused);
+  });
+}
+
+/**
+ * Email the receipt of one payment to the patient, for their insurer: a row in
+ * the outbox, which Adminium sends with the receipt attached. It goes to the
+ * patient the payment is for (the address a first visit booked with, when
+ * they are not on file yet), in their language. A voided payment has no
+ * receipt to send.
+ */
+export function emailInsurerReceipt(paymentId: Id, key: string): Promise<Outcome<Message>> {
+  return attempt(async () => {
+    const payment = useDesk.getState().payments[paymentId];
+    if (payment === undefined || payment.voided) {
+      throw Object.assign(new Error("gone"), { kind: "refused", status: 404, code: "NOT_FOUND" });
+    }
+    if (visitOf(payment.appointment_id) === undefined) await refreshVisits([payment.appointment_id]);
+    const visit = visitOf(payment.appointment_id);
+    // The visit's patient as it stands: a first visit linked since the payment was taken counts.
+    const patientId = visit?.patient_id ?? payment.patient_id ?? null;
+    await ensurePatients([patientId]);
+    const patient = patientOf(patientId);
+    return (await insert("messages", {
+      kind: "receipt",
+      payment_id: payment.id,
+      patient_id: patientId,
+      appointment_id: payment.appointment_id,
+      to_address: patient?.email ?? visit?.new_email ?? null,
+      language: patient?.language ?? visit?.language ?? null,
+      status: "queued",
+      client_key: stepKey(key, "a"),
+    })) as unknown as Message;
+  });
 }
 
 // ── end of day and the desk's settings ──────────────────────────────────────

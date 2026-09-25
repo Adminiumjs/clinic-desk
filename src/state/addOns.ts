@@ -13,10 +13,16 @@
  * DISCONNECTING TAKES THE SURFACES AND THE CREDENTIALS, NEVER THE DATA: an
  * add-on switched off keeps its saved values, and switched on again shows
  * them unchanged.
+ *
+ * In a desk Adminium serves, an add-on Adminium says is connected to this app
+ * (the staff config's `addOns`) starts switched on, with the values Adminium
+ * keeps for it: Holiday calendars ticked at install shows its saved days on
+ * Hours & closures without anyone switching it on here.
  */
 import { create } from "zustand";
 
 import { applyAddOnSettings, createRegistry, defaultSettingsFor, type AddOn, type AddOnRegistry, type AddOnSettings } from "../add-ons/vendor/host/index.ts";
+import type { ConnectedAddOns } from "../data/connectedAddOns.ts";
 
 export interface AddOnsState {
   registry: AddOnRegistry;
@@ -27,6 +33,8 @@ export interface AddOnsState {
   /** Each add-on's saved values, keyed by add-on key and opaque to this app. */
   addOnSettings: AddOnSettings;
   registerAddOns: (addOns: readonly AddOn[]) => void;
+  /** Adminium's word on which add-ons are connected to this app, and the values it keeps for each. */
+  connectFromServer: (connected: ConnectedAddOns) => void;
   toggleAddOn: (key: string) => void;
   connectAddOn: (key: string) => void;
   disconnectAddOn: (key: string) => void;
@@ -44,6 +52,20 @@ export const useAddOns = create<AddOnsState>((set, get) => ({
     const addOnSettings: AddOnSettings = { ...defaultSettingsFor(addOns), ...get().addOnSettings };
     set({ registry: createRegistry(addOns), addOnSettings });
     applyAddOnSettings(addOns, addOnSettings);
+  },
+  connectFromServer: (connected) => {
+    const { registry } = get();
+    const here = registry.all.filter((addOn) => connected[addOn.key] !== undefined);
+    if (here.length === 0) return;
+    const enabled = new Set(get().enabled);
+    const seeded: Record<string, Record<string, unknown>> = {};
+    for (const addOn of here) {
+      enabled.add(addOn.key);
+      seeded[addOn.key] = { ...(get().addOnSettings[addOn.key] ?? {}), ...connected[addOn.key]!.settings };
+    }
+    const addOnSettings: AddOnSettings = { ...get().addOnSettings, ...seeded };
+    set({ enabled, addOnSettings });
+    applyAddOnSettings(registry.all, addOnSettings);
   },
   toggleAddOn: (key) => {
     if (get().enabled.has(key)) get().disconnectAddOn(key);

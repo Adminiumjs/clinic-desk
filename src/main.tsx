@@ -174,6 +174,10 @@ async function bootDesk(): Promise<void> {
   });
   setDeskReads(sessionDeskReads(transport, tables, (ref) => can(ref, "read")));
   setSink(sessionSink(transport, tables));
+  // The add-ons connected to this app: Invoices & Receipts (receipts for insurers), Holiday calendars (its days).
+  const [{ loadConnectedAddOns }, { setConnectedAddOns }] = await Promise.all([import("./data/connectedAddOns.ts"), import("./state/features.ts")]);
+  const connected = await loadConnectedAddOns();
+  setConnectedAddOns(connected);
   useUi.setState({ persona: "clinic", view: "daysheet", theme: systemTheme() });
   await loadDesk();
   if (useDesk.getState().load === "failed") {
@@ -194,7 +198,7 @@ async function bootDesk(): Promise<void> {
     console.warn("[clinic] live updates are off:", error),
   );
 
-  await wireAddOns();
+  await wireAddOns(connected);
   await wireHost("staff");
   startTicking();
   const { default: App } = await import("./app/App.tsx");
@@ -317,10 +321,15 @@ async function bootDemo(): Promise<void> {
   render(App);
 }
 
-/** The add-ons this build carries, registered once (their days suggest closures on Hours & closures). */
-async function wireAddOns(): Promise<void> {
+/**
+ * The add-ons this build carries, registered once (their days suggest closures
+ * on Hours & closures) — and, in a desk Adminium serves, the ones it says are
+ * connected to this app switched on with the values it keeps for them.
+ */
+async function wireAddOns(connected: import("./data/connectedAddOns.ts").ConnectedAddOns = {}): Promise<void> {
   const [{ demoAddOns }, { useAddOns }] = await Promise.all([import("./add-ons/registry.ts"), import("./state/addOns.ts")]);
   useAddOns.getState().registerAddOns(demoAddOns());
+  useAddOns.getState().connectFromServer(connected);
 }
 
 /**

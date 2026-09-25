@@ -8,6 +8,8 @@
  * is still the product's input, checked in, and `manifest-drift.test.ts`
  * fails when it and the modules disagree (`npm run manifest` re-writes it).
  */
+import { ADD_ONS } from "./add-ons.ts";
+import { DOCUMENTS } from "./documents.ts";
 import { emailTemplates } from "./emails.ts";
 import { untranslated } from "./labels.ts";
 import { OUTBOX } from "./outbox.ts";
@@ -16,11 +18,17 @@ import { PUBLIC_ACCESS, PUBLIC_KEYS } from "./public.ts";
 import { ROLES } from "./roles.ts";
 import { TABLES } from "./tables.ts";
 
-/** This release. The version moves 0.1.4 → 0.2.0 once: its tables are new. */
-export const VERSION = "0.2.0";
+/** This release. The version moved 0.1.4 → 0.2.0 once (its tables were new); since then, patches. */
+export const VERSION = "0.2.1";
 
-/** The Adminium release that first reads everything below (booking, the outbox, claims). */
-export const MIN_ADMINIUM = "0.3.0";
+/**
+ * The Adminium release that first reads everything below: booking, the
+ * outbox and claims (0.3.0), the add-ons an app works with, the documents it
+ * ships and an email that carries one (0.3.1), and an update that rebuilds a
+ * SQLite table, a document switched on when its add-on is connected later, and
+ * a print copy that opens in a tab (0.3.2).
+ */
+export const MIN_ADMINIUM = "0.3.2";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
@@ -90,6 +98,7 @@ export function buildManifest(): Record<string, unknown> {
       },
     ],
     navGroups: NAV_GROUPS,
+    addOns: ADD_ONS,
     requiredSchema: { prefixed: true, tables: TABLES },
     pages: pages(),
     roles: ROLES,
@@ -97,6 +106,7 @@ export function buildManifest(): Record<string, unknown> {
     publicAccess: PUBLIC_ACCESS,
     outbox: OUTBOX,
     emailTemplates: emailTemplates(),
+    documents: DOCUMENTS,
     sampleData: { file: "seeds/clinic.sample.json" },
   };
 }
