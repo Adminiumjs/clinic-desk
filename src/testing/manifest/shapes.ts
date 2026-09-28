@@ -28,13 +28,19 @@
  * What an app may do to a part, and nothing else:
  *  - add columns of its own;
  *  - relabel, and add display rules (`enumLabels`, `personal`) and narrowing
- *    ones (`validation`, `required`, `notAfter`, `notBefore`) to the part's columns;
+ *    ones (`validation`, `required`, `requiredWhen`, `notAfter`, `notBefore`)
+ *    to the part's columns;
  *  - put a `copy` in front of a column the part fills from a setting (a
  *    client's own tax rate before the add-on's default): the part's fill
  *    still answers whenever the copy comes back empty;
  *  - add to a lock's exceptions (its own columns a client may still write),
  *    give a move to some roles only, tie more child tables to the state, and
- *    empty more of its own columns when a child is created.
+ *    empty more of its own columns when a child is created;
+ *  - let a locked child EMPTY some of its own columns in some of the lock's
+ *    states (`release`: a void invoice's line letting go of the time it
+ *    billed), and lock columns of the rows its own links point at
+ *    (`lockLinked`) — never a column of the child's part, whose lock is the
+ *    shape's.
  *
  * Everything else — a column's type, a rule that decides a value, a move —
  * must be exactly the part's, or the install is refused `SHAPE_MISMATCH`
@@ -43,7 +49,7 @@
  * Pure: no I/O, no import of the schema at run time.
  */
 import type { ColumnRules } from './schema.ts';
-import type { States } from './states.ts';
+import type { StateChild, States } from './states.ts';
 
 /** A column as a shape and an app both declare it. */
 export interface ShapeColumn {
@@ -83,8 +89,14 @@ export function shapeKey(addOn: string, shape: { name: string; version: number }
   return `${addOn}/${shape.name}@${String(shape.version)}`;
 }
 
-/** Rules an app may add to a part's column: they label or narrow, never decide. */
-const ADDABLE_RULES: ReadonlySet<string> = new Set(['enumLabels', 'personal', 'validation', 'required', 'options', 'notAfter', 'notBefore']);
+/**
+ * Rules an app may add to a part's column: they label or narrow, never decide.
+ * `secret` only as `true`: an app may hide a part's column, never show one the
+ * shape keeps back (`SECRET_ONLY_HIDES`).
+ */
+const ADDABLE_RULES: ReadonlySet<string> = new Set(['enumLabels', 'personal', 'secret', 'validation', 'required', 'requiredWhen', 'options', 'notAfter', 'notBefore']);
+/** An addable rule that is added only one way: `secret: true` hides; `false` would show a part's column to every reader. */
+const SECRET_ONLY_HIDES = (name: string, value: unknown) => name === 'secret' && value !== true;
 
 /** JSON with sorted keys, so two spellings of one value compare equal. */
 function canonical(value: unknown): string {
@@ -115,8 +127,11 @@ interface AppTableView {
 export function shapeConformanceIssues(
   app: { requiredSchema?: { tables: readonly AppTableView[] } | undefined; outbox?: { kinds: Readonly<Record<string, string>>; producers?: readonly { kind: string }[] | undefined } | undefined },
   shapes: ReadonlyMap<string, ShapeDefinitionView>,
+  /** The rules an app may add to a part's column; an add-on's shape takes {@link ADDABLE_RULES}. */
+  opts: { addable?: ReadonlySet<string> } = {},
 ): ShapeIssue[] {
   const out: ShapeIssue[] = [];
+  const addable = opts.addable ?? ADDABLE_RULES;
   const tables = app.requiredSchema?.tables ?? [];
   /** The app's table built on a part: `document` in the same shape, or `quote@1/document` in another of the add-on's. */
   const tableFor = (builtOn: string, ref: string): string | undefined => {
@@ -175,8 +190,10 @@ export function shapeConformanceIssues(
       }
       for (const name of Object.keys(haveRules)) {
         const copyBeforeFill = name === 'copy' && wantRules['default'] !== undefined && wantRules['copy'] === undefined;
-        if (wantRules[name] === undefined && !ADDABLE_RULES.has(name) && !copyBeforeFill) {
+        if (wantRules[name] === undefined && !addable.has(name) && !copyBeforeFill) {
           mismatch(`${here}.rules.${name}`, `"${table.ref}.${want.ref}" adds a ${name} rule the shape does not keep`);
+        } else if (wantRules[name] === undefined && SECRET_ONLY_HIDES(name, haveRules[name])) {
+          mismatch(`${here}.rules.${name}`, `"${table.ref}.${want.ref}" may be made a secret, never shown: only "secret": true is added to a shape's column`);
         }
       }
     }
@@ -187,7 +204,14 @@ export function shapeConformanceIssues(
       } else if (table.states === undefined) {
         mismatch(at('states'), `"${table.ref}" drops the shape's states`);
       } else {
-        for (const message of statesDifferences(mapStates(part.states, map), table.states)) mismatch(at('states'), message);
+        // A child's columns the app added itself: the ones its part does not declare.
+        const ownColumns = (childRef: string): ReadonlySet<string> => {
+          const child = tables.find((candidate) => candidate.ref === childRef);
+          const childPart = child?.builtOn === undefined || child.part === undefined ? undefined : shapes.get(child.builtOn)?.parts[child.part];
+          const partColumns = new Set((childPart?.columns ?? []).map((column) => column.ref));
+          return new Set((child?.columns ?? []).map((column) => column.ref).filter((ref) => !partColumns.has(ref)));
+        };
+        for (const message of statesDifferences(mapStates(part.states, map), table.states, ownColumns)) mismatch(at('states'), message);
       }
     }
   });
@@ -248,8 +272,8 @@ function mapStates(states: States, map: (ref: string) => string): States {
   };
 }
 
-/** How an app's states differ from the part's, beyond what an app may add. */
-function statesDifferences(want: States, have: States): string[] {
+/** How an app's states differ from the part's, beyond what an app may add. `ownColumns` are a child table's columns the app added. */
+function statesDifferences(want: States, have: States, ownColumns: (childRef: string) => ReadonlySet<string>): string[] {
   const out: string[] = [];
   const same = (a: unknown, b: unknown) => canonical(a) === canonical(b);
   if (want.column !== have.column || want.initial !== have.initial) out.push('the state column and the first state are the shape\'s');
@@ -270,14 +294,36 @@ function statesDifferences(want: States, have: States): string[] {
   }
   for (const [ref, rule] of Object.entries(want.children ?? {})) {
     const own = have.children?.[ref];
-    if (own === undefined || own.via !== rule.via || own.lock !== rule.lock || !same(own.parentIn, rule.parentIn)) {
+    // `parentIn` is `createIn` and `changeIn` at once: the states a child is tied to are compared however they are written.
+    const tiedIn = (child: StateChild | undefined, key: 'createIn' | 'changeIn') => child?.[key] ?? child?.parentIn;
+    if (own === undefined || own.via !== rule.via || own.lock !== rule.lock || !same(tiedIn(own, 'createIn'), tiedIn(rule, 'createIn')) || !same(tiedIn(own, 'changeIn'), tiedIn(rule, 'changeIn'))) {
       out.push(`"${ref}" is tied to the state as the shape ties it`);
       continue;
     }
     const cleared = (rule.clearOnCreate ?? []).filter((col) => !(own.clearOnCreate ?? []).includes(col));
     if (cleared.length > 0) out.push(`creating a "${ref}" row empties ${cleared.join(', ')}, as the shape says`);
+    // A release or a linked lock the shape keeps is kept as it is; one the app adds names only its own columns.
+    const added = ownColumns(ref);
+    if (rule.release !== undefined) {
+      if (!same(own.release, rule.release)) out.push(`"${ref}" is released as the shape releases it`);
+    } else if (own.release !== undefined) {
+      const theirs = own.release.columns.filter((col) => !added.has(col));
+      if (theirs.length > 0) out.push(`a "${ref}" row is released only for columns the app added, never ${theirs.join(', ')}`);
+    }
+    for (const [link, columns] of Object.entries(rule.lockLinked ?? {})) {
+      const kept = own.lockLinked?.[link] ?? [];
+      const missing = columns.filter((col) => !kept.includes(col));
+      if (missing.length > 0) out.push(`a "${ref}" row's ${link} keeps ${missing.join(', ')} as the shape does`);
+    }
+    for (const link of Object.keys(own.lockLinked ?? {})) {
+      if (rule.lockLinked?.[link] === undefined && !added.has(link)) out.push(`"${ref}.${link}" is the shape's, and locks nothing the shape does not`);
+    }
   }
   for (const name of ['lockedWhenReferencedBy', 'noDelete', 'onlyLater'] as const) {
+    if (!same(want[name], have[name])) out.push(`${name} is the shape's`);
+  }
+  // What a move waits for, sets off or is refused as are the shape's too: an app adds none of them to a shape's table.
+  for (const name of ['strict', 'late', 'timed', 'effects', 'create'] as const) {
     if (!same(want[name], have[name])) out.push(`${name} is the shape's`);
   }
   return out;
