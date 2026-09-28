@@ -22,7 +22,17 @@
  *      again, it all comes back;
  *   7. nothing anonymous reaches it: no patients'-page door opens payments or
  *      documents, and a document's print copy needs a session;
- *   8. the sample removed.
+ *   8. a patient's booking, through the patients' pages' own port and the
+ *      real public client: the free times and days exactly as the demo's own
+ *      rule answers them on the same rows; a first visit booked by someone
+ *      not on file, and a taken time, a time outside the hours, a closed day
+ *      and a clinician who does not offer the visit each refused with the
+ *      code and reason the page words; the claim by mobile and date of
+ *      birth, the emailed code, and the found patient's own visits; a
+ *      booking, a move and a cancel within the rules (the limit of two, too
+ *      late to move, a late cancel flagged); and the stop on someone who
+ *      keeps guessing;
+ *   9. the sample removed.
  *
  * And the update a practice on 0.2.0 makes: the released 0.2.0 installed with
  * its sample, then updated to this version with Holiday calendars — the new
@@ -36,13 +46,19 @@
  * that a failure. Postgres and MySQL run with `TEST_POSTGRES_URL` /
  * `TEST_MYSQL_URL`. It takes eight ports from `CONTRACT_PORT_BASE` (4941).
  */
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { createPublicClient, PUBLIC_ERROR_CODES } from "@adminiumjs/public-client";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import bundleJson from "../../seeds/clinic.sample.json";
+import { PortError, type PatientsPort, type SlotTime } from "../data/ports.ts";
+import { instantOf, publicPatientsPort } from "../data/publicPatients.ts";
 import { normalise } from "../data/rows.ts";
 import { resolveSample } from "../data/sampleRows.ts";
-import type { TableRef } from "../data/types.ts";
+import type { Appointment, TableRef } from "../data/types.ts";
+import { addDays, venueDay, venueTime } from "../data/venueTime.ts";
+import { days as demoDays, slots as demoSlots, type Practice } from "../demo/booking.ts";
 import { DEMO_START, DEMO_ZONE } from "../lib/clock.ts";
+import { resolveSurfaceConfig } from "../publicConfig.ts";
 import { addOnBundle, appBundle, boot, Caller, ENGINES, missing, ok, packedFloor, packedVersion, RELEASED, releasedReadable, until, type Engine, type Reply, type Server } from "./harness.ts";
 
 type Row = Record<string, unknown> & { id: number };
@@ -71,15 +87,21 @@ const REHEARSAL = (() => {
   ].join("");
 })();
 
+/** The real clock, whatever `Date` is made to say. */
+const realNow = () => performance.timeOrigin + performance.now();
+
 /** What one install on one engine needs to be driven. */
 interface Install {
   server: Server;
   staff: Caller;
   connectionId: string;
   tableIds: Record<string, string>;
+  /** When its server's clock was set to the demo's moment (real epoch ms), to read the server's "now". */
+  startedAt: number;
 }
 
 async function start(engine: Engine, port: number, database: string): Promise<Install> {
+  const startedAt = realNow();
   const server = await boot(engine, port, DEMO_START, database);
   const staff = new Caller(server.base, { origin: server.base });
   await staff.signIn(ADMIN.email, ADMIN.password);
@@ -87,7 +109,45 @@ async function start(engine: Engine, port: number, database: string): Promise<In
   const connectionId = connections.connections.find((c) => c.name === "northwind")!.id;
   // The practice's clock and currency, as the sample practice keeps them.
   ok(await staff.patch(`/api/v1/connections/${connectionId}`, { timezone: DEMO_ZONE, currency: "GBP" }));
-  return { server, staff, connectionId, tableIds: {} };
+  return { server, staff, connectionId, tableIds: {}, startedAt };
+}
+
+/** The server's "now": the demo's moment, run on since its clock was set. */
+const serverNow = (at: Install) => DEMO_START + (realNow() - at.startedAt);
+/**
+ * A patient's browser on the practice's clock, as a real one shares the real
+ * server's: the public client keeps its claim session by `Date.now()`, and a
+ * session the server set to expire in July would read as long ended in a
+ * process on today's date. `Date` alone is moved, and it runs on.
+ */
+const onPracticeClock = (at: Install) => vi.useFakeTimers({ now: serverNow(at), toFake: ["Date"], shouldAdvanceTime: true });
+
+/** The refusal a patient's action met, as the patients' pages hold it. */
+async function refusal(run: () => Promise<unknown>): Promise<PortError> {
+  try {
+    await run();
+  } catch (error) {
+    if (error instanceof PortError) return error;
+    throw error;
+  }
+  throw new Error("expected a refusal, and it went through");
+}
+
+/** A patient's time as the page shows it: the server's desk-only `resource` is not the page's. */
+const shown = (list: SlotTime[]) => list.map((s) => ({ time: s.time, state: s.state }));
+
+/** The practice as the demo's booking rule reads it, from the rows the install holds. */
+async function practiceOf(at: Install): Promise<Practice> {
+  const [settings, hours, clinicians, links, clinicianHours, closures, appointments] = await Promise.all([
+    rows(at, "settings"),
+    rows(at, "opening_hours"),
+    rows(at, "clinicians"),
+    rows(at, "clinician_visit_types"),
+    rows(at, "clinician_hours"),
+    rows(at, "closures"),
+    rows(at, "appointments"),
+  ]);
+  return { settings: (settings[0] ?? null) as never, hours: hours as never, clinicians: clinicians as never, links: links as never, clinicianHours: clinicianHours as never, closures: closures as never, appointments: appointments as never };
 }
 
 async function upload(staff: Caller, kind: "add-ons" | "apps", bundle: { buffer: Buffer; integrity: string; key: string; version: string }): Promise<void> {
@@ -363,6 +423,233 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await guest.get(drawn.printUrl)).status).toBe(401);
           expect((await stranger.post("/api/v1/apps/clinic/documents/render", { kind: "receipt", ref: "payments", pk: { id: payment.id } })).status).toBe(401);
         }, 120_000);
+
+        // ── a patient's booking, through the patients' pages' own port ──────────
+        // `publicPatientsPort` over the real public client, with the key and the
+        // table names the customer surface serves, and the human check solved as
+        // the page asks for it: what a patient's browser does. Every refusal is
+        // checked as the server's code (and what it named), which the released
+        // page turns into words; every code heard must be one the released
+        // client knows, or the page reads it as "offline".
+        const heard: string[] = [];
+        const patientPort = async (): Promise<PatientsPort> => {
+          const config = await resolveSurfaceConfig({ baked: {}, hostedCustomer: true, base: `${at.server.base}/apps/clinic/customer/`, origin: at.server.base });
+          if (config === null) throw new Error("the patients' pages were served no key");
+          const asBrowser: typeof fetch = async (input, init) => {
+            const res = await fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: at.server.base } });
+            if (!res.ok) heard.push(((await res.clone().json().catch(() => null)) as { error?: { code?: string } } | null)?.error?.code ?? `HTTP ${String(res.status)}`);
+            return res;
+          };
+          const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asBrowser });
+          return publicPatientsPort(client!, config.tables ?? {});
+        };
+        /** The practice's next working days after today, on its own clock. */
+        const workingDays = (from: string, n: number): string[] => {
+          const out: string[] = [];
+          for (let day = addDays(from, 1); out.length < n; day = addDays(day, 1)) {
+            if (![0, 6].includes(new Date(`${day}T12:00:00Z`).getUTCDay())) out.push(day);
+          }
+          return out;
+        };
+        const firstFree = (list: SlotTime[], after = "00:00"): string => {
+          const found = list.find((s) => s.state === "free" && s.time > after);
+          if (found === undefined) throw new Error(`no free time after ${after}`);
+          return found.time;
+        };
+        let anon: PatientsPort;
+        let today = "";
+        let tomorrow = "";
+        let later = "";
+
+        afterAll(() => {
+          vi.useRealTimers();
+        });
+
+        it("answers a patient's free times and days exactly as the demo's own booking rule does, on the same rows", async () => {
+          onPracticeClock(at);
+          ok(await at.staff.put("/api/v1/public-api", { enabled: true }));
+          anon = await patientPort();
+          expect(anon.timeZone()).toBe(DEMO_ZONE);
+          const catalogue = await anon.catalogue();
+          expect(catalogue.settings?.practice_name).toBe("Rowan Health");
+          expect(catalogue.visitTypes.map((t) => t.id).sort()).toEqual([1, 2, 3, 4]);
+          const practice = await practiceOf(at);
+          today = venueDay(serverNow(at), DEMO_ZONE);
+          [tomorrow, later] = workingDays(today, 2) as [string, string];
+          const ask = () => ({ zone: DEMO_ZONE, now: serverNow(at), isPublic: true });
+          // Each kind of visit, with anyone and with each clinician who offers it, tomorrow and the day after.
+          const asks: { kind: number; resource: number | "any" }[] = [
+            ...practice.links.map((l) => ({ kind: l.visit_type_id, resource: l.clinician_id })),
+            ...[...new Set(practice.links.map((l) => l.visit_type_id))].map((kind) => ({ kind, resource: "any" as const })),
+          ];
+          let full = 0;
+          for (const day of [tomorrow, later]) {
+            for (const q of asks) {
+              const minutes = catalogue.visitTypes.find((t) => t.id === q.kind)!.minutes;
+              const served = await anon.times({ kind: q.kind, ...(q.resource === "any" ? {} : { resource: q.resource }), date: day });
+              expect(shown(served), `${day} kind ${String(q.kind)} with ${String(q.resource)}`).toEqual(shown(demoSlots(practice, q.kind, minutes, day, q.resource, ask())));
+              expect(served.length).toBeGreaterThan(0);
+              full += served.filter((s) => s.state === "full").length;
+            }
+          }
+          // The sample's own bookings fill some of them: the answer is not all free.
+          expect(full).toBeGreaterThan(0);
+          // A strip of days from today: weekends closed, the window's end closed, and each day's free count.
+          for (const q of [{ kind: 1, resource: "any" as const }, { kind: 3, resource: 3 }]) {
+            const minutes = catalogue.visitTypes.find((t) => t.id === q.kind)!.minutes;
+            const strip = await anon.days({ kind: q.kind, ...(q.resource === "any" ? {} : { resource: q.resource }), from: today, days: 21 });
+            expect(strip, `days of kind ${String(q.kind)}`).toEqual(demoDays(practice, q.kind, minutes, today, 21, q.resource, ask()));
+            expect(strip.filter((d) => [0, 6].includes(new Date(`${d.date}T12:00:00Z`).getUTCDay())).every((d) => d.state === "closed")).toBe(true);
+            expect(strip.at(-1)!.state).toBe("closed");
+          }
+          // Physiotherapy on the day Nadia is away (a closure of her own): nothing to book.
+          const away = practice.closures.find((c) => c.clinician_id === 3)!.from_date;
+          expect(await anon.times({ kind: 3, date: away })).toEqual([]);
+        }, 120_000);
+
+        let booked: { ref: string; starts_at: string; clinician_id: number | null };
+        it("books a first visit for someone not on file: its reference, time, length and clinician, and the desk has it to check", async () => {
+          const time = firstFree(await anon.times({ kind: 2, date: tomorrow }), "09:00");
+          const startsAt = instantOf(tomorrow, time, DEMO_ZONE);
+          const made = await anon.book({
+            visit_type_id: 2,
+            clinician_id: null,
+            starts_at: startsAt,
+            reason: "Knee pain after running",
+            desk_note: null,
+            language: "en-US",
+            newPatient: { name: `Ada Quill ${engine}`, born_on: "1990-04-12", mobile: "07700 900601", email: null },
+          });
+          expect(Object.keys(made).sort()).toEqual(["clinician_id", "minutes", "ref", "starts_at", "status"]);
+          expect(made).toMatchObject({ minutes: 30, status: "booked" });
+          expect(Date.parse(made.starts_at)).toBe(Date.parse(startsAt));
+          expect([1, 2]).toContain(made.clinician_id);
+          expect(made.ref).not.toBe("");
+          booked = made as typeof booked;
+          // The desk's row: booked online, to check, with the details typed and no patient yet.
+          const row = (await rows(at, "appointments")).find((a) => a["ref"] === made.ref)!;
+          expect([row["channel"], row["check_status"], row["status"], row["patient_id"], row["new_name"], row["new_mobile"]]).toEqual(["online", "to_check", "booked", null, `Ada Quill ${engine}`, "07700 900601"]);
+          // That clinician is now taken then.
+          const after = await anon.times({ kind: 2, resource: made.clinician_id!, date: tomorrow });
+          expect(after.find((s) => s.time === time)?.state).toBe("full");
+        }, 120_000);
+
+        it("refuses a taken time, a time outside the hours, a closed day and a clinician who does not offer the visit, as the page words them", async () => {
+          const newcomer = { name: `Bo Reyes ${engine}`, born_on: "1985-09-30", mobile: "07700 900602", email: null };
+          const visit = (over: Partial<{ visit_type_id: number; clinician_id: number | null; starts_at: string }>) =>
+            anon.book({ visit_type_id: 2, clinician_id: booked.clinician_id, starts_at: booked.starts_at, reason: null, desk_note: null, language: "en-US", newPatient: newcomer, ...over });
+          const taken = await refusal(() => visit({}));
+          expect(taken.code).toBe("PUBLIC_SLOT_FULL");
+          const late = await refusal(() => visit({ starts_at: instantOf(tomorrow, "18:00", DEMO_ZONE) }));
+          expect([late.code, late.params["column"], late.params["reason"]]).toEqual(["PUBLIC_WRITE_REFUSED", "starts_at", "out-of-hours"]);
+          const saturday = [1, 2, 3, 4, 5, 6, 7].map((n) => addDays(today, n)).find((d) => new Date(`${d}T12:00:00Z`).getUTCDay() === 6)!;
+          const weekend = await refusal(() => visit({ starts_at: instantOf(saturday, "10:00", DEMO_ZONE) }));
+          expect([weekend.code, weekend.params["column"], weekend.params["reason"]]).toEqual(["PUBLIC_WRITE_REFUSED", "starts_at", "out-of-hours"]);
+          const notOffered = await refusal(() => visit({ visit_type_id: 3, clinician_id: 1, starts_at: instantOf(later, "10:00", DEMO_ZONE) }));
+          expect([notOffered.code, notOffered.params["column"], notOffered.params["reason"]]).toEqual(["PUBLIC_WRITE_REFUSED", "clinician_id", "not-offered"]);
+          // None of them wrote a row.
+          expect((await rows(at, "appointments")).filter((a) => a["new_name"] === newcomer.name)).toEqual([]);
+          expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
+        }, 120_000);
+
+        // A patient on file with one visit booked, later today: inside the day's cancellation window.
+        let patient: Row;
+        let soon: Appointment;
+        let own: PatientsPort;
+        const CLAIM_INBOX = `claim-${engine}@rowan-contract.dev`;
+        it("finds a patient by mobile and date of birth, emails a code, and shows their own visits once it is typed back", async () => {
+          const [patients, visits] = [await rows(at, "patients"), (await rows(at, "appointments")) as unknown as (Appointment & Row)[]];
+          const now = serverNow(at);
+          const upcoming = (id: number) => visits.filter((v) => v.patient_id === id && v.status === "booked" && Date.parse(v.starts_at) > now);
+          patient = patients.find((p) => {
+            const mine = upcoming(p.id);
+            const twin = patients.filter((q) => q["mobile"] === p["mobile"] && q["born_on"] === p["born_on"]).length > 1;
+            return !twin && mine.length === 1 && Date.parse(mine[0]!.starts_at) - now > 2 * 3_600_000 && Date.parse(mine[0]!.starts_at) - now < 20 * 3_600_000;
+          })!;
+          expect(patient, "the sample has a patient with one visit booked later today").toBeDefined();
+          soon = upcoming(patient.id)[0]!;
+          ok(await at.staff.patch(`${data(at, "patients")}/${String(patient.id)}`, { values: { email: CLAIM_INBOX } }));
+
+          own = await patientPort();
+          // A wrong date of birth finds nobody, and says no more than that.
+          expect(await own.find(String(patient["mobile"]), "1901-01-01")).toBeNull();
+          expect(own.level()).toBeNull();
+          expect(await own.find(String(patient["mobile"]), String(patient["born_on"]))).toEqual({ name: patient["name"] });
+          expect(own.level()).toBe("lookup");
+          // Found is not proved: their visits wait for the emailed code.
+          expect((await refusal(() => own.myVisits())).code).toBe("PUBLIC_CLAIM_LEVEL");
+          const sent = await own.requestCode({ purpose: "verify" });
+          expect(sent.sentTo).not.toContain(CLAIM_INBOX);
+          expect(sent.sentTo.charAt(0)).toBe("c");
+          expect(sent.resendAfter).toBeGreaterThan(0);
+          expect(sent.expiresAt).toBeGreaterThan(serverNow(at));
+          expect((await refusal(() => own.requestCode({ purpose: "verify" }))).code).toBe("PUBLIC_CODE_TOO_SOON");
+          const mail = await until(async () => (await sinkFor(at, CLAIM_INBOX))[0], "the code email");
+          const code = /\b(\d{6})\b/.exec(`${mail.subject} ${mail.text}`)?.[1];
+          expect(code, mail.text).toBeDefined();
+          const wrong = await own.verifyCode(code === "000000" ? "111111" : "000000");
+          expect(wrong.ok).toBe(false);
+          expect(wrong.ok === false && wrong.triesLeft).toBeGreaterThan(0);
+          expect(await own.verifyCode(code!)).toEqual({ ok: true, level: "verified", ended: false });
+          expect(own.level()).toBe("verified");
+          // Their own visits, newest first, and only theirs.
+          const mine = await own.myVisits();
+          expect(mine.map((v) => v.id).sort((a, b) => a - b)).toEqual(visits.filter((v) => v.patient_id === patient.id).map((v) => v.id).sort((a, b) => a - b));
+          expect(Object.keys(mine[0]!).sort()).toEqual(["balance", "clinician_id", "id", "late_cancel", "minutes", "reason", "ref", "starts_at", "status", "visit_type_id"]);
+          expect(await own.myDetails()).toMatchObject({ name: patient["name"], email: CLAIM_INBOX, mobile: patient["mobile"] });
+        }, 180_000);
+
+        it("books, moves and cancels as the found patient, within the rules: two at most, too late to move, a late cancel flagged", async () => {
+          const time = firstFree(await own.times({ kind: 1, resource: 2, date: later }), "09:00");
+          const made = await own.book({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, time, DEMO_ZONE), reason: null, desk_note: null, language: "en-US" });
+          expect(made).toMatchObject({ minutes: 15, clinician_id: 2, status: "booked" });
+          const row = (await rows(at, "appointments")).find((a) => a["ref"] === made.ref)!;
+          expect([row["patient_id"], row["channel"], row["check_status"], row["new_name"]]).toEqual([patient.id, "online", null, null]);
+          // Two booked ahead is the most a patient may hold online.
+          const third = await refusal(async () =>
+            own.book({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, firstFree(await own.times({ kind: 1, resource: 2, date: later }), time), DEMO_ZONE), reason: null, desk_note: null, language: "en-US" }),
+          );
+          expect(third.code).toBe("PUBLIC_LIMIT_REACHED");
+          // Moved to another time that day: the room follows it.
+          const to = firstFree(await own.times({ kind: 1, resource: 2, date: later, exclude: row.id }), time);
+          const moved = await own.reschedule(row.id, instantOf(later, to, DEMO_ZONE));
+          expect([venueTime(Date.parse(moved.starts_at), DEMO_ZONE), moved.status]).toEqual([to, "booked"]);
+          const stranger = await (await patientPort()).times({ kind: 1, resource: 2, date: later });
+          expect([stranger.find((s) => s.time === time)?.state, stranger.find((s) => s.time === to)?.state]).toEqual(["free", "full"]);
+          // Its own time is not counted against the patient moving it.
+          expect((await own.times({ kind: 1, resource: 2, date: later, exclude: row.id })).find((s) => s.time === to)?.state).toBe("free");
+          // The visit later today is inside the window: moving it is refused, and it stands.
+          const tooLate = await refusal(() => own.reschedule(soon.id, instantOf(later, time, DEMO_ZONE)));
+          expect(tooLate.code).toBe("PUBLIC_TOO_LATE");
+          expect((await rows(at, "appointments")).find((a) => a.id === soon.id)!["starts_at"]).toBe(soon.starts_at);
+          // Cancelled inside the window: never refused, flagged late. Outside it: not.
+          const lateCancel = await own.cancel(soon.id);
+          expect([lateCancel.status, lateCancel.late_cancel]).toEqual(["cancelled", true]);
+          const onTime = await own.cancel(row.id);
+          expect([onTime.status, onTime.late_cancel]).toEqual(["cancelled", false]);
+          // Signed out: nothing of theirs is shown any more — their visits' door is, to this page, not there.
+          await own.signOut();
+          expect(own.level()).toBeNull();
+          expect((await refusal(() => own.myVisits())).code).toBe("PUBLIC_REF_NOT_FOUND");
+        }, 180_000);
+
+        it("stops someone who keeps guessing at a patient, and says so in a code the page knows", async () => {
+          const guesser = await patientPort();
+          let stopped: PortError | undefined;
+          for (let tries = 0; tries < 12 && stopped === undefined; tries += 1) {
+            try {
+              expect(await guesser.find(String(patient["mobile"]), `1950-01-${String(10 + tries)}`)).toBeNull();
+            } catch (error) {
+              if (!(error instanceof PortError)) throw error;
+              stopped = error;
+            }
+          }
+          expect(stopped, "a guesser is stopped within a dozen wrong guesses").toBeDefined();
+          // The finding door's own limit: the page tells them to wait, not that they are unknown.
+          expect(stopped!.code).toBe("PUBLIC_RATE_LIMITED");
+          expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
+          vi.useRealTimers();
+        }, 180_000);
 
         it("removes the sample, keeping the payment the desk took and the emails it sent", async () => {
           const plan = ok(await at.staff.post<{ total: number }>("/api/v1/apps/clinic/sample-data/remove-plan"));
