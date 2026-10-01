@@ -41,6 +41,19 @@ export interface AddOnsState {
   patchAddOnSettings: (addOn: string, patch: Record<string, unknown>) => void;
 }
 
+/**
+ * How a desk Adminium serves keeps an add-on's values: saved to the add-on's
+ * own settings there, so they are still here after a reload. None in the
+ * demo, whose values live in the page.
+ */
+type AddOnSaver = (addOn: string, values: Record<string, unknown>) => Promise<void>;
+let saver: AddOnSaver | null = null;
+let onSaveFailed: (() => void) | null = null;
+export function setAddOnSaver(next: AddOnSaver | null, failed: (() => void) | null = null): void {
+  saver = next;
+  onSaveFailed = failed;
+}
+
 export const useAddOns = create<AddOnsState>((set, get) => ({
   registry: createRegistry([]),
   enabled: new Set<string>(),
@@ -86,8 +99,20 @@ export const useAddOns = create<AddOnsState>((set, get) => ({
       return { enabled, credentialled };
     }),
   patchAddOnSettings: (addOn, patch) => {
-    const addOnSettings: AddOnSettings = { ...get().addOnSettings, [addOn]: { ...(get().addOnSettings[addOn] ?? {}), ...patch } };
+    const before = get().addOnSettings;
+    const addOnSettings: AddOnSettings = { ...before, [addOn]: { ...(before[addOn] ?? {}), ...patch } };
     set({ addOnSettings });
     applyAddOnSettings(get().registry.all, addOnSettings);
+    /*
+     * Kept in Adminium too. The values lived in the page alone: "Import this
+     * year" listed the holidays, and a reload took them away again. A save
+     * the server refuses puts the page back as it was, and says so.
+     */
+    if (saver === null) return;
+    void saver(addOn, patch).catch(() => {
+      set({ addOnSettings: before });
+      applyAddOnSettings(get().registry.all, before);
+      onSaveFailed?.();
+    });
   },
 }));

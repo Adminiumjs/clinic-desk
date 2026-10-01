@@ -74,7 +74,7 @@ describe("the add-ons Clinic Desk works with", () => {
   });
 
   it("asks for the Adminium that reads add-ons, documents and attachments, as a patch of 0.2", () => {
-    expect([VERSION, MIN_ADMINIUM, manifest.version, manifest.compatibility.minAdminiumVersion]).toEqual(["0.2.1", "0.3.2", "0.2.1", "0.3.2"]);
+    expect([VERSION, MIN_ADMINIUM, manifest.version, manifest.compatibility.minAdminiumVersion]).toEqual(["0.2.2", "0.3.2", "0.2.2", "0.3.2"]);
     const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { version: string; repository?: unknown };
     expect(pkg.version).toBe(VERSION);
   });

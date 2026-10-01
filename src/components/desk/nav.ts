@@ -57,6 +57,18 @@ export function visibleNav(access: StaffAccess | null, role: DeskRole | null): N
   });
 }
 
+/**
+ * Whether this person may open a screen: exactly what puts its item in the
+ * sidebar. The rule used to live in the sidebar alone, so a screen left out
+ * of it still opened by its address — a clinician read every patient's
+ * balance on Accounts, under a "Taken today £0" their role could not fill in.
+ * A screen with no item (the kiosk, "no such view") is nobody's to refuse.
+ */
+export function mayOpen(access: StaffAccess | null, role: DeskRole | null, view: string): boolean {
+  if (!NAV.some((item) => item.view === view)) return true;
+  return visibleNav(access, role).some((item) => item.view === view);
+}
+
 /** The count beside each item; an item without one shows none. */
 export function navCounts(s: DeskState, today: Day, now: number): Partial<Record<DeskView, number>> {
   const all = Object.values(s.visits);

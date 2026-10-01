@@ -67,6 +67,9 @@ const CLINICIAN_READS = [
   "recalls",
 ];
 
+/** Holiday Calendars' own (non-secret) settings: the days picked on Hours & closures are kept there. */
+const HOLIDAY_SETTINGS = "addOn:holiday-calendars:settings";
+
 export const ROLES = [
   {
     key: "reception",
@@ -80,6 +83,8 @@ export const ROLES = [
       ...grant("payments", "create"),
       ...RECEPTION_PAGES.map(view),
       ...DESK_PII.map(pii),
+      // The days Holiday Calendars suggests are picked on Hours & closures, and kept in the add-on's own settings.
+      HOLIDAY_SETTINGS,
     ],
   },
   {
@@ -104,6 +109,7 @@ export const ROLES = [
       ),
       ...PAGE_REFS.flatMap((page) => [view(page), `page:@${page}:edit`]),
       ...DESK_PII.map(pii),
+      HOLIDAY_SETTINGS,
     ],
   },
   {

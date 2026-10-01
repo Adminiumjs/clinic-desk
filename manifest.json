@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "key": "clinic",
   "name": "Clinic Desk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "publisher": {
     "id": "adminium",
     "name": "Adminium",
@@ -7688,7 +7688,8 @@
         "table:@patients:read_pii",
         "table:@registrations:read_pii",
         "table:@appointments:read_pii",
-        "table:@messages:read_pii"
+        "table:@messages:read_pii",
+        "addOn:holiday-calendars:settings"
       ]
     },
     {
@@ -7834,7 +7835,8 @@
         "table:@patients:read_pii",
         "table:@registrations:read_pii",
         "table:@appointments:read_pii",
-        "table:@messages:read_pii"
+        "table:@messages:read_pii",
+        "addOn:holiday-calendars:settings"
       ]
     },
     {

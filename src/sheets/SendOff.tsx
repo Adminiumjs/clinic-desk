@@ -80,6 +80,8 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
   const hasBalance = visit.balance > 0 || savedPayment !== undefined;
   const typed = parseAmount(amount);
   const over = hasBalance && savedPayment === undefined && !skip && typed !== null && typed > balance;
+  // Something typed that is not an amount: said, and nothing is taken or left on account by guessing.
+  const notAmount = hasBalance && savedPayment === undefined && !skip && amount.trim() !== "" && typed === null;
   const noPatient = visit.patient_id === null || visit.clinician_id === null;
   const chosenWeeks = savedRecall?.weeks ?? weeks;
   const due = chosenWeeks > 0 ? addDays(visitDay, chosenWeeks * 7) : null;
@@ -115,7 +117,7 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
   };
 
   const finish = async (follow: boolean) => {
-    if (over || alreadyDone) return;
+    if (over || notAmount || alreadyDone) return;
     setError(null);
     const outcome = await run(() => sendOff({ visitId: visit.id, payment: take, recallWeeks: chosenWeeks > 0 && !noPatient ? chosenWeeks : null, followUp: null, key }));
     if (outcome === null) return;
@@ -181,7 +183,7 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
   const sub = [visit.ref, visit.reason ?? type?.name ?? "", clinician?.short_name ?? ""].filter((x) => x !== "").join(" · ");
   const lockedPay = savedPayment !== undefined;
   const lockedRecall = savedRecall !== undefined;
-  const followDisabled = over || alreadyDone || noPatient || followBeyond;
+  const followDisabled = over || notAmount || alreadyDone || noPatient || followBeyond;
 
   return (
     <Sheet
@@ -245,8 +247,8 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
                       setError(null);
                     }}
                     inputMode="decimal"
-                    aria-invalid={over}
-                    aria-describedby={over ? "co-err" : undefined}
+                    aria-invalid={over || notAmount}
+                    aria-describedby={over || notAmount ? "co-err" : undefined}
                     style={fieldStyle(true)}
                   />
                 </label>
@@ -274,6 +276,11 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
               {over && (
                 <Note tone="danger" icon={CircleAlert} role="alert" id="co-err">
                   {t("sendOff.over", { most: money(balance) })}
+                </Note>
+              )}
+              {notAmount && (
+                <Note tone="danger" icon={CircleAlert} role="alert" id="co-err">
+                  {t("payment.notAmount")}
                 </Note>
               )}
               <button
@@ -334,7 +341,7 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
             {t("sendOff.followUp")}
           </Btn>
           {followBeyond && !noPatient && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{t("sendOff.beyond")}</span>}
-          <Btn icon={HandHeart} busy={busy} disabled={over} onClick={() => void finish(false)} style={{ width: "100%", ...(over ? { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 } : {}) }}>
+          <Btn icon={HandHeart} busy={busy} disabled={over || notAmount} onClick={() => void finish(false)} style={{ width: "100%", ...(over || notAmount ? { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 } : {}) }}>
             {lockedPay || lockedRecall ? t("sendOff.finish") : t("sendOff.done")}
           </Btn>
         </div>

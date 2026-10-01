@@ -199,6 +199,16 @@ async function bootDesk(): Promise<void> {
   );
 
   await wireAddOns(connected);
+  // An add-on's values are saved to Adminium (its own settings), as the staff role's grant allows.
+  {
+    const [{ setAddOnSaver }, { toast }, { t }] = await Promise.all([import("./state/addOns.ts"), import("./state/ui.ts"), import("./i18n/ambient.ts")]);
+    setAddOnSaver(
+      async (addOn, values) => {
+        await transport.mutate(`/api/v1/add-ons/${encodeURIComponent(addOn)}/settings`, "PUT", { values });
+      },
+      () => toast(t("refusal.offline"), { tone: "danger" }),
+    );
+  }
   await wireHost("staff");
   startTicking();
   const { default: App } = await import("./app/App.tsx");

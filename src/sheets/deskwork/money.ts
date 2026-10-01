@@ -26,6 +26,8 @@ function westernDigits(text: string): string {
  * decimals, grouping that is not in threes.
  */
 export function parseAmount(raw: string): number | null {
+  // Letters touching the digits are not a currency: "12abc" is not twelve pounds. ("45 Kč" and "£45" are.)
+  if (/\d\p{L}|\p{L}\d/u.test(westernDigits(raw))) return null;
   let s = westernDigits(raw.trim())
     .replace(/[\s\u00A0\u202F']/g, "")
     .replace(/\u066B/g, ".")

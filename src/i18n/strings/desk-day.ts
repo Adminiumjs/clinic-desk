@@ -125,6 +125,8 @@ const EN = {
   "deskNotFound.title": "No such view at this desk.",
   "deskNotFound.body": "The day sheet is where the morning lives. Everything else is one click away in the sidebar.",
   "deskNotFound.action": "Open the day sheet",
+  "deskDenied.title": "Your role can’t open this view.",
+  "deskDenied.body": "It is kept for the people who run the desk. Ask whoever manages the practice’s accounts if you need it.",
 } as const;
 
 type Messages = typeof EN;
@@ -235,6 +237,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "Diese Ansicht gibt es am Empfang nicht.",
     "deskNotFound.body": "Der Morgen spielt sich in der Tagesliste ab. Alles andere ist in der Seitenleiste nur einen Klick entfernt.",
     "deskNotFound.action": "Tagesliste öffnen",
+    "deskDenied.title": "Ihre Rolle kann diese Ansicht nicht öffnen.",
+    "deskDenied.body": "Sie ist den Personen vorbehalten, die den Empfang führen. Wenden Sie sich an die Person, die die Konten der Praxis verwaltet, wenn Sie sie brauchen.",
   },
   "fr-FR": {
     "shell.nav": "Écrans de l’accueil",
@@ -340,6 +344,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "Cette vue n’existe pas à l’accueil.",
     "deskNotFound.body": "La matinée se passe sur la feuille du jour. Tout le reste est à un clic dans la barre latérale.",
     "deskNotFound.action": "Ouvrir la feuille du jour",
+    "deskDenied.title": "Votre rôle ne peut pas ouvrir cette vue.",
+    "deskDenied.body": "Elle est réservée aux personnes qui tiennent l’accueil. Adressez-vous à la personne qui gère les comptes du cabinet si vous en avez besoin.",
   },
   "da-DK": {
     "shell.nav": "Receptionens skærme",
@@ -445,6 +451,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "Den visning findes ikke i receptionen.",
     "deskNotFound.body": "Morgenen foregår i dagsoversigten. Alt andet er et klik væk i sidepanelet.",
     "deskNotFound.action": "Åbn dagsoversigten",
+    "deskDenied.title": "Din rolle kan ikke åbne denne visning.",
+    "deskDenied.body": "Den er forbeholdt dem, der står for receptionen. Spørg den, der administrerer klinikkens konti, hvis du har brug for den.",
   },
   "cs-CZ": {
     "shell.nav": "Obrazovky recepce",
@@ -550,6 +558,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "Takové zobrazení recepce nemá.",
     "deskNotFound.body": "Ráno se odehrává v denním přehledu. Všechno ostatní je o klik dál v postranním panelu.",
     "deskNotFound.action": "Otevřít denní přehled",
+    "deskDenied.title": "Vaše role toto zobrazení otevřít nemůže.",
+    "deskDenied.body": "Je vyhrazeno lidem, kteří vedou recepci. Pokud ho potřebujete, obraťte se na toho, kdo spravuje účty ordinace.",
   },
   "ar-EG": {
     "shell.nav": "شاشات الاستقبال",
@@ -656,6 +666,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "لا توجد شاشة بهذا الاسم في الاستقبال.",
     "deskNotFound.body": "الصباح كله في جدول اليوم. وكل ما عداه على بُعد نقرة في الشريط الجانبي.",
     "deskNotFound.action": "افتح جدول اليوم",
+    "deskDenied.title": "دورك لا يسمح بفتح هذه الشاشة.",
+    "deskDenied.body": "هذه الشاشة مخصصة لمن يديرون الاستقبال. اطلب ذلك ممن يدير حسابات العيادة إذا احتجت إليها.",
   },
   "zh-CN": {
     "shell.nav": "前台页面",
@@ -760,6 +772,8 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "前台没有这个页面。",
     "deskNotFound.body": "上午的工作都在今日日程里。其他一切都在侧边栏，点一下就到。",
     "deskNotFound.action": "打开今日日程",
+    "deskDenied.title": "您的角色无法打开此页面。",
+    "deskDenied.body": "它仅供负责前台的人员使用。如有需要，请联系管理诊所账户的人。",
   },
   "zh-TW": {
     "shell.nav": "櫃檯頁面",
@@ -864,5 +878,7 @@ export const deskDay: { "en-US": Messages } & Record<Exclude<LocaleTag, "en-US">
     "deskNotFound.title": "櫃檯沒有這個頁面。",
     "deskNotFound.body": "上午的工作都在今日行程裡。其他一切都在側邊欄，點一下就到。",
     "deskNotFound.action": "開啟今日行程",
+    "deskDenied.title": "您的角色無法開啟此頁面。",
+    "deskDenied.body": "它僅供負責櫃檯的人員使用。如有需要，請聯絡管理診所帳戶的人。",
   },
 };

@@ -8,7 +8,7 @@ import type { Appointment, Message, Patient } from "../../data/types.ts";
 import type { StaffAccess } from "../../staffConnection.ts";
 import type { DeskState } from "../../state/desk.ts";
 import { outboxWaiting } from "../../lib/outbox.ts";
-import { visibleNav } from "./nav.ts";
+import { mayOpen, visibleNav } from "./nav.ts";
 
 const tables = (entries: Record<string, ("read" | "create" | "update" | "delete")[]>): StaffAccess => ({ tables: entries, roles: [] });
 const views = (access: StaffAccess | null, role: DeskState["me"]["role"]) => visibleNav(access, role).map((i) => i.view);
@@ -25,6 +25,15 @@ describe("which screens show", () => {
   it("gives a clinician the day sheet, the waiting room and the patients only", () => {
     const clinician = tables({ appointments: ["read", "update"], patients: ["read"], recalls: ["read"], opening_hours: ["read"], settings: ["read"] });
     expect(views(clinician, "clinician")).toEqual(["daysheet", "waiting", "patients"]);
+  });
+  it("opens by its address only what the sidebar offers", () => {
+    // A clinician typed /accounts and read every patient's balance: the rule lived in the sidebar alone.
+    const clinician = tables({ appointments: ["read", "update"], patients: ["read"], recalls: ["read"], opening_hours: ["read"], settings: ["read"], payments: [] });
+    expect(["daysheet", "patients", "accounts", "recalls", "hours", "settings"].map((view) => mayOpen(clinician, "clinician", view))).toEqual([true, true, false, false, false, false]);
+    // A screen with no item of its own (the kiosk, "no such view") is nobody's to refuse.
+    expect([mayOpen(clinician, "clinician", "kiosk"), mayOpen(clinician, "clinician", "notfound"), mayOpen(clinician, "clinician", "nowhere")]).toEqual([true, true, true]);
+    // With no word from the server, everything opens, as everything shows.
+    expect(mayOpen(null, null, "accounts")).toBe(true);
   });
   it("gives the kiosk nothing", () => {
     expect(views(tables({}), "kiosk")).toEqual([]);

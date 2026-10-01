@@ -84,11 +84,23 @@ export default function Kiosk() {
     };
   }, [look, port]);
 
+  /*
+   * Looked at again every twenty seconds, ON or off, and whenever the tablet
+   * comes back to the front. While on it used to look once, when the page
+   * loaded: a kiosk switched off at the desk went on saying "check yourself
+   * in" until a patient had typed their details and been turned away.
+   */
   useEffect(() => {
-    if (mode !== "off") return;
     const again = setInterval(() => void look(), LOOK_AGAIN_MS);
-    return () => clearInterval(again);
-  }, [mode, look]);
+    const onShow = () => {
+      if (document.visibilityState === "visible") void look();
+    };
+    document.addEventListener("visibilitychange", onShow);
+    return () => {
+      clearInterval(again);
+      document.removeEventListener("visibilitychange", onShow);
+    };
+  }, [look]);
 
   // The demo card's "A patient due now": their details typed in, ready to check in.
   useDemoSignal("kiosk.fill", (payload) => {

@@ -28,3 +28,24 @@ export default function NotFound() {
     </section>
   );
 }
+
+/** A screen of the desk this person's role may not open: said, with the way back. */
+export function Denied() {
+  const { t } = useI18n();
+  return (
+    <section
+      className="rh-screen"
+      data-screen="Denied"
+      aria-labelledby="desk-denied"
+      style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 16, paddingBlock: "clamp(20px,6vw,60px)", maxWidth: 520 }}
+    >
+      <h1 id="desk-denied" style={{ margin: 0, fontSize: "clamp(23px,3.2vw,30px)", fontWeight: 800, letterSpacing: "-.034em", lineHeight: 1.14 }}>
+        {t("deskDenied.title")}
+      </h1>
+      <p style={{ margin: 0, fontSize: 14, fontWeight: 500, lineHeight: 1.65, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("deskDenied.body")}</p>
+      <Btn icon={CalendarDays} onClick={() => go("daysheet")}>
+        {t("deskNotFound.action")}
+      </Btn>
+    </section>
+  );
+}

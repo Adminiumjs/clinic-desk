@@ -40,7 +40,8 @@ import Hours from "../screens/Hours.tsx";
 import Outbox from "../screens/Outbox.tsx";
 import Endofday from "../screens/Endofday.tsx";
 import Settings from "../screens/Settings.tsx";
-import NotFound from "../screens/NotFound.tsx";
+import NotFound, { Denied } from "../screens/NotFound.tsx";
+import { mayOpen } from "../components/desk/nav.ts";
 
 import Find from "../screens/patient/Find.tsx";
 import Details from "../screens/patient/Details.tsx";
@@ -106,8 +107,11 @@ function KioskAlone() {
 function Desk() {
   const view = useUi((s) => s.view);
   const kioskOnly = useDesk((s) => s.me.role === "kiosk");
+  const access = useDesk((s) => s.me.access);
+  const role = useDesk((s) => s.me.role);
   if (kioskOnly || view === "kiosk") return <KioskAlone />;
-  const Screen = (DESK_SCREENS as Partial<Record<string, ComponentType>>)[view] ?? NotFound;
+  // A screen the sidebar does not offer this person does not open by its address either.
+  const Screen = mayOpen(access, role, view) ? ((DESK_SCREENS as Partial<Record<string, ComponentType>>)[view] ?? NotFound) : Denied;
   return (
     <>
       <DeskShell>

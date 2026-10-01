@@ -19,28 +19,13 @@ import type { DeskState } from "../../state/desk.ts";
 // ── money as typed ──────────────────────────────────────────────────────────
 
 /**
- * An amount as someone typed it, in any of the desk's languages: "12.50",
- * "12,50", "£ 12.50", "1 234,5". Null when there is no number in it.
- *
- * A comma is the decimal mark when it is the last separator and two or fewer
- * digits follow it; otherwise separators are grouping and are dropped.
+ * An amount as someone typed it — the desk's ONE reader, the strict one
+ * Record a payment uses (`deskwork/money.ts`). This sheet had a reader of its
+ * own that dropped every character it did not know, so "12abc" was taken as
+ * a £12 cash payment without a word; the same text in Record a payment was
+ * refused. Null means "not an amount", and the sheet says so.
  */
-export function parseAmount(text: string): number | null {
-  const kept = text.replace(/[^\d.,]/g, "");
-  if (!/\d/.test(kept)) return null;
-  const lastSep = Math.max(kept.lastIndexOf("."), kept.lastIndexOf(","));
-  let whole = kept;
-  let fraction = "";
-  if (lastSep !== -1) {
-    const after = kept.slice(lastSep + 1);
-    if (after.length <= 2) {
-      whole = kept.slice(0, lastSep);
-      fraction = after;
-    }
-  }
-  const value = Number(`${whole.replace(/[.,]/g, "") || "0"}.${fraction || "0"}`);
-  return Number.isFinite(value) ? Math.round(value * 100) / 100 : null;
-}
+export { parseAmount } from "../deskwork/money.ts";
 
 /** Half a balance, to the cent. */
 export const halfOf = (balance: number): number => Math.round((balance / 2) * 100) / 100;

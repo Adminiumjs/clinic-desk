@@ -65,6 +65,9 @@ describe("an amount as typed", () => {
     expect(parseAmount("1,000")).toBe(1000);
     expect(parseAmount("")).toBeNull();
     expect(parseAmount("abc")).toBeNull();
+    // Letters after the digits are not grouping: "12abc" was taken as a £12 payment.
+    expect(parseAmount("12abc")).toBeNull();
+    expect(parseAmount("-5")).toBeNull();
   });
   it("halves a balance to the cent", () => {
     expect(halfOf(45)).toBe(22.5);
