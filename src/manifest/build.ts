@@ -28,7 +28,7 @@ export const VERSION = "0.2.2";
  * SQLite table, a document switched on when its add-on is connected later, and
  * a print copy that opens in a tab (0.3.2).
  */
-export const MIN_ADMINIUM = "0.3.2";
+export const MIN_ADMINIUM = "0.3.9";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },

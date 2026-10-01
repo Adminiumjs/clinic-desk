@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.2",
+    "minAdminiumVersion": "0.3.9",
     "engines": [
       "sqlite",
       "postgres",
