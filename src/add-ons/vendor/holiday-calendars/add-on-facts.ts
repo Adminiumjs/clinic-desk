@@ -12,11 +12,13 @@
  * need to know things that are true of an ADD-ON: which addresses it names and
  * cannot call, which of its strings must never reach a browser, which words in
  * it are somebody's trademark. All three used to be written out inside each
- * host — so one shop's D11 list carried another add-on's endpoints, and BOTH
- * hosts' bundle gates carried the delivery add-on's secret setting keys.
+ * host — so one shop's no-real-call list carried another add-on's endpoints,
+ * and BOTH hosts' bundle gates carried the delivery add-on's secret setting
+ * keys.
  *
- * That is AC20/D21 broken: making a portable add-on pass required editing an
- * exemption list inside the app receiving it. So the facts travel with the
+ * That breaks the rule that an add-on runs unchanged in any host app: making a
+ * portable add-on pass required editing an exemption list inside the app
+ * receiving it. So the facts travel with the
  * add-on, and each host discovers whatever it has VENDORED with
  * `import.meta.glob`. Vendor this add-on and its facts arrive; drop it and they
  * leave; nothing in either host changes either way.
@@ -32,16 +34,18 @@
 /**
  * ADDRESSES THIS ADD-ON NAMES, AND WHY NONE CAN CAUSE A REQUEST.
  *
- * Empty, and it is the strictest state there is: a host's D11 net reports every
- * absolute URL in what it ships whose origin nobody has declared inert, so with
- * nothing declared here EVERY address is a finding. This add-on has no
+ * Empty, and it is the strictest state there is: a host's no-real-call net (no
+ * demo may make a real third-party call) reports every absolute URL in what it
+ * ships whose origin nobody has declared inert, so with nothing declared here
+ * EVERY address is a finding. This add-on has no
  * `network` block, no `outbound-http` capability and no third party to reach —
  * naming one would mean coming here and writing down why it stays a string.
  */
 export const INERT_ORIGINS: readonly { origin: string; why: string }[] = [];
 
 /**
- * STRINGS THAT MUST NEVER APPEAR IN A CLIENT BUNDLE (24 D15, D11).
+ * STRINGS THAT MUST NEVER APPEAR IN A CLIENT BUNDLE: SECRETS NEVER REACH THE
+ * BROWSER.
  *
  * Empty, and unlike the two lists around it that needs no justification beyond
  * the manifest: this add-on declares `connect: { kind: "none" }` and carries no
@@ -54,7 +58,7 @@ export const INERT_ORIGINS: readonly { origin: string; why: string }[] = [];
 export const NEVER_IN_A_BROWSER: readonly { text: string; why: string }[] = [];
 
 /**
- * COMPANY MARKS THIS ADD-ON'S OWN SCREENS MAY PRINT (24 AC6) — THERE ARE NONE.
+ * COMPANY MARKS THIS ADD-ON'S OWN SCREENS MAY PRINT — THERE ARE NONE.
  *
  * ── AN EMPTY GATE PROVES NOTHING, SO THIS ONE IS PROVED ELSEWHERE ───────────
  *

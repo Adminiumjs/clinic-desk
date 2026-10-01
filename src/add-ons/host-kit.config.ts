@@ -94,13 +94,13 @@ export const hostKit: HostKitConfig<HostedSlotId> = {
    *
    * DECLARING 1 WHILE CARRYING `jsdom` IS A FAILURE WITH NO EXEMPTION FIELD, so
    * the two halves of this decision are one line apart: this word, and the
-   * absence of a DOM in `package.json`. Adding `jsdom` would not breach 25 D11
-   * — that rule is about what reaches a browser and a devDependency reaches no
-   * bundle — so the reason this app sits here is not a rule, it is that a React
-   * test tree, a surface tour and a recording mount fixture are a change of
-   * their own with their own review, and a half-built tour that visits two
-   * screens reports green about the other nine. The honest state is the one
-   * that says so on every run.
+   * absence of a DOM in `package.json`. Adding `jsdom` would not breach the
+   * no-new-runtime-dependency rule — that rule is about what reaches a browser
+   * and a devDependency reaches no bundle — so the reason this app sits here is
+   * not a rule, it is that a React test tree, a surface tour and a recording
+   * mount fixture are a change of their own with their own review, and a
+   * half-built tour that visits two screens reports green about the other nine.
+   * The honest state is the one that says so on every run.
    */
   tier: 1,
 

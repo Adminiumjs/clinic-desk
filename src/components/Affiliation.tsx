@@ -4,10 +4,11 @@
  *
  * ── WHY THE NAME AND THE LINE ARE IN ONE FILE ──────────────────────────────
  *
- * 24 AC6 says a surface that names a real company carries the line saying
- * Adminium is not affiliated with it — on the surface where the reader meets
- * the name, not a page further in. The gate that checks this is a grep: any
- * `.tsx` of this app's that prints `addOn.name` must also mount `Affiliation`.
+ * The affiliation rule says a surface that names a real company carries the
+ * line saying Adminium is not affiliated with it — on the surface where the
+ * reader meets the name, not a page further in. The gate that checks this is a
+ * grep: any `.tsx` of this app's that prints `addOn.name` must also mount
+ * `Affiliation`.
  *
  * A grep can be satisfied and still be wrong, in both directions. A file can
  * mention `Affiliation` in a branch that never runs; a file can print a name
@@ -22,8 +23,7 @@
  *
  * `namesCompany: true`  → THIS APP's line, `addon.host.notAffiliated`. It names
  *                         no add-on and no company, so holding it here does not
- *                         make this app know anything about which add-ons exist
- *                         (24 AC5).
+ *                         make this app know anything about which add-ons exist.
  * `namesCompany: false` → THE ADD-ON's own words, out of its own eight-locale
  *                         bundle, through `noCompanyKeys`. This app has no
  *                         sentence of its own claiming an add-on connects to
@@ -109,7 +109,7 @@ export type ProvenanceKey = "addon.host.fromAddOn" | "addon.host.dayFrom";
  * the same three-line paragraph under every imported row, so a reader met one
  * sentence twelve times and would learn to skip it by the third. A line
  * everybody skims is the same defect as a line that is not there, arriving by a
- * route AC6 does not describe.
+ * route the rule does not describe.
  *
  * So a list draws a `SourceChip` per row and ONE `AddOnAttributions` after
  * them. The two are here, in the same file as the rule, and `AddOnAttributions`

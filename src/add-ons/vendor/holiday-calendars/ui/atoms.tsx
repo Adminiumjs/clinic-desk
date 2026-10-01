@@ -19,7 +19,7 @@
  * COPIED, NOT SHARED, and that is the same decision the host mirror and the
  * `t` seam make: this repository publishes each add-on standalone and there is
  * no package sitting between them. Four copies of a button is a cost; a shared
- * runtime dependency an add-on's host does not have is a D7 violation.
+ * runtime dependency an add-on's host does not have is not allowed at all.
  */
 
 import type { CSSProperties, ReactNode } from "react";
@@ -269,12 +269,11 @@ export const inputStyle: CSSProperties = {
 /**
  * The line that stands where an add-on's not-affiliated notice would go.
  *
- * 24 AC6 asks every add-on's detail surface to be clear about who else is
- * involved. This one involves nobody, and rendering NOTHING there is
- * indistinguishable from having forgotten the notice — so it states the
- * positive fact instead. The host renders the same sentence from
- * `noCompanyKeys`; this repeats it at the foot of the form, where somebody
- * changing a setting is actually looking.
+ * Every add-on's detail surface has to be clear about who else is involved.
+ * This one involves nobody, and rendering NOTHING there is indistinguishable
+ * from having forgotten the notice — so it states the positive fact instead.
+ * The host renders the same sentence from `noCompanyKeys`; this repeats it at
+ * the foot of the form, where somebody changing a setting is actually looking.
  */
 export function NoCompany({ children }: { children: ReactNode }) {
   return (

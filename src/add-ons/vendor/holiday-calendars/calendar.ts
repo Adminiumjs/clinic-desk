@@ -175,9 +175,9 @@ export function readStored(values: AddOnSettingValues | undefined): readonly Sto
     if (typeof country !== "string" || typeof year !== "number") {
       // A day stamped with an unreadable origin is still a real day somebody
       // meant to keep. It survives as a typed one rather than being dropped —
-      // losing a closure is the worst thing this package can do (see D16 and
-      // `applyImport` below), and "we could not read where it came from" is not
-      // a reason to lose it.
+      // losing a closure is the worst thing this package can do (disconnecting
+      // never destroys data; see `applyImport` below), and "we could not read
+      // where it came from" is not a reason to lose it.
       out.push({ date, name });
       continue;
     }
@@ -230,7 +230,7 @@ export type ImportOutcome =
 
 /**
  * ═════════════════════════════════════════════════════════════════════════════
- * THE REFUSAL (25 D10), AND THE RULE IT REFUSES BY
+ * THE REFUSAL, AND THE RULE IT REFUSES BY
  * ═════════════════════════════════════════════════════════════════════════════
  *
  * Importing a year REFUSES when one of its days falls on a date the operator
@@ -311,8 +311,8 @@ export function applyImport(
    * destructive. A clinic shuts for reasons that are not public holidays, and
    * losing those loses a real appointment.
    *
-   * D16 is the same promise one level up: disconnecting this add-on takes its
-   * surfaces and leaves the days behind. A re-import is the smaller version of
+   * Disconnecting never destroys data, which is the same promise one level up:
+   * disconnecting this add-on takes its surfaces and leaves the days behind. A re-import is the smaller version of
    * that promise and is kept the same way.
    */
   const kept = current.filter((day) => day.from === undefined || !sameOrigin(day.from, origin));
@@ -398,8 +398,8 @@ export interface NonWorkingDay {
  * The one function a host calls. Pure, total, and defined for values it has
  * never seen: an add-on that has just been connected and has imported nothing
  * returns `[]`, and a host merging `[]` is a host that behaves exactly as it
- * did before the add-on existed. That is 24 D6 — the app is designed with the
- * hole already in it — expressed as a return value.
+ * did before the add-on existed. That is the rule that the app is designed
+ * with the hole already in it, expressed as a return value.
  *
  * ── HOW EACH HOST MERGES IT, WHICH IS THE HOST'S JOB AND NOT THIS FILE'S ────
  *

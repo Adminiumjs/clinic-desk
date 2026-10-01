@@ -22,7 +22,7 @@
  * ── AND WHY NOTHING IN THIS FILE NAMES AN ADD-ON ───────────────────────────
  *
  * It iterates `DAY_SOURCES`, which `add-ons/daySources.ts` declares — one of the
- * two files in this app allowed to name an add-on (24 AC5). So the merge rule,
+ * two files in this app allowed to name an add-on. So the merge rule,
  * the provenance labelling and the disconnect behaviour below are written about
  * "a source of closing days" rather than about the one that exists, and a
  * second one is a row in that list rather than an edit here.
@@ -92,7 +92,8 @@ export function addOnClosures(
 }
 
 /**
- * How many days each DISCONNECTED source still holds — 24 D16, made visible.
+ * How many days each DISCONNECTED source still holds — the data a disconnect
+ * leaves alone, made visible.
  *
  * Disconnecting an add-on takes its surfaces and leaves its data alone, and an
  * app that only kept the data would be keeping a promise nobody can see. This

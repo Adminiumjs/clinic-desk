@@ -45,7 +45,7 @@ const own = (date: string, reason: string, clinician: string | null = null): Clo
 });
 
 describe("what an add-on contributes", () => {
-  it("contributes nothing at all when nothing is switched on (24 D6)", () => {
+  it("contributes nothing at all when nothing is switched on", () => {
     const settings = { cal: { days: [day("2026-12-25", "Christmas Day")] } };
     expect(addOnClosures([fake("cal")], new Set(), settings)).toEqual([]);
   });
@@ -81,7 +81,7 @@ describe("what an add-on contributes", () => {
   });
 });
 
-describe("switching an add-on off (24 D16)", () => {
+describe("switching an add-on off", () => {
   const settings = { cal: { days: [day("2026-12-25", "Christmas"), day("2026-12-26", "Boxing")] } };
 
   it("stops applying its days", () => {

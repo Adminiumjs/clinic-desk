@@ -11,7 +11,7 @@
  * answers, and everything the host needs to draw a shelf row and one surface is
  * in the value it gets back.
  *
- * SCOPE, stated where somebody would come looking to widen it (24 §7): this
+ * SCOPE, stated where somebody would come looking to widen it: this
  * carries curated public-holiday day-sets and lets an operator choose one. It
  * is not a rota, not a leave engine, not an absence tracker and not a booking
  * calendar. Both of its hosts already own those, and an add-on that grew one
@@ -20,9 +20,10 @@
  * ── WHAT THIS OBJECT LEAVES OUT, AND WHY EACH ABSENCE IS A DECISION ─────────
  *
  * `demoSwitch` — absent. It exists so a credentialled add-on can offer "use a
- * stand-in instead of calling the real service" (24 D11). Nothing here calls
- * anything, so there is nothing to stand in for, and a switch offering to
- * disable a call that does not happen would be a lie in the connect dialog.
+ * stand-in instead of calling the real service", because no demo may make a
+ * real third-party call. Nothing here calls anything, so there is nothing to
+ * stand in for, and a switch offering to disable a call that does not happen
+ * would be a lie in the connect dialog.
  *
  * `applySettings` — absent, and it is the one worth reading twice. Every other
  * add-on here keeps a module-level copy of its settings, because its engines
@@ -70,14 +71,15 @@ export function register(): AddOn {
     lineKey: "addon.holiday-calendars.line",
     whatKey: "addon.holiday-calendars.what",
     // Three letters on a neutral tile. There is no mark to avoid redrawing
-    // here (D12) and the tile is drawn the same way regardless, because a shelf
-    // has to read as one system rather than as twenty marks.
+    // here (no real logo is ever drawn) and the tile is drawn the same way
+    // regardless, because a shelf has to read as one system rather than as
+    // twenty marks.
     monogram: "CAL",
     /*
-     * `data` from the closed five (24 D2). Not `operations`, which is an APP
-     * facet and belongs to the other vocabulary — an add-on is not a vertical.
-     * Of the five, `data` is the one this fits: it brings a reference dataset
-     * into a shop that had none.
+     * `data` from the closed five add-on categories. Not `operations`, which
+     * is an APP facet and belongs to the other vocabulary — an add-on is not a
+     * vertical. Of the five, `data` is the one this fits: it brings a reference
+     * dataset into a shop that had none.
      */
     category: "data",
     /*
@@ -92,9 +94,9 @@ export function register(): AddOn {
     // that all eight locales carry every key of the English set.
     messages: strings,
     /*
-     * D16, and it is unusually easy to state honestly here: there is no
-     * credential to delete, so the whole of "what goes" is the surface, and the
-     * whole of "what stays" is the data. Both halves are checked by
+     * Disconnecting never destroys data, and it is unusually easy to state
+     * honestly here: there is no credential to delete, so the whole of "what
+     * goes" is the surface, and the whole of "what stays" is the data. Both halves are checked by
      * `packages/host/src/disconnect-copy.test.ts`, which fails an add-on that
      * puts a deletion under the heading that says things survive.
      */

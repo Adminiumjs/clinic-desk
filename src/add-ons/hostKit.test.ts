@@ -48,7 +48,7 @@ import { demoAddOns } from "./registry.ts";
 import { DAY_SOURCES } from "./daySources.ts";
 
 /**
- * Claims about a delivery this app has already answered for (34 D19).
+ * Claims about a delivery this app has already answered for.
  *
  * Filled in below, per key, with the argument being made — see
  * `testing/kit/delivery-claims.ts` for the three that are legitimate.
@@ -118,9 +118,9 @@ factsGuard(hostKit);
 vendoredGuard(hostKit);
 stylesGuard(hostKit);
 /*
- * 34 D19. This app labels no simulation — it has no demo-marker convention at
- * all — so every claim it makes has to be answered in `claimsDeclared`, by
- * name, with the argument being made.
+ * Delivery claims. This app labels no simulation — it has no demo-marker
+ * convention at all — so every claim it makes has to be answered in
+ * `claimsDeclared`, by name, with the argument being made.
  */
 deliveryClaimsGuard(hostKit, {
   bundleFor: (locale) => MESSAGES[locale as "en-US"] ?? {},

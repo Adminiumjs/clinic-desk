@@ -73,10 +73,10 @@ export default defineConfig({
   plugins: [
     react(),
     /*
-     * `surface.json` beside `index.html`, on surface builds only
-     * (29-app-surfaces.md D7). Adminium reads it to offer this app's sections
-     * in its own sidebar; a build without `VITE_ADMINIUM_SURFACE_SIDE` writes
-     * nothing, so the demo and standalone artifacts stay byte-identical.
+     * `surface.json` beside `index.html`, on surface builds only.
+     * Adminium reads it to offer this app's sections in its own sidebar; a
+     * build without `VITE_ADMINIUM_SURFACE_SIDE` writes nothing, so the demo
+     * and standalone artifacts stay byte-identical.
      *
      * The nav is imported from `src/surface-nav.ts` — the SAME module the app
      * routes with — so the emitted file cannot describe a screen the bundle

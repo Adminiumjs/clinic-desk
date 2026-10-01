@@ -22,7 +22,7 @@
  * here rather than an edit to any of them.
  *
  * Beside `registry.ts` and nowhere else: the import below names an add-on, and
- * these two files are the only shipped source in this app allowed to (24 AC5).
+ * these two files are the only shipped source in this app allowed to.
  */
 
 import { nonWorkingDays, type NonWorkingDay } from './vendor/holiday-calendars/index.ts';
@@ -37,10 +37,10 @@ export interface DaySource {
    * PURE AND TOTAL, and both words are load-bearing. Total, because an add-on
    * that has just been registered and imported nothing answers `[]` — so a host
    * merging it behaves exactly as it did before the add-on existed, which is
-   * 24 D6 expressed as a return value and is why `closures.ts` needs no "is
-   * anything connected" branch. Pure, because `dormantDayCounts` asks a
-   * DISCONNECTED add-on how many days it is still holding, and that question
-   * has to cost nothing and reach nothing.
+   * "add-ons are optional" expressed as a return value and is why
+   * `closures.ts` needs no "is anything connected" branch. Pure, because
+   * `dormantDayCounts` asks a DISCONNECTED add-on how many days it is still
+   * holding, and that question has to cost nothing and reach nothing.
    */
   readonly days: (values: AddOnSettingValues | undefined) => readonly NonWorkingDay[];
 }

@@ -44,7 +44,7 @@
 #   *.test.ts(x)   the monorepo runs its own suites; re-running them here would
 #                  assert the copy rather than the thing (and the conformance
 #                  suites pull in zod, which this app carries only as a dev
-#                  dependency for its manifest validator — 24 D7).
+#                  dependency for its manifest validator).
 #   src/testing/   the copied conformance harness and build helpers, same
 #                  reason. The shared package's `testing/` entry point — where
 #                  its zod validators live — is never vendored either.
@@ -57,8 +57,9 @@
 # therefore a check that finds nothing today, and it stays: the file list is
 # what decides what is copied, and the day a second add-on with a credential is
 # vendored here the list will be edited by somebody who is thinking about the
-# add-on rather than about D15. A gate that only exists once it is needed is a
-# gate that is written the day after it was needed.
+# add-on rather than about keeping secrets out of the browser. A gate that only
+# exists once it is needed is a gate that is written the day after it was
+# needed.
 #
 # With no monorepo checkout present, `status` reports SOURCE-MISSING and exits 0
 # — a clean clone of this app alone still builds, and its own suites still
@@ -114,7 +115,7 @@ FILES_holiday_calendars=(
   ui/atoms.tsx ui/SettingsPanel.tsx
 )
 
-# Modules that must never be reachable from the browser half (D15), and the
+# Modules that must never be reachable from the browser half, and the
 # server ENTRY POINTS a manifest's `provides[].server` names. Nothing this app
 # vendors has one — the add-on here declares `connect: { kind: "none" }` and
 # carries no credential — so this list finds nothing today and is kept for the
@@ -312,7 +313,7 @@ cmd_status() {
       done < <(cd "$dest" && find . -type f | sed 's|^\./||' | sort)
 
       if [ "$key" != host ]; then
-        # D15: the server half must not be reachable from a browser bundle.
+        # The server half must not be reachable from a browser bundle.
         for f in "${FORBIDDEN[@]}"; do
           [ -e "$dest/$f" ] && { state="SECRET-LEAK $f"; drift=1; }
         done
