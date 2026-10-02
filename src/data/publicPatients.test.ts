@@ -40,7 +40,7 @@ function fakeClient(asked: { ref: string; opts: unknown }[]): PublicClient {
     clinic_closures: [{ id: 5, from_date: "2026-08-31", to_date: "2026-08-31", label: "Bank holiday", note: null, clinician_id: null }],
     clinic_appointments_verified: [
       { id: 7, starts_at: "2026-07-20T09:00:00.000Z", status: "seen" },
-      { id: 8, starts_at: "2026-08-04T09:00:00.000Z", status: "booked" },
+      { id: 8, ref: "RH-0008", clinician_id: 1, visit_type_id: 3, starts_at: "2026-08-04T09:00:00.000Z", minutes: 15, status: "booked", reason: "Check-up" },
     ],
   };
   return {
@@ -48,6 +48,12 @@ function fakeClient(asked: { ref: string; opts: unknown }[]): PublicClient {
     list: async (name: string, opts: unknown) => {
       asked.push({ ref: name, opts });
       return { data: rows[name] ?? [] };
+    },
+    // A write's answer: the columns its endpoint shows — here, fewer than the read's.
+    update: async (name: string, id: string, values: Record<string, unknown>) => {
+      const row = (rows[name] ?? []).find((r) => String(r["id"]) === id)!;
+      Object.assign(row, values);
+      return { id: row["id"], ...values };
     },
   } as unknown as PublicClient;
 }
@@ -69,5 +75,18 @@ describe("the patients' pages over the public API", () => {
     const visits = await port.myVisits();
     expect(asked.find((a) => a.ref === "clinic_appointments_verified")?.opts).not.toHaveProperty("order");
     expect(visits.map((v) => v.id)).toEqual([8, 7]);
+  });
+
+  it("keeps the whole visit after a move or a cancel, whatever the write's answer leaves out", async () => {
+    /*
+     * The page holds what these return in place of the visit it had. A write
+     * that answered fewer columns than the read left the rest reading as
+     * nothing: a moved visit with no reference, no clinician and no length.
+     */
+    const port = await publicPatientsPort(fakeClient([]), TABLE_OF_REF);
+    const moved = await port.reschedule(8, "2026-08-05T10:00:00.000Z");
+    expect(moved).toMatchObject({ id: 8, ref: "RH-0008", clinician_id: 1, visit_type_id: 3, minutes: 15, status: "booked", reason: "Check-up", starts_at: "2026-08-05T10:00:00.000Z" });
+    const cancelled = await port.cancel(8);
+    expect(cancelled).toMatchObject({ id: 8, ref: "RH-0008", minutes: 15, status: "cancelled", starts_at: "2026-08-05T10:00:00.000Z" });
   });
 });

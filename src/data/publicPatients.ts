@@ -113,6 +113,19 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
   const listAll = async <R extends TableRef>(table: R, ref: string) =>
     normaliseAll(table, (await client.list<Record<string, unknown>>(ref, { limit: 200 })).data);
 
+  /*
+   * A write answers only the columns its endpoint shows, and the page holds
+   * the visit this returns in place of the one it had. So the reply is laid
+   * over the visit as the read gives it: a column the write's answer does not
+   * carry keeps its value instead of reading as nothing. (`savePrefs` below
+   * does the same for the patient's details.)
+   */
+  const changeVisit = async (id: number | string, values: Record<string, unknown>): Promise<OwnVisit> => {
+    const reply = await client.update<Record<string, unknown>>(refs.visits, String(id), values);
+    const held = (await client.list<Record<string, unknown>>(refs.visits, { limit: 200 })).data.find((row) => String(row["id"]) === String(id));
+    return ownVisit({ ...held, ...reply });
+  };
+
   return {
     timeZone: () => zone,
 
@@ -234,9 +247,9 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
         return { ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status };
       }),
 
-    reschedule: (id, startsAt) => guard(async () => ownVisit(await client.update<Record<string, unknown>>(refs.visits, String(id), { starts_at: startsAt }))),
+    reschedule: (id, startsAt) => guard(() => changeVisit(id, { starts_at: startsAt })),
 
-    cancel: (id) => guard(async () => ownVisit(await client.update<Record<string, unknown>>(refs.visits, String(id), { status: "cancelled" }))),
+    cancel: (id) => guard(() => changeVisit(id, { status: "cancelled" })),
 
     register: (person) =>
       guard(async () => {
