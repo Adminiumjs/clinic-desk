@@ -220,3 +220,8 @@ demo:reset` move the seeded rows in and out afterwards
 ## License
 
 [AGPL-3.0](LICENSE) © 2026 Clinic Desk. An example app for Adminium.
+
+## Building on this app with a coding agent
+
+The Adminium skills teach Claude Code, Codex and other agents to build and change an app:
+`npx skills add Adminiumjs/skills` — https://github.com/Adminiumjs/skills
