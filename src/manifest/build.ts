@@ -19,7 +19,7 @@ import { ROLES } from "./roles.ts";
 import { TABLES } from "./tables.ts";
 
 /** This release. The version moved 0.1.4 → 0.2.0 once (its tables were new); since then, patches. */
-export const VERSION = "0.2.2";
+export const VERSION = "0.2.3";
 
 /**
  * The Adminium release that first reads everything below: booking, the
