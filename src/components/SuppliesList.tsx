@@ -52,7 +52,7 @@ function Row({ view, first, edits, busy, t }: { view: SupplyView; first: boolean
   const dim = notUsed ? "var(--fg-subtle)" : undefined;
   const short = view.left !== null && view.left <= 0;
   return (
-    <li style={{ padding: "11px 12px", display: "flex", flexDirection: "column", gap: 8, ...(first ? {} : { borderBlockStart: "1px solid var(--border)" }) }}>
+    <li data-line={line.id} style={{ padding: "11px 12px", display: "flex", flexDirection: "column", gap: 8, ...(first ? {} : { borderBlockStart: "1px solid var(--border)" }) }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={{ flex: "1 1 120px", minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-.015em", lineHeight: 1.35, textWrap: "pretty", ...(notUsed ? { color: "var(--fg-subtle)", textDecoration: "line-through" } : { color: "var(--fg)" }) }}>{name}</span>
@@ -123,7 +123,8 @@ function Row({ view, first, edits, busy, t }: { view: SupplyView; first: boolean
                 disabled={busy}
                 aria-label={t("supplies.confirmBatch", { code: batch.code, name })}
                 onClick={() => edits.confirm(line.id, batch.id)}
-                style={{ ...btnGhostSm, height: 30, fontFamily: meta.fontFamily, fontWeight: 600 }}
+                // A batch and its date can be longer than a phone is wide: the choice wraps inside its button.
+                style={{ ...btnGhostSm, height: "auto", minHeight: 30, maxWidth: "100%", paddingBlock: 5, whiteSpace: "normal", textAlign: "start", lineHeight: 1.45, fontFamily: meta.fontFamily, fontWeight: 600 }}
               >
                 {batch.expiresOn === null ? t("supplies.batchExpiresNoDate", { code: batch.code }) : t("supplies.batchChoice", { code: batch.code, date: dayShortYear(batch.expiresOn) })}
               </button>

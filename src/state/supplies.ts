@@ -127,3 +127,12 @@ export function suppliesChanged(): void {
     for (const visitId of shown.keys()) void loadSupplies(visitId);
   }, GATHER_MS);
 }
+
+// A visit sent off or taken back moves the shelf in that same save, at this desk or another:
+// what is left is read again for a visit on screen whose step changed.
+useDesk.subscribe((now, before) => {
+  if (now.visits === before.visits) return;
+  for (const visitId of shown.keys()) {
+    if (now.visits[visitId]?.status !== before.visits[visitId]?.status) return suppliesChanged();
+  }
+});

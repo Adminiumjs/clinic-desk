@@ -71,6 +71,17 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
     setAsking(false);
     setTimeout(() => correctButton.current?.querySelector<HTMLElement>("button")?.focus(), 0);
   };
+  // A save can take away the very button that was pressed (a batch confirmed, the question
+  // answered, "Done"): the focus then stays in the list, on the line it was on, not on the page.
+  const section = useRef<HTMLElement>(null);
+  const focusWas = useRef<{ line: string | null } | null>(null);
+  useEffect(() => {
+    const was = focusWas.current;
+    const at = document.activeElement;
+    if (busy || was === null || (at !== null && at !== document.body)) return;
+    const row = was.line === null ? null : section.current?.querySelector(`[data-line="${was.line}"]`);
+    (row?.querySelector<HTMLElement>("button:not(:disabled)") ?? section.current)?.focus();
+  }, [busy]);
 
   /** One save at a time; a refusal is said under the list, with the way to try again. */
   const save = (work: () => Promise<Outcome<unknown>>) => {
@@ -147,7 +158,19 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
     });
 
   return (
-    <section aria-labelledby={headId} style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+    <section
+      ref={section}
+      tabIndex={-1}
+      aria-labelledby={headId}
+      onFocus={(event) => {
+        focusWas.current = { line: (event.target as HTMLElement).closest("[data-line]")?.getAttribute("data-line") ?? null };
+      }}
+      onBlur={(event) => {
+        // Focus taken somewhere else on purpose is not ours to bring back.
+        if (event.relatedTarget !== null && !event.currentTarget.contains(event.relatedTarget)) focusWas.current = null;
+      }}
+      style={{ display: "flex", flexDirection: "column", gap: 10, outline: "none" }}
+    >
       <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
         <h3 id={headId} style={{ ...kicker, margin: 0 }}>
           {t("supplies.heading")}

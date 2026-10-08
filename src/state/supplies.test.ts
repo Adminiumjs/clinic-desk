@@ -256,6 +256,27 @@ describe("the demo's shelf", () => {
   });
 });
 
+describe("what is left, after the visit moves", () => {
+  it("is read again when a visit on screen is sent off or taken back: the shelf was counted in that same save", async () => {
+    const visit = visitAt("ready");
+    await hold(visit);
+    const real = demoSuppliesPort(db);
+    let reads = 0;
+    setSuppliesPort({ ...real, load: (...args) => ((reads += 1), real.load(...args)) });
+    expect((await act.setStatus(visit.id, "seen")).ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(reads).toBe(1);
+    expect((await act.setStatus(visit.id, "ready")).ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(reads).toBe(2);
+    // A visit nobody is looking at reads nothing, whatever happens to it.
+    const other = visitAt("ready");
+    expect((await act.setStatus(other.id, "seen")).ok).toBe(true);
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(reads).toBe(2);
+  });
+});
+
 describe("a kit half on the visit", () => {
   it("is offered again until every thing in it is there, and a confirmed batch can be taken back", async () => {
     const visit = visitAt("ready");
