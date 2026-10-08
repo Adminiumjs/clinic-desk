@@ -84,6 +84,8 @@
  */
 import { z } from 'zod';
 
+import { stateActionIssues, stateActionsSchema } from './state-actions.ts';
+
 import {
   momentIssues,
   momentOffsetSchema,
@@ -176,6 +178,12 @@ export const stateMoveSchema = z.union([
        * for that move only. Only on a move marked `undo`.
        */
       clears: z.array(refSchema).min(1).max(8).optional(),
+      /**
+       * The move is made only by a ledger's own planned update (an order
+       * received when its last line is in): no person and no role makes it,
+       * no button offers it, and no timed rule reaches it.
+       */
+      planned: z.literal(true).optional(),
     })
     .strict(),
 ]);
@@ -239,6 +247,8 @@ export const lateMoveSchema = z
     mode: z.enum(['flag', 'refuse']),
     flag: refSchema.optional(),
     refuse: z.enum(['public', 'everyone']).optional(),
+    /** Only a move whose row, as the write leaves it, meets these (a cancellation by the house is never late). */
+    where: z.array(stateConditionSchema).min(1).max(8).optional(),
   })
   .strict()
   .refine((l) => (l.mode === 'flag') === (l.flag !== undefined), {
@@ -371,7 +381,12 @@ export const statesSchema = z
       .max(4)
       .optional(),
     noDelete: z.object({ when: z.union([z.literal('numbered'), z.array(stateName).min(1).max(16)]) }).strict().optional(),
-    onlyLater: z.array(refSchema).min(1).max(8).optional(),
+    /** Dates that may move later and never earlier: always, or (`{column, in}`) only while the row is in one of `in`. */
+    onlyLater: z
+      .array(z.union([refSchema, z.object({ column: refSchema, in: z.array(stateName).min(1).max(16) }).strict()]))
+      .min(1)
+      .max(8)
+      .optional(),
     /** A move to the state a row already holds is refused, naming when it got there (see {@link strictStatesSchema}). */
     strict: strictStatesSchema.optional(),
     /** A move made close to a moment sets a flag, or is refused (see {@link lateMoveSchema}). */
@@ -379,9 +394,11 @@ export const statesSchema = z
     /** Moves Adminium makes on its own when a moment passes (see {@link timedMoveSchema}). */
     timed: z.array(timedMoveSchema).min(1).max(8).optional(),
     /** A move that moves the row one of its links points at too (see {@link stateEffectSchema}). */
-    effects: z.array(stateEffectSchema).min(1).max(4).optional(),
+    effects: z.array(stateEffectSchema).min(1).max(8).optional(),
     /** What a new row must meet to be created (see {@link createRequiresSchema}). */
     create: createRequiresSchema.optional(),
+    /** The buttons a generated record page offers for a row (see `state-actions.ts`). */
+    actions: stateActionsSchema.optional(),
   })
   .strict();
 export type States = z.infer<typeof statesSchema>;
@@ -423,6 +440,9 @@ interface StatesContext<C extends ColumnShape> {
   lineOf?: ((table: string) => string | undefined) | undefined;
   /** The app's outbox table, whose rows move only by the outbox's own moves. */
   outboxTable?: string | undefined;
+  /** The manifest's generated page refs and, for an add-on, its code page refs: what a state action's link may open. */
+  pages?: ReadonlySet<string> | undefined;
+  codePages?: ReadonlySet<string> | undefined;
 }
 
 /** A column of the table as the judge of an undo's `clears` needs it. */
@@ -515,6 +535,11 @@ export function statesIssues<C extends ColumnShape>(
         if (ctx.roles !== undefined && !ctx.roles.includes(role)) {
           out.push({ path: at('moves', from, m, 'roles'), message: `"${role}" is not one of the app's roles` });
         }
+      }
+      if (move.planned === true) {
+        // Made by a ledger's planned update alone: nothing a person does, so nothing a person's move carries.
+        if (move.undo === true) out.push({ path: at('moves', from, m, 'planned'), message: 'an undo is made by a person, a planned move by a ledger: a move is one or the other' });
+        if (move.roles !== undefined) out.push({ path: at('moves', from, m, 'roles'), message: 'a planned move is made by no role: take "roles" out' });
       }
       // An undo takes back a listed move: the one from where it goes to where it starts.
       if (move.undo === true && !(states.moves[to] ?? []).some((back) => moveTarget(back) === from)) {
@@ -614,12 +639,33 @@ export function statesIssues<C extends ColumnShape>(
       states.noDelete.when.forEach((value, i) => known(value, at('noDelete', 'when', i)));
     }
   }
-  for (const ref of states.onlyLater ?? []) {
+  (states.onlyLater ?? []).forEach((entry, i) => {
+    const ref = typeof entry === 'string' ? entry : entry.column;
     const found = index.column(table, ref);
-    if (found === undefined) out.push({ path: at('onlyLater'), message: `"${table}" has no column "${ref}"` });
-    else if (found.type !== 'date' && found.type !== 'timestamptz') out.push({ path: at('onlyLater'), message: `"${table}.${ref}" is not a date` });
-  }
+    if (found === undefined) out.push({ path: at('onlyLater', i), message: `"${table}" has no column "${ref}"` });
+    else if (found.type !== 'date' && found.type !== 'timestamptz') out.push({ path: at('onlyLater', i), message: `"${table}.${ref}" is not a date` });
+    if (typeof entry !== 'string') entry.in.forEach((state, s) => known(state, at('onlyLater', i, 'in', s)));
+  });
   out.push(...conditionedMoveIssues(table, states, ctx, at, values));
+  // The buttons a record page offers: moves a person may make, columns that are the row's to set, a child that is one.
+  if (states.actions !== undefined) {
+    out.push(
+      ...stateActionIssues(
+        states.actions,
+        {
+          table,
+          states,
+          column: (of, ref) => index.column(of, ref) as unknown as { ref: string; type: string } | undefined,
+          hasTable: (of) => index.table(of) !== undefined,
+          decided: (ref) => ctx.decided?.(ref) === true,
+          keptFromReaders: (ref) => ctx.keptFromReaders?.(ref) ?? null,
+          pages: ctx.pages ?? new Set(),
+          codePages: ctx.codePages ?? new Set(),
+        },
+        at,
+      ),
+    );
+  }
   return out;
 }
 
@@ -708,6 +754,7 @@ function conditionedMoveIssues<C extends ColumnShape>(
     });
     if (late.from === undefined && !reached(late.to)) out.push({ path: here('to'), message: `no listed move goes to "${late.to}"` });
     out.push(...momentIssues(table, late.moment, index, here('moment')));
+    (late.where ?? []).forEach((condition, w) => out.push(...conditionIssues(table, condition, index, here('where', w))));
     if (late.flag !== undefined) {
       const flag = index.column(table, late.flag);
       if (flag === undefined) out.push({ path: here('flag'), message: `"${table}" has no column "${late.flag}"` });
@@ -734,6 +781,7 @@ function conditionedMoveIssues<C extends ColumnShape>(
     const move = listed(timed.from, timed.to);
     if (move === undefined) out.push({ path: here('to'), message: `no listed move goes from "${timed.from}" to "${timed.to}"` });
     else if (typeof move === 'object' && move.undo === true) out.push({ path: here('to'), message: `the move from "${timed.from}" to "${timed.to}" is an undo, which only a person makes` });
+    else if (typeof move === 'object' && move.planned === true) out.push({ path: here('to'), message: `the move from "${timed.from}" to "${timed.to}" is planned, which only a ledger's own update makes` });
     if ((states.timed ?? []).some((other, j) => j < i && other.from === timed.from)) {
       out.push({ path: here('from'), message: `another timed move already leaves "${timed.from}"` });
     }

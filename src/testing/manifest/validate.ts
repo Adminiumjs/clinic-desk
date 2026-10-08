@@ -21,12 +21,15 @@
 
 import {
   FIRST_PARTY_PUBLISHER_ID,
+  LOCAL_PUBLISHER_ID,
   RESERVED_KEYS,
   addOnIssues,
   cappedFormulaWarnings,
   manifestSchema,
   type Manifest,
 } from './schema.ts';
+import { plainTextLengthWarnings } from './public-access.ts';
+import { ledgerIndexIssues } from './ledger-indexes.ts';
 import { tableShapeIssues } from './table-shapes.ts';
 
 export interface ManifestIssue {
@@ -48,6 +51,13 @@ export interface ValidateManifestOptions {
    * in front of it.
    */
   allowThirdPartyPublishers?: boolean;
+  /**
+   * Allow the publisher `local`: an app made on this install and installed
+   * from a file. Narrower than the option above on purpose — it lets exactly
+   * one id through, and never for an add-on, whose server half would run in
+   * the host process.
+   */
+  allowLocalPublisher?: boolean;
   /** Installed app keys, so an add-on's `attaches` can be checked. */
   knownAppKeys?: readonly string[];
   /** The host app's table refs, so an add-on's `scopes` can be bounded. */
@@ -99,6 +109,8 @@ export function manifestWarnings(manifest: Manifest): ManifestIssue[] {
       }
     });
   });
+  // A plain-text column longer than its plain text takes: the end of what a guest types is refused.
+  out.push(...plainTextLengthWarnings(manifest.publicAccess ?? [], manifest.requiredSchema?.tables ?? []));
   // A capped balance worked out from a formula whose columns stay open while the capped rows exist.
   for (const warning of cappedFormulaWarnings(manifest.requiredSchema?.tables ?? [])) out.push({ path: warning.path.map(String).join('.'), message: warning.message });
   /*
@@ -128,10 +140,11 @@ export function validateManifest(
   if (!parsed.success) {
     return {
       ok: false,
-      issues: parsed.error.issues.map((issue) => ({
-        path: issue.path.map(String).join('.'),
-        message: issue.message,
-      })),
+      issues: parsed.error.issues.map((issue) => {
+        // A check with a code of its own (a ledger's scope) hands it through the issue's params.
+        const code = issue.code === 'custom' ? (issue as { params?: { code?: unknown } }).params?.code : undefined;
+        return { path: issue.path.map(String).join('.'), message: issue.message, ...(typeof code === 'string' ? { code } : {}) };
+      }),
       warnings: [],
     };
   }
@@ -139,14 +152,28 @@ export function validateManifest(
   const manifest = parsed.data;
   const issues: ManifestIssue[] = [];
 
-  if (!(opts.allowThirdPartyPublishers ?? false) && manifest.publisher.id !== FIRST_PARTY_PUBLISHER_ID) {
+  const publisher = manifest.publisher.id;
+  if (publisher === LOCAL_PUBLISHER_ID && manifest.kind === 'add-on') {
+    // Before the third-party option, which would otherwise let it through.
+    issues.push({
+      path: 'publisher.id',
+      message: `an add-on cannot carry the publisher "${LOCAL_PUBLISHER_ID}"`,
+    });
+  } else if (publisher === LOCAL_PUBLISHER_ID && !(opts.allowThirdPartyPublishers ?? false)) {
+    if (!(opts.allowLocalPublisher ?? false)) {
+      issues.push({
+        path: 'publisher.id',
+        message: `"${LOCAL_PUBLISHER_ID}" is a self-made app: it installs from a file you upload, not from a catalogue`,
+      });
+    }
+  } else if (!(opts.allowThirdPartyPublishers ?? false) && publisher !== FIRST_PARTY_PUBLISHER_ID) {
     issues.push({
       path: 'publisher.id',
       message: `third-party publishers are not accepted in v1 (expected "${FIRST_PARTY_PUBLISHER_ID}")`,
     });
   }
 
-  // D17 — apps and add-ons share one key namespace, and these keys shadow a
+  // Apps and add-ons share one key namespace, and these keys shadow a
   // storefront route or a data file.
   if ((RESERVED_KEYS as readonly string[]).includes(manifest.key)) {
     issues.push({
@@ -163,6 +190,8 @@ export function validateManifest(
   );
 
   issues.push(...sampleDataIssues(manifest));
+  // The receipt key Adminium makes must be one every database can index.
+  issues.push(...ledgerIndexIssues(manifest));
   // A table shared under a shape Adminium writes down is what that shape says.
   if (manifest.kind === 'app') issues.push(...tableShapeIssues(manifest));
 
@@ -171,11 +200,32 @@ export function validateManifest(
   return { ok: true, manifest, warnings };
 }
 
+/**
+ * An app that declares no screen of its own: every `frontends` entry is
+ * `kind: "none"`. Its tables and pages are the whole app, and a package of it
+ * carries no built side.
+ */
+export function isManifestOnly(manifest: Manifest): boolean {
+  return manifest.kind === 'app' && manifest.frontends.every((frontend) => frontend.kind === 'none');
+}
+
 /** `sampleData.skipWhenShared` names the app's own tables, its `table` is one it shares, and no table left in links to a skipped one. */
 function sampleDataIssues(manifest: Manifest): ManifestIssue[] {
-  const rule = manifest.kind === 'app' ? manifest.sampleData?.skipWhenShared : undefined;
-  if (rule === undefined) return [];
   const out: ManifestIssue[] = [];
+  if (manifest.kind === 'app') {
+    // Rows for an add-on: one the app names, in a file of its own.
+    const named = new Set([...(manifest.addOns?.requires ?? []), ...(manifest.addOns?.suggests ?? [])].map((need) => need.key));
+    for (const [key, section] of Object.entries(manifest.sampleData?.addOns ?? {})) {
+      if (!named.has(key)) {
+        out.push({ path: `sampleData.addOns.${key}`, message: `"${key}" is not an add-on this app names: add it to addOns.requires or addOns.suggests` });
+      }
+      if (section.file === manifest.sampleData?.file) {
+        out.push({ path: `sampleData.addOns.${key}.file`, message: `rows for "${key}" are a file of their own, not the app's own sample file` });
+      }
+    }
+  }
+  const rule = manifest.kind === 'app' ? manifest.sampleData?.skipWhenShared : undefined;
+  if (rule === undefined) return out;
   const tables = new Map((manifest.requiredSchema?.tables ?? []).map((table) => [table.ref, table]));
   const shared = tables.get(rule.table);
   if (shared === undefined) {

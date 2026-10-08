@@ -55,8 +55,42 @@ import {
 import { momentIssues, momentOffsetSchema, plainMomentSchema, wallTimeSchema, type Moment } from './refs.ts';
 import { conditionIssues, linkedConditionSchema, reachedOnlyByUndo, stateConditionSchema, type StateMove } from './states.ts';
 
+/** The fewest characters (its prefix apart) of a code that opens its own row (`unlockBy.self`). */
+export const SELF_UNLOCK_MIN_LENGTH = 10;
+
 /** The key every entry uses unless it names another. */
 export const CUSTOMER_KEY = 'customer';
+
+/** The longest a plain-text value may be unless its column says longer: a name. */
+export const PLAIN_TEXT_MAX = 80;
+/** The most digits a plain-text column may take in all: "table 12", "2 without onions", never a phone number. */
+export const PLAIN_TEXT_DIGITS_MOST = 4;
+/** The longest a plain-text column may say it runs: a note to the kitchen. */
+export const PLAIN_TEXT_LONGEST = 200;
+
+/**
+ * A column held to plain text: its ref (a name: no digits, 80 characters), or
+ * its ref with the digits it may hold in all and how long it may run (a note).
+ */
+const plainTextColumnSchema = z.union([
+  refSchema,
+  z
+    .object({
+      column: refSchema,
+      digits: z.number().int().min(1).max(PLAIN_TEXT_DIGITS_MOST).optional(),
+      max: z.number().int().min(1).max(PLAIN_TEXT_LONGEST).optional(),
+    })
+    .strict(),
+]);
+const plainTextSchema = z.array(plainTextColumnSchema).min(1).max(8);
+
+export type PlainTextColumnRef = z.infer<typeof plainTextColumnSchema>;
+
+/** The column a plain-text entry names. */
+export const plainTextRef = (entry: PlainTextColumnRef): string => (typeof entry === 'string' ? entry : entry.column);
+
+/** The longest a plain-text entry takes. */
+export const plainTextMax = (entry: PlainTextColumnRef): number => (typeof entry === 'string' ? PLAIN_TEXT_MAX : (entry.max ?? PLAIN_TEXT_MAX));
 
 const keyNameSchema = z.string().regex(/^[a-z][a-z0-9-]{0,31}$/, 'a key name is kebab-case');
 
@@ -369,7 +403,7 @@ const childEntryShape = {
   agrees: z.array(agreeSchema).min(1).max(8).optional(),
   counts: z.array(countsSchema).min(1).max(2).optional(),
   /** Columns that hold plain text only (no links), as on a create nobody signed in for. */
-  plainText: z.array(refSchema).min(1).max(8).optional(),
+  plainText: plainTextSchema.optional(),
   /** The most a column may add up to across the rows of one write (a dozen items to an order). */
   sumMax: sumMaxSchema.optional(),
 };
@@ -555,7 +589,7 @@ export const publicAccessSchema = z
          * visitor is held to on any key, only fewer.
          */
         perIpHour: z.number().int().min(1).max(60).optional(),
-        plainText: z.array(refSchema).min(1).max(8).optional(),
+        plainText: plainTextSchema.optional(),
       })
       .strict()
       .optional(),
@@ -568,7 +602,7 @@ export const publicAccessSchema = z
     limits: z
       .object({
         perValue: z.object({ columns: z.array(refSchema).min(1).max(4), n: z.number().int().min(1).max(20) }).strict().optional(),
-        plainText: z.array(refSchema).min(1).max(8).optional(),
+        plainText: plainTextSchema.optional(),
       })
       .strict()
       .refine((l) => l.perValue !== undefined || l.plainText !== undefined, { message: 'limits name a per-value cap, plain-text columns, or both' })
@@ -613,13 +647,37 @@ export const publicAccessSchema = z
     /** Availability of a parent limit: the column of the pool's rows a page asks by (an event's ticket types). */
     under: refSchema.optional(),
     /**
+     * Availability answered by an add-on's stock words (`<add-on key>:<words
+     * id>`) in place of a limit of the table: each row asked about is `in`,
+     * `low` or `out`, with how many are left only where the owner shows it.
+     */
+    words: z.string().regex(/^[a-z][a-z0-9-]{1,79}:[a-z][a-z0-9-]{0,39}$/, '<add-on key>:<words id>').optional(),
+    /**
      * Rows readable only with a code that unlocks them: a row of `table`
      * whose `column` holds the typed code, and whose `link` points at the row
      * (a presale code revealing its ticket type).
      */
     unlockBy: z
-      .object({ table: refSchema, column: refSchema, link: refSchema, where: codeWhereSchema.optional() })
-      .strict()
+      .union([
+        z.object({ table: refSchema, column: refSchema, link: refSchema, where: codeWhereSchema.optional() }).strict(),
+        /**
+         * A row that opens only with ITS OWN code, sent in the `x-adminium-code`
+         * header (a gift card's balance): `column` is the code column of the
+         * entry's own table. `length` is the code's length without its
+         * prefix; a code of any other length is refused before it is looked up.
+         */
+        z
+          .object({
+            header: z.literal(true),
+            column: refSchema,
+            self: z.literal(true),
+            // Said, and long: the code is all that stands between a stranger and the row (a card's balance), and a
+            // short one is found by trying. Ten characters of the code alphabet are past what the guess limits let anyone try.
+            length: z.number().int().min(SELF_UNLOCK_MIN_LENGTH).max(16),
+            where: codeWhereSchema.optional(),
+          })
+          .strict(),
+      ])
       .optional(),
     /** Image columns any visitor may see, through the rows this entry reads. */
     pictures: z.array(refSchema).min(1).max(4).optional(),
@@ -648,11 +706,22 @@ export const publicKeySchema = z
      */
     requiresStaff: z.object({ role: z.string().regex(/^[a-z][a-z0-9-]*$/, 'a role key') }).strict().optional(),
     enabledBy: settingRefSchema.optional(),
+    /**
+     * The key's budget a minute when its app meets its peak (a show going on
+     * sale): from Adminium's own (3,000 reads, 300 writes) up to five times
+     * that. Each visitor still gets a twelfth of it. Read at install.
+     */
+    peak: z
+      .object({ reads: z.number().int().min(3000).max(15_000), writes: z.number().int().min(300).max(1500) })
+      .strict()
+      .optional(),
   })
   .strict();
 export const publicKeysSchema = z
   .record(keyNameSchema, publicKeySchema)
-  .refine((keys) => !(CUSTOMER_KEY in keys), { message: '"customer" is the app\'s own key and is not declared here' });
+  .refine((keys) => !(CUSTOMER_KEY in keys) || Object.keys(keys[CUSTOMER_KEY] ?? {}).every((field) => field === 'peak'), {
+    message: '"customer" is the app\'s own key: only its peak is said here',
+  });
 export type PublicKey = z.infer<typeof publicKeySchema>;
 
 interface PublicAccessContext {
@@ -665,6 +734,8 @@ interface PublicAccessContext {
   mailsOnCreate?: (table: string) => boolean;
   /** Whether the table carries a capacity or a booking rule to answer availability from. */
   answersAvailability: (table: string) => boolean;
+  /** The add-ons whose stock words an entry may be answered by: the ones the manifest names, and itself when it is one. Absent: not checked. */
+  addOns?: ReadonlySet<string> | undefined;
   /** The table's limits, as it declares them (absent: the caller does not say). */
   capacityOf?: (table: string) => Capacity | undefined;
   publicKeys: Readonly<Record<string, PublicKey>> | undefined;
@@ -769,6 +840,8 @@ export function publicAccessIssues(entries: readonly PublicAccess[], ctx: Public
 
   for (const [name, key] of Object.entries(ctx.publicKeys ?? {})) {
     const at = ['publicKeys', name];
+    // The app's own key, named only for its peak: nothing more to check.
+    if (name === CUSTOMER_KEY) continue;
     if (key.requiresStaff === undefined) {
       // No one signs this key in: it may only open one row by its token, and read.
       const identity = entries.find((entry) => (entry.key ?? CUSTOMER_KEY) === name && entry.claim !== undefined);
@@ -1232,7 +1305,7 @@ export function publicAccessIssues(entries: readonly PublicAccess[], ctx: Public
     if (entry.anonymous !== undefined) {
       const caps = entry.anonymous;
       if (!creates) out.push({ path: at('anonymous'), message: 'anonymous limits a create' });
-      for (const [name, columns] of [['perValue', caps.perValue?.columns ?? []], ['plainText', caps.plainText ?? []]] as const) {
+      for (const [name, columns] of [['perValue', caps.perValue?.columns ?? []], ['plainText', (caps.plainText ?? []).map(plainTextRef)]] as const) {
         for (const ref of columns) {
           const found = column(ref);
           if (found === undefined) out.push({ path: at('anonymous', name), message: `"${entry.table}" has no column "${ref}"` });
@@ -1243,7 +1316,7 @@ export function publicAccessIssues(entries: readonly PublicAccess[], ctx: Public
     if (entry.limits !== undefined) {
       const limits = entry.limits;
       if (!patches) out.push({ path: at('limits'), message: 'limits apply to a change (PATCH); a create has anonymous' });
-      for (const [name, columns] of [['perValue', limits.perValue?.columns ?? []], ['plainText', limits.plainText ?? []]] as const) {
+      for (const [name, columns] of [['perValue', limits.perValue?.columns ?? []], ['plainText', (limits.plainText ?? []).map(plainTextRef)]] as const) {
         for (const ref of columns) {
           const found = column(ref);
           if (found === undefined) out.push({ path: at('limits', name), message: `"${entry.table}" has no column "${ref}"` });
@@ -1279,11 +1352,22 @@ export function publicAccessIssues(entries: readonly PublicAccess[], ctx: Public
         }
       }
     }
-    if (entry.kind === 'availability') {
+    if (entry.words !== undefined) {
+      // Answered by an add-on's stock words, not by a limit of the table: its own entry, shaped by nothing else.
+      const [addOn] = entry.words.split(':') as [string, string];
+      if (entry.kind !== 'availability') out.push({ path: at('words'), message: 'stock words answer an availability entry: write "kind": "availability" beside them' });
+      for (const name of ['rule', 'showLeft', 'under', 'claim', 'unlockBy'] as const) {
+        if (entry[name] !== undefined) out.push({ path: at(name), message: `an entry answered by stock words takes no "${name}": the add-on's own settings say what is shown` });
+      }
+      if (ctx.addOns !== undefined && !ctx.addOns.has(addOn)) {
+        out.push({ path: at('words'), message: `"${addOn}" is not an add-on this manifest names: add it to addOns.requires or addOns.suggests` });
+      }
+      if (entry.methods.some((method) => method !== 'GET')) out.push({ path: at('methods'), message: 'availability is read-only' });
+    } else if (entry.kind === 'availability') {
       if (!ctx.answersAvailability(entry.table)) out.push({ path: at('kind'), message: `"${entry.table}" declares no capacity or booking to answer from` });
       if (entry.methods.some((method) => method !== 'GET')) out.push({ path: at('methods'), message: 'availability is read-only' });
     }
-    out.push(...availabilityShapeIssues(entry, ctx, at));
+    if (entry.words === undefined) out.push(...availabilityShapeIssues(entry, ctx, at));
     if (entry.unlockBy !== undefined) out.push(...unlockIssues(entry, entry.unlockBy, entries, ctx, at));
     if (entry.pictures !== undefined) out.push(...pictureIssues(entry, entry.pictures, entries, ctx, at));
   });
@@ -1351,6 +1435,38 @@ function unlockIssues(
     if (entry[name] !== undefined) out.push({ path: at(name), message: 'an unlock is its own entry' });
   }
   if (entry.kind === 'availability') out.push({ path: at('kind'), message: 'an unlock is its own entry' });
+  if ('self' in unlock) {
+    // The code is the row's own: the same checks, on the entry's table, and no link to follow.
+    const code = index.column(entry.table, unlock.column) as (ColumnShape & { unique?: true; rules?: { code?: unknown; normalize?: string } }) | undefined;
+    if (code === undefined) {
+      out.push({ path: at('unlockBy', 'column'), message: `"${entry.table}" has no column "${unlock.column}"` });
+    } else {
+      if (code.type !== 'text' || (code.unique !== true && code.rules?.code === undefined)) {
+        out.push({ path: at('unlockBy', 'column'), message: `a code finds one row: make "${entry.table}.${code.ref}" unique` });
+      }
+      if (code.rules?.code === undefined && code.rules?.normalize !== 'code') {
+        out.push({ path: at('unlockBy', 'column'), message: `"${entry.table}.${code.ref}" is compared as a code: give it normalize "code"` });
+      }
+      if (shareCodeColumns(entries, entry.table).includes(code.ref)) {
+        out.push({ path: at('unlockBy', 'column'), message: "a shared link's code is never looked up" });
+      }
+      // The code opens the row; the row never shows it back.
+      if ((entry.select ?? []).includes(code.ref)) {
+        out.push({ path: at('select'), message: `"${entry.table}.${code.ref}" opens the row, so the row does not show it: take it out of select` });
+      }
+    }
+    (unlock.where ?? []).forEach((condition, k) => {
+      const path = at('unlockBy', 'where', k);
+      const filter = index.column(entry.table, condition.column);
+      if (filter === undefined) out.push({ path: [...path, 'column'], message: `"${entry.table}" has no column "${condition.column}"` });
+      else if ('eq' in condition) {
+        if (!valueFits(filter, condition.eq)) out.push({ path: [...path, 'eq'], message: `${JSON.stringify(condition.eq)} is not a value of "${entry.table}.${filter.ref}"` });
+      } else if (filter.type !== 'date' && filter.type !== 'timestamptz') {
+        out.push({ path: [...path, 'column'], message: `"${entry.table}.${filter.ref}" is not a date` });
+      }
+    });
+    return out;
+  }
   if (index.table(unlock.table) === undefined) {
     out.push({ path: at('unlockBy', 'table'), message: `"${unlock.table}" is not a table of this app` });
     return out;
@@ -1688,7 +1804,7 @@ function boundIssues(index: TableIndex, ctx: PublicAccessContext, table: string,
     if (bounds?.min === undefined || bounds.min < 0 || bounds.max === undefined) {
       out.push({
         path: at,
-        message: `"${table}.${ref}" is written by a guest and feeds a price Adminium works out, so it declares validation.min (at least 0) and validation.max`,
+        message: `"${table}.${ref}" is written by a guest and feeds a price Adminium works out, so it declares validation.min (at least 0) and validation.max — on the column itself, in the table's own definition (e.g. "validation": { "min": 1, "max": 50 }), not in the access entry`,
       });
     }
   }
@@ -1738,7 +1854,7 @@ function treeIssues(
       if (!creates && !changes) out.push({ path: at('expect'), message: 'a price check belongs to a create or a change' });
       if (column === undefined) out.push({ path: at('expect'), message: `"${entry.table}" has no column "${entry.expect}"` });
       else if (column.type !== 'decimal' && column.type !== 'money') out.push({ path: at('expect'), message: `"${entry.table}.${entry.expect}" is not a money column` });
-      else if (!ctx.decided(entry.table).has(entry.expect)) out.push({ path: at('expect'), message: `"${entry.table}.${entry.expect}" is not a figure Adminium works out, so there is nothing to check` });
+      else if (!ctx.decided(entry.table).has(entry.expect)) out.push({ path: at('expect'), message: `"${entry.table}.${entry.expect}" is not a figure Adminium works out, so there is nothing to check: take "expect" out of the entry, or first declare how the figure is worked out (a line total and a parent total, as the guide "orders with lines" shows)` });
       if (!(entry.select ?? []).includes(entry.expect)) out.push({ path: at('expect'), message: `"${entry.expect}" is checked, so the entry shows it (select)` });
     }
 
@@ -1784,7 +1900,7 @@ function treeIssues(
           ['writable', child.writable],
           ['select', child.select ?? []],
           ['requires', child.requires ?? []],
-          ['plainText', child.plainText ?? []],
+          ['plainText', (child.plainText ?? []).map(plainTextRef)],
           ['defaults', Object.keys(child.defaults ?? {})],
           ['writableValues', Object.keys(child.writableValues ?? {})],
           ['position', child.position === undefined ? [] : [child.position]],
@@ -1812,7 +1928,7 @@ function treeIssues(
             if (!valueFits(column, value)) out.push({ path: here('writableValues', ref), message: `${JSON.stringify(value)} is not a value of "${name}.${ref}"` });
           }
         }
-        for (const ref of child.plainText ?? []) {
+        for (const ref of (child.plainText ?? []).map(plainTextRef)) {
           const column = index.column(name, ref);
           if (column !== undefined && column.type !== 'text') out.push({ path: here('plainText'), message: `"${name}.${ref}" is not a text column` });
           else if (!child.writable.includes(ref)) out.push({ path: here('plainText'), message: `"${ref}" is not writable, so a guest never types it` });
@@ -2317,6 +2433,46 @@ function ownAddressAndWithholdIssues(
         out.push({ path: ['publicAccess', j, 'writable'], message: `"${entry.table}.${holder}" decides who reads the withheld columns, so no browser writes it` });
       }
     });
+  });
+  return out;
+}
+
+/**
+ * Advice about a plain-text column that holds more than its plain text takes:
+ * a guest who types to the column's `maxLength` is refused at the end of the
+ * form ("orders.note" holds 140, its plain text takes 80).
+ */
+export function plainTextLengthWarnings(
+  publicAccess: readonly PublicAccess[],
+  tables: readonly { ref: string; columns: readonly { ref: string; type: string; maxLength?: number | undefined }[] }[],
+): { path: string; message: string }[] {
+  const out: { path: string; message: string }[] = [];
+  const check = (table: string, list: readonly PlainTextColumnRef[] | undefined, path: string) => {
+    (list ?? []).forEach((entry, k) => {
+      const ref = plainTextRef(entry);
+      const holds = tables.find((t) => t.ref === table)?.columns.find((c) => c.ref === ref)?.maxLength;
+      const takes = plainTextMax(entry);
+      if (holds === undefined || holds <= takes) return;
+      out.push({
+        path: `${path}.${String(k)}`,
+        message:
+          `"${table}.${ref}" holds ${String(holds)} characters but its plain text takes ${String(takes)}, so a guest who types more is refused: ` +
+          `lower its maxLength to ${String(takes)}, or give it { "column": "${ref}", "max": ${String(Math.min(holds, PLAIN_TEXT_LONGEST))} }` +
+          (holds > PLAIN_TEXT_LONGEST ? ` and a maxLength of ${String(PLAIN_TEXT_LONGEST)}` : ''),
+      });
+    });
+  };
+  const walk = (children: Readonly<Record<string, ChildEntry>> | undefined, base: string) => {
+    for (const [name, child] of Object.entries(children ?? {})) {
+      check(name, child.plainText, `${base}.children.${name}.plainText`);
+      walk(child.children, `${base}.children.${name}`);
+    }
+  };
+  publicAccess.forEach((entry, e) => {
+    const base = `publicAccess.${String(e)}`;
+    check(entry.table, entry.anonymous?.plainText, `${base}.anonymous.plainText`);
+    check(entry.table, entry.limits?.plainText, `${base}.limits.plainText`);
+    walk(entry.children, base);
   });
   return out;
 }
