@@ -22,6 +22,7 @@ const REFS: readonly TableRef[] = [
   "patients",
   "registrations",
   "appointments",
+  "appointment_supplies",
   "payments",
   "write_offs",
   "check_notes",

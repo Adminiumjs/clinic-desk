@@ -178,6 +178,11 @@ async function bootDesk(): Promise<void> {
   const [{ loadConnectedAddOns }, { setConnectedAddOns }] = await Promise.all([import("./data/connectedAddOns.ts"), import("./state/features.ts")]);
   const connected = await loadConnectedAddOns();
   setConnectedAddOns(connected);
+  // A visit's supplies are read through Inventory, and only where it is connected to this app.
+  if (connected["inventory"] !== undefined) {
+    const [{ sessionStockReads, suppliesPort }, { setSuppliesPort }] = await Promise.all([import("./data/supplies.ts"), import("./state/supplies.ts")]);
+    setSuppliesPort(suppliesPort(sessionStockReads(transport)));
+  }
   useUi.setState({ persona: "clinic", view: "daysheet", theme: systemTheme() });
   await loadDesk();
   if (useDesk.getState().load === "failed") {

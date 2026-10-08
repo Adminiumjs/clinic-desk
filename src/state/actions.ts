@@ -37,6 +37,7 @@ import type {
   Recall,
   Registration,
   Settings,
+  SupplyLine,
   TableRef,
   WaitingEntry,
   WriteOff,
@@ -48,6 +49,7 @@ import { now, practiceZone } from "../lib/clock.ts";
 import { stepKey } from "../lib/keys.ts";
 import { deskReads, drop, ensurePatients, upsert, useDesk } from "./desk.ts";
 import { forgetAddOn } from "./features.ts";
+import { loadSupplies, useSupplies } from "./supplies.ts";
 import { sink } from "./writes.ts";
 
 // ── outcomes ────────────────────────────────────────────────────────────────
@@ -80,7 +82,11 @@ export type Refusal =
   /** The part of the desk that needs an add-on is off: the add-on is not connected to this app. */
   | "off"
   /** The add-on could not draw the document (a value it needs is empty). */
-  | "not-drawn";
+  | "not-drawn"
+  /** A supply line of a visit that is already seen: a manager takes the visit back first. */
+  | "supplies-closed"
+  /** The supplies could not be recorded, so the save they belong to was not made. */
+  | "supplies";
 
 export type Outcome<T = void> = { ok: true; value: T } | { ok: false; reason: Refusal; field?: string | null; balance?: number };
 
@@ -107,6 +113,13 @@ export function refusalOf(error: unknown): Outcome<never> {
   }
   if (code === "UNIQUE_VIOLATION") return { ok: false, reason: "duplicate", field: e.field ?? null };
   if (code === "FEATURE_OFF") return { ok: false, reason: "off" };
+  // A save that posts into Inventory's ledger, refused whole. Stock itself never
+  // refuses a visit (a staffed desk takes what the books have): what arrives is
+  // a line changed after its visit was seen, or the ledger unable to answer.
+  if (code === "POSTING_REFUSED") {
+    const why = String(details["reason"] ?? "");
+    return { ok: false, reason: why === "receipt-open" || why === "mapped-changed" ? "supplies-closed" : "supplies" };
+  }
   if (code === "DOCUMENT_NOT_DRAWN") return { ok: false, reason: "not-drawn" };
   if (e.status === 403) return { ok: false, reason: "not-allowed" };
   if (e.status === 404) return { ok: false, reason: "gone" };
@@ -245,6 +258,71 @@ export function setStatus(id: Id, status: AppointmentStatus): Promise<Outcome<Ap
 /** Cancel at the desk: the time goes back on the board; inside the window it is logged as late. */
 export function cancelVisit(id: Id): Promise<Outcome<Appointment>> {
   return attempt(async () => (await update("appointments", id, { status: "cancelled" })) as unknown as Appointment);
+}
+
+// ── what a visit used ───────────────────────────────────────────────────────
+
+/**
+ * A step's key for a kit's lines: the action's key with its first two
+ * characters replaced by the line's place in the kit — still 36 characters,
+ * and the same on every retry, so a kit pressed again finds what it saved.
+ */
+const kitLineKey = (action: string, index: number): string => `${index.toString(16).padStart(2, "0")}${action.slice(2)}`;
+
+/** One supply save, then what Inventory says of the visit's lines read again (what is left moved, or will). */
+async function supplyAttempt<T>(visitId: Id, steps: () => Promise<T>): Promise<Outcome<T>> {
+  const outcome = await attempt(steps);
+  await loadSupplies(visitId).catch(() => undefined);
+  return outcome;
+}
+
+const supplyLine = (visitId: Id, lineId: Id): SupplyLine | undefined => useSupplies.getState().byVisit[visitId]?.view?.lines.find((view) => view.line.id === lineId)?.line;
+
+/**
+ * Add a kit to a visit: one line for each thing in it, in the kit's order.
+ * Pressed twice, or tried again after the network dropped half-way, it adds
+ * each line once — by the action's key, and by the server's own rule that a
+ * visit holds an item of a kit once.
+ */
+export function addKit(input: { visitId: Id; kitId: Id; lines: readonly { itemId: Id; qty: number }[]; key: string }): Promise<Outcome<void>> {
+  return supplyAttempt(input.visitId, async () => {
+    for (const [index, line] of input.lines.entries()) {
+      try {
+        await insert("appointment_supplies", { appointment_id: input.visitId, kit_id: input.kitId, item_id: line.itemId, qty: line.qty, client_key: kitLineKey(input.key, index) });
+      } catch (error) {
+        // Already on the visit, from another press of the same kit: that is what was asked for.
+        if ((error as Partial<SinkError>).code !== "UNIQUE_VIOLATION") throw error;
+      }
+    }
+  });
+}
+
+/** Add one item by hand. */
+export function addSupply(input: { visitId: Id; itemId: Id; key: string }): Promise<Outcome<SupplyLine>> {
+  return supplyAttempt(input.visitId, async () => (await insert("appointment_supplies", { appointment_id: input.visitId, kit_id: null, item_id: input.itemId, qty: 1, client_key: stepKey(input.key, "a") })) as unknown as SupplyLine);
+}
+
+/** How many of it were used. */
+export function setSupplyQty(input: { visitId: Id; lineId: Id; qty: number }): Promise<Outcome<SupplyLine>> {
+  return supplyAttempt(input.visitId, async () => (await update("appointment_supplies", input.lineId, { qty: input.qty })) as unknown as SupplyLine);
+}
+
+/** Mark a line not used (it stays on the visit, and nothing is taken for it), or used after all. */
+export function setNotUsed(input: { visitId: Id; lineId: Id; notUsed: boolean }): Promise<Outcome<SupplyLine>> {
+  return supplyAttempt(input.visitId, async () => (await update("appointment_supplies", input.lineId, { not_used_at: input.notUsed ? new Date(now()).toISOString() : null })) as unknown as SupplyLine);
+}
+
+/** Say which batch it came from. Never done for the clinician: a batch nobody confirmed reads "batch not known". */
+export function confirmBatch(input: { visitId: Id; lineId: Id; batchId: Id | null }): Promise<Outcome<SupplyLine>> {
+  return supplyAttempt(input.visitId, async () => (await update("appointment_supplies", input.lineId, { batch_id: input.batchId })) as unknown as SupplyLine);
+}
+
+/** Take a line added by hand off the visit. A kit's line is marked not used instead. */
+export function removeSupply(input: { visitId: Id; lineId: Id }): Promise<Outcome<void>> {
+  return supplyAttempt(input.visitId, async () => {
+    if (supplyLine(input.visitId, input.lineId)?.kit_id != null) throw Object.assign(new Error("a kit's line is marked not used"), { kind: "refused", status: 422, code: "VALIDATION_FAILED" });
+    await remove("appointment_supplies", input.lineId);
+  });
 }
 
 // ── money ───────────────────────────────────────────────────────────────────

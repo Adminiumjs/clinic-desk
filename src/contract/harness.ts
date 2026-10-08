@@ -361,7 +361,9 @@ export class Caller {
       if (set.length > 0) this.cookie = set.map((c) => c.split(";")[0]).join("; ");
       // A burst the rate limit refused is the limit's, not the contract's: wait it out.
       if (res.status === 429 && attempt < 6) {
-        await new Promise((resolve) => setTimeout(resolve, 5_000));
+        // It says how long: asking again sooner only spends the next allowance.
+        const said = /in (\d+) seconds?/.exec(await res.clone().text())?.[1];
+        await new Promise((resolve) => setTimeout(resolve, said === undefined ? 5_000 : (Number(said) + 1) * 1_000));
         continue;
       }
       const type = res.headers.get("content-type") ?? "";
@@ -385,6 +387,16 @@ export class Caller {
   async signIn(email: string, password: string): Promise<void> {
     ok(await this.post("/api/v1/auth/login", { email, password }));
     this.csrf = ok(await this.get<{ data: { csrfToken: string } }>("/api/v1/bootstrap")).data.csrfToken;
+  }
+
+  /**
+   * Sign in as someone whose role opens the app's own screens and not the
+   * dashboard (a clinician, the kiosk): the write token comes with the desk's
+   * own config, as the desk itself takes it.
+   */
+  async signInToDesk(email: string, password: string, app = "clinic"): Promise<void> {
+    ok(await this.post("/api/v1/auth/login", { email, password }));
+    this.csrf = ok(await this.get<{ csrfToken: string }>(`/apps/${app}/staff/surface-config.json`)).csrfToken;
   }
 
   get = <T = unknown>(path: string, extra?: Record<string, string>) => this.send<T>("GET", path, undefined, extra);

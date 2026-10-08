@@ -37,6 +37,8 @@ export interface LiveFrame {
  */
 export const LIVE_TABLES: readonly TableRef[] = [
   "appointments",
+  // What a clinician records on a visit shows at once on reception's copy of it.
+  "appointment_supplies",
   "payments",
   "write_offs",
   "waiting_list",

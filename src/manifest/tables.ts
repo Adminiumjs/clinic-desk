@@ -478,7 +478,9 @@ export const TABLES: Table[] = [
       id,
       fk("appointment_id", "appointments", "Appointment"),
       stockLink("kit_id", "kits", "Kit"),
-      stockLink("item_id", "items", "Item"),
+      // A line says what was used, always: one with no item could never be handed
+      // to Inventory, and would stop its visit being seen the day Inventory is connected.
+      { ...stockLink("item_id", "items", "Item"), rules: { addOnLink: { addOn: "inventory", table: "items" }, required: true } },
       { ref: "qty", type: "decimal", scale: 3, default: 1, label: l("Quantity"), rules: { validation: { min: 0.001 } } },
       at("not_used_at", "Marked not used at", opt),
       stockLink("batch_id", "batches", "Batch"),

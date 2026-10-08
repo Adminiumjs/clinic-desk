@@ -15,6 +15,8 @@
  *   appointments           the patient it names, when the desk does not hold them
  *   patients               only a patient the desk already holds; the rest are
  *                          read when something on screen names them
+ *   appointment_supplies   nothing by key: the visits whose Supplies tab is
+ *                          open read their lines again (`state/supplies.ts`)
  *
  * A key the read does not return is a row that is gone, or one this person
  * may no longer read: either way it leaves the desk.
@@ -27,6 +29,7 @@ import type { LiveFrame } from "../data/live.ts";
 import type { Appointment, Id, Payment, TableRef, WriteOff } from "../data/types.ts";
 import { practiceZone, today } from "../lib/clock.ts";
 import { applySnapshot, deskReads, drop, ensureDays, ensurePatients, upsert, useDesk } from "./desk.ts";
+import { suppliesChanged } from "./supplies.ts";
 
 /** How long frames gather before one read answers them all. */
 const GATHER_MS = 120;
@@ -91,6 +94,11 @@ async function readRows(ref: TableRef, ids: Set<Id>): Promise<{ id: Id }[] | nul
 
 /** One frame from the stream (or the demo's database). */
 export function applyFrame(frame: LiveFrame): void {
+  // A supply line is not held by the desk: the visits whose supplies are open read theirs again.
+  if (frame.table === "appointment_supplies") {
+    void suppliesChanged();
+    return;
+  }
   if (frame.id === null) return;
   if (frame.kind === "record.delete") {
     // A payment or write-off taken back changes its visit's balance.

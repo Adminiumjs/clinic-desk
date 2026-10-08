@@ -57,6 +57,8 @@ export interface Settings {
   reminders_on: boolean;
   default_lead_hours: number;
   kiosk_on: boolean;
+  /** The place in Inventory a visit's supplies come off; null for Inventory's own default place. */
+  supplies_place_id: Id | null;
 }
 
 export interface OpeningHours {
@@ -231,6 +233,31 @@ export interface Appointment {
   created_at: Instant | null;
 }
 
+/**
+ * One thing a visit used: a link to an item of Inventory, how many, and — for
+ * an item kept in batches — which batch, once the clinician has confirmed it.
+ * It carries no name of anything: the practice's own tables hold a link, never
+ * a medicine. Nothing leaves the shelf for it until the visit is seen.
+ */
+export interface SupplyLine {
+  id: Id;
+  appointment_id: Id;
+  /** The kit it was added with; null for a line added by hand. */
+  kit_id: Id | null;
+  item_id: Id | null;
+  qty: number;
+  /** Set when the clinician marked it not used: the line stays, and nothing is taken for it. */
+  not_used_at: Instant | null;
+  /** The batch the clinician confirmed; null reads "batch not known". */
+  batch_id: Id | null;
+  place_id: Id | null;
+  recorded_by: string | null;
+  recorded_at: Instant | null;
+  changed_by: string | null;
+  changed_at: Instant | null;
+  client_key: string | null;
+}
+
 export type PayMethod = "card" | "cash" | "transfer";
 
 export interface Payment {
@@ -352,6 +379,7 @@ export interface Tables {
   patients: Patient;
   registrations: Registration;
   appointments: Appointment;
+  appointment_supplies: SupplyLine;
   payments: Payment;
   write_offs: WriteOff;
   check_notes: CheckNote;

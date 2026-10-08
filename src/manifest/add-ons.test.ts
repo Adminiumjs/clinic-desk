@@ -129,6 +129,8 @@ describe("a visit's supplies, counted by Inventory", () => {
     expect(supplies.columns.filter((c) => c.type === "text").map((c) => c.ref)).toEqual(["recorded_by", "changed_by", "client_key"]);
     expect(column("appointment_supplies", "appointment_id")).toMatchObject({ type: "fk", references: "appointments" });
     expect(supplies.unique).toEqual([["appointment_id", "kit_id", "item_id"]]);
+    // A line always names its item: the column is empty-able only because a link into an add-on must be.
+    expect(column("appointment_supplies", "item_id")?.rules).toMatchObject({ required: true });
   });
 
   it("makes every link a plain number with no foreign key, so the app installs, and updates, without Inventory", () => {

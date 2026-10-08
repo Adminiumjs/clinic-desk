@@ -32,7 +32,12 @@
  *      booking, a move and a cancel within the rules (the limit of two, too
  *      late to move, a late cancel flagged); and the stop on someone who
  *      keeps guessing;
- *   9. the sample removed.
+ *   9. the sample removed;
+ *  10. Inventory, which this practice never installed: a visit is seen as
+ *      ever and a supply line that names an item is refused, with Inventory
+ *      absent and again with it installed and not connected to the app; then
+ *      connected afterwards, with nothing of the app changed, a supply leaves
+ *      the shelf when its visit is seen.
  *
  * And the update a practice on 0.2.0 makes: the released 0.2.0 installed with
  * its sample, then updated to this version with Holiday calendars — the new
@@ -667,6 +672,73 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await rows(at, "messages")).filter((m) => m["kind"] === "receipt").length).toBe(2);
           expect(ok(await at.staff.get<{ loaded: boolean }>("/api/v1/apps/clinic/sample-data")).loaded).toBe(false);
         }, 180_000);
+
+        /*
+         * INVENTORY, WHICH THIS PRACTICE NEVER INSTALLED. Everything above ran
+         * without it: the desk is the desk it was. What is left to say is what
+         * the server does with the new table while its add-on is not there —
+         * and that connecting Inventory later needs nothing of the app.
+         */
+        type Line = { data: Row; postings?: { ledger: string; state: string }[] };
+        let kept: Row;
+        const lines = () => `/api/v1/data/${at.connectionId}/${encodeURIComponent(at.tableIds["appointment_supplies"]!)}`;
+        const moveTo = (status: string) => at.staff.patch<Line>(`${data(at, "appointments")}/${String(kept.id)}`, { values: { status } });
+        const inert = async (itemId: number) => {
+          // A line always says what was used: one with no item is no line.
+          const empty = await at.staff.post(lines(), { values: { appointment_id: kept.id, qty: "1" } });
+          expect([empty.status, empty.code]).toEqual([422, "VALIDATION_FAILED"]);
+          // A row can never name an item of an add-on that is not here for this app.
+          const dead = await at.staff.post(lines(), { values: { appointment_id: kept.id, item_id: itemId, qty: "1" } });
+          expect([dead.status, dead.code, dead.details["reason"]]).toEqual([409, "POSTING_REFUSED", "add-on-unavailable"]);
+          // A visit is seen as it always was: nothing is asked, nothing refused, nothing posted.
+          ok(await moveTo("ready"));
+          const sent = await moveTo("seen");
+          expect([sent.status, sent.body.postings ?? []], JSON.stringify(sent.body).slice(0, 600)).toEqual([200, []]);
+        };
+
+        it("without Inventory on the server: a visit is seen as ever, and a supply line that names an item is refused", async () => {
+          await tablesOf(at);
+          kept = (await rows(at, "appointments")).find((v) => v["status"] === "seen")!;
+          expect(kept).toBeDefined();
+          await inert(1);
+          const desk = ok(await at.staff.get<{ addOns?: Record<string, unknown> }>("/apps/clinic/staff/surface-config.json"));
+          expect(Object.keys(desk.addOns ?? {})).not.toContain("inventory");
+        }, 120_000);
+
+        it("with Inventory installed and not connected to this app: the same, to the letter", async () => {
+          await upload(at.staff, "add-ons", addOnBundle("inventory"));
+          const installed = await at.staff.post("/api/v1/add-ons", { key: "inventory", version: packedVersion("inventory").version, attachTo: [] });
+          expect(installed.status, JSON.stringify(installed.body).slice(0, 1200)).toBeLessThan(300);
+          ok(await at.staff.post("/api/v1/add-ons/inventory/sample-data"));
+          await until(async () => (ok(await at.staff.get<{ loaded: boolean }>("/api/v1/add-ons/inventory/sample-data")).loaded ? true : undefined), "Inventory's sample to be added");
+          const schema = ok(await at.staff.get<{ model: { tables: { id: string; name: string }[] } }>(`/api/v1/connections/${at.connectionId}/schema`));
+          const items = ok(await at.staff.get<{ data: Row[] }>(`/api/v1/data/${at.connectionId}/${encodeURIComponent(schema.model.tables.find((t) => t.name === "inventory_items")!.id)}?limit=200`)).data;
+          // A real item of an Inventory that is on the server — and still not this app's to name.
+          await inert(Number(items.find((item) => item["sku"] === "SWAB-ALC")!.id));
+          const desk = ok(await at.staff.get<{ addOns?: Record<string, unknown> }>("/apps/clinic/staff/surface-config.json"));
+          expect(Object.keys(desk.addOns ?? {})).not.toContain("inventory");
+        }, 300_000);
+
+        it("connects Inventory to the app afterwards, with nothing of the app changed: the desk is told, and a supply leaves the shelf when its visit is seen", async () => {
+          // Nothing could be recorded while it was away, so nothing waits to trip the first visit seen with it.
+          expect((await rows(at, "appointment_supplies")).length).toBe(0);
+          const attached = await at.staff.post("/api/v1/add-ons/inventory/attachments", { app: "clinic", connectionId: at.connectionId });
+          expect(attached.status, JSON.stringify(attached.body).slice(0, 1200)).toBe(200);
+          const desk = ok(await at.staff.get<{ addOns?: Record<string, unknown> }>("/apps/clinic/staff/surface-config.json"));
+          expect(Object.keys(desk.addOns ?? {})).toContain("inventory");
+          const schema = ok(await at.staff.get<{ model: { tables: { id: string; name: string }[] } }>(`/api/v1/connections/${at.connectionId}/schema`));
+          const read = async (name: string) => ok(await at.staff.get<{ data: Row[] }>(`/api/v1/data/${at.connectionId}/${encodeURIComponent(schema.model.tables.find((t) => t.name === name)!.id)}?limit=200`)).data;
+          const swab = (await read("inventory_items")).find((item) => item["sku"] === "SWAB-ALC")!;
+          const room = (await read("inventory_places")).find((place) => place["name"] === "Treatment room")!;
+          const left = async () => Number((await read("inventory_stock_points")).find((point) => Number(point["item_id"]) === Number(swab.id) && Number(point["place_id"]) === Number(room.id))!["available"]);
+          const was = await left();
+          ok(await moveTo("ready"));
+          ok(await at.staff.post(lines(), { values: { appointment_id: kept.id, item_id: swab.id, qty: "2", place_id: room.id } }), 201);
+          const sent = await moveTo("seen");
+          expect(sent.status, JSON.stringify(sent.body).slice(0, 1200)).toBe(200);
+          expect((sent.body.postings ?? []).map((posting) => [posting.ledger, posting.state])).toEqual([["stock", "ok"]]);
+          expect(await left()).toBe(was - 2);
+        }, 300_000);
       });
 
       describe.skipIf(!releasedReadable())("the update a practice on 0.2.0 makes", () => {

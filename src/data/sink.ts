@@ -91,7 +91,7 @@ export class SinkError extends Error {
 export function kindOfStatus(status: number, code = ""): SinkErrorKind {
   if (status === 401) return "signed-out";
   // A lost lock race or a busy database: the server says try again.
-  if (status === 0 || status >= 500 || code === "WRITE_CONFLICT" || code === "BOOKING_BUSY") return "offline";
+  if (status === 0 || status >= 500 || code === "WRITE_CONFLICT" || code === "BOOKING_BUSY" || code === "CAPACITY_BUSY") return "offline";
   return "refused";
 }
 

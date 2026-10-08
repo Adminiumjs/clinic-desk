@@ -35,6 +35,7 @@ export const REQUIRED: Record<TableRef, string[]> = {
   patients: ["id", "name", "born_on", "mobile", "email", "allergies_note", "client_key"],
   registrations: ["id", "ref", "name", "born_on", "mobile", "status", "patient_id", "outcome"],
   appointments: ["id", "ref", "patient_id", "clinician_id", "visit_type_id", "starts_at", "minutes", "fee", "paid", "balance", "status", "check_status", "client_key"],
+  appointment_supplies: ["id", "appointment_id", "kit_id", "item_id", "qty", "not_used_at", "batch_id", "place_id", "client_key"],
   payments: ["id", "appointment_id", "amount", "method", "paid_at", "voided", "client_key"],
   write_offs: ["id", "appointment_id", "amount", "reason", "written_at", "client_key"],
   check_notes: ["id", "registration_id", "appointment_id", "note", "created_at"],
