@@ -153,9 +153,10 @@ export const NEXT: Partial<Record<AppointmentStatus, AppointmentStatus>> = {
 };
 
 /**
- * A clinician moves a visit only into a room, in with them, and ready to go.
- * The server lets their role update a visit at all; which way it may move is
- * the desk's to hold, so their screens offer these three steps and no others.
+ * A clinician moves a visit only into a room, in with them, and ready to go:
+ * the three steps the server takes from their role, each from the step before
+ * it. Their screens offer these and no others, so no button asks for a move
+ * the server refuses.
  */
 const CLINICIAN_STEPS: readonly AppointmentStatus[] = ["roomed", "with_clinician", "ready"];
 

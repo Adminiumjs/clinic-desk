@@ -25,7 +25,7 @@ import { describe, expect, it } from "vitest";
 import { LOCALE_TAGS } from "../i18n/locales.ts";
 import { sampleBundleIssues, sampleBundleSchema, sampleSectionIssues } from "../testing/manifest/sample.ts";
 import type { AddOnManifest, AppManifest, Manifest } from "../testing/manifest/schema.ts";
-import { buildSupplySample, FLU_LINES, SUPPLIES_VISIT } from "./sample-supplies.ts";
+import { buildSupplySample, FLU_KIT, FLU_LINES, KITS_VISIT_TYPE, OFFERED_KITS, SUPPLIES_VISIT } from "./sample-supplies.ts";
 import { SAMPLE_MOMENT, SAMPLE_ZONE, buildSample, type SampleRow } from "./sample.ts";
 import { schemaSql, seedSql, type ManifestTables } from "./sample-sql.ts";
 import { COLUMNS, COPIES, ROLLUPS, resolveSample, type ResolvedSample } from "./sampleRows.ts";
@@ -493,8 +493,24 @@ describe("the sample's rows for Inventory", () => {
     );
     expect(lines.rows.filter((row) => row["not_used_at"] !== undefined).map((row) => labelOf(row["item_id"]))).toEqual(["item:PLST"]);
     expect(JSON.stringify(supplies)).not.toMatch(/cost|price|value|amount/);
-    // It adds nothing of Inventory's: the practice's own lines, never an item, a link, a movement, a level or a receipt.
-    expect(supplies.tables.map((t) => [t.ref, t.own])).toEqual([["appointment_supplies", true]]);
+  });
+
+  it("offers the nurse's kind of visit its two kits, and adds nothing else of Inventory's: never an item, a movement, a level or a receipt", () => {
+    // The practice's own lines, and the one table of Inventory's that is catalogue: which kit a kind of visit offers.
+    expect(supplies.tables.map((t) => [t.ref, t.own])).toEqual([
+      ["links", undefined],
+      ["appointment_supplies", true],
+    ]);
+    const offered = supplies.tables.find((t) => t.ref === "links")!.rows;
+    expect(offered.map((row) => [row["source_table"], labelOf(row["source_row"]), row["kind"], labelOf(row["kit_id"])])).toEqual([
+      [{ "@table": "visit_types" }, "type:nurse", "kit", "kit:flu-vaccination"],
+      [{ "@table": "visit_types" }, "type:nurse", "kit", "kit:dressing-change"],
+    ]);
+    // A link says which kit, and nothing a count is made from: no amount, no place, no receipt.
+    expect([...new Set(offered.flatMap((row) => Object.keys(row)))].sort()).toEqual(["kind", "kit_id", "source_row", "source_table"]);
+    // The visit the six lines stand on is of that kind, so its tab offers the kit it used.
+    expect(rowsOf("appointments").find((row) => row["@label"] === SUPPLIES_VISIT.label)!["visit_type_id"]).toEqual({ "@ref": KITS_VISIT_TYPE });
+    expect(OFFERED_KITS).toContain(FLU_KIT);
   });
 
   const ADD_ONS = process.env["ADD_ONS_REPO"] ?? fileURLToPath(new URL("../../../add-ons", import.meta.url));

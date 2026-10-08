@@ -242,6 +242,8 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
         if (row["item_id"] === undefined || row["item_id"] === null) throw new DemoRefusal(422, "VALIDATION_FAILED", "A value this needs is missing.", { fields: { item_id: { code: "required" } } });
         const twin = rows.appointment_supplies.find((line) => row["kit_id"] !== null && line.appointment_id === row["appointment_id"] && line.kit_id === row["kit_id"] && line.item_id === row["item_id"]);
         if (twin !== undefined) throw new DemoRefusal(409, "UNIQUE_VIOLATION", "A record with this value already exists.", { column: "item_id" });
+        // Where it is taken from is the practice's setting, written on the line as it is recorded.
+        row["place_id"] ??= rows.settings[0]?.supplies_place_id ?? null;
       }
       if (ref === "payments") copyFromVisit(row);
       const who = STAMP_WHO[ref];

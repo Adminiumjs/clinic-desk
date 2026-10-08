@@ -49,7 +49,7 @@ interface StockGrant {
 interface Role {
   key: string;
   permissions: string[];
-  limits?: Record<string, { creatable?: string[]; writable?: string[] }>;
+  limits?: Record<string, { creatable?: string[]; writable?: string[]; writableValues?: Record<string, string[]>; writableFrom?: Record<string, string[]> }>;
   tables?: StockGrant[];
 }
 interface Manifest {
@@ -175,6 +175,28 @@ describe("a visit's supplies, counted by Inventory", () => {
       creatable: ["appointment_id", "kit_id", "item_id", "qty", "client_key"],
       writable: ["qty", "not_used_at", "batch_id"],
     });
+    // Where from is the practice's setting, written by the server: the one default that reads another table, on the one link it fills.
+    expect(column("appointment_supplies", "place_id")?.rules).toEqual({
+      addOnLink: { addOn: "inventory", table: "places" },
+      default: { from: { table: "settings", column: "supplies_place_id" } },
+    });
+    expect(column("settings", "supplies_place_id")?.rules).toEqual({ addOnLink: { addOn: "inventory", table: "places" } });
+    expect(links(supplies).filter((c) => c.rules?.["default"] !== undefined).map((c) => c.ref)).toEqual(["place_id"]);
+  });
+
+  it("lets a clinician move a visit only forward from the three steps that are theirs: a seen visit, whose supplies have left the shelf, is not theirs to take back", () => {
+    const limit = role("clinician").limits!["appointments"]!;
+    expect(limit).toEqual({
+      writable: ["status"],
+      writableValues: { status: ["roomed", "with_clinician", "ready"] },
+      writableFrom: { status: ["checked_in", "roomed", "with_clinician"] },
+    });
+    // The reverse point of the posting is leaving seen: no step a clinician may start from is that one, or the one before it.
+    const [posting] = supplies.postings!;
+    for (const from of posting!.reverse!.on["from"] as string[]) expect(limit.writableFrom!["status"]).not.toContain(from);
+    expect(limit.writableFrom!["status"]).not.toContain("ready");
+    // Nobody else is held to it: reception sends off, a manager takes back.
+    for (const key of ["reception", "manager"]) expect(role(key).limits?.["appointments"], key).toBeUndefined();
     // Reception reads the lines and writes none; the kiosk has no table at all.
     expect(role("reception").permissions.filter((p) => p.includes("appointment_supplies"))).toEqual(["table:@appointment_supplies:read"]);
     expect(role("kiosk").permissions.filter((p) => p.startsWith("table:"))).toEqual([]);

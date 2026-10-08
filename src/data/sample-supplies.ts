@@ -8,9 +8,10 @@
  * used, three working days ago: the six lines of the flu vaccination kit, the
  * vaccine from batch FV26A, the plaster marked not used.
  *
- * It holds the practice's own lines and nothing of Inventory's: which kits a
- * visit type offers is a row of Inventory's (a link on the visit type's Stock
- * tab), and Inventory's rows are Inventory's to write.
+ * It also says which kits the nurse's kind of visit offers: two rows of
+ * Inventory's `links`, the same an owner makes on the visit type's Stock tab.
+ * A link is catalogue, not history — nothing is counted from it — so it is the
+ * one table of Inventory's a practice's sample may fill.
  *
  * Sample rows are history: nothing is taken off Inventory's shelf for them,
  * so the counts Inventory's own sample shows do not move.
@@ -25,6 +26,9 @@ export const SUPPLIES_VISIT = { label: "visit:h-wren", date: "2026-07-23", recor
 export const FLU_KIT = "kit:flu-vaccination";
 export const TREATMENT_ROOM = "place:treatment-room";
 export const FLU_BATCH = "batch:FV26A";
+/** The kind of visit that offers kits, and the kits it offers, in the order the tab shows them. */
+export const KITS_VISIT_TYPE = "type:nurse";
+export const OFFERED_KITS = [FLU_KIT, "kit:dressing-change"] as const;
 
 export interface SampleSupply {
   /** The item's stock code in Inventory's sample: its label is `item:<sku>`. */
@@ -58,6 +62,10 @@ export function buildSupplySample(): SupplySampleBundle {
     app: "clinic",
     addOn: "inventory",
     tables: [
+      {
+        ref: "links",
+        rows: OFFERED_KITS.map((kit) => ({ source_table: { "@table": "visit_types" }, source_row: ref(KITS_VISIT_TYPE), kind: "kit", kit_id: ref(kit) })),
+      },
       {
         ref: "appointment_supplies",
         own: true,

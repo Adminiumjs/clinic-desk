@@ -484,7 +484,9 @@ export const TABLES: Table[] = [
       { ref: "qty", type: "decimal", scale: 3, default: 1, label: l("Quantity"), rules: { validation: { min: 0.001 } } },
       at("not_used_at", "Marked not used at", opt),
       stockLink("batch_id", "batches", "Batch"),
-      stockLink("place_id", "places", "Taken from"),
+      // Where a line is taken from is the practice's, not the person's who records it: the
+      // server writes the setting on the line. Empty while the setting is, or Inventory is away.
+      { ...stockLink("place_id", "places", "Taken from"), rules: { addOnLink: { addOn: "inventory", table: "places" }, default: { from: { table: "settings", column: "supplies_place_id" } } } },
       text("recorded_by", 120, "Recorded by", { ...opt, rules: stampWho }),
       at("recorded_at", "Recorded at", { ...opt, rules: { stamp: { set: "now", on: "create" } } }),
       text("changed_by", 120, "Changed by", { ...opt, rules: { stamp: { set: "user-name", on: { columns: SUPPLY_EDITS } } } }),

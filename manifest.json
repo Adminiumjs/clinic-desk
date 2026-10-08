@@ -3800,6 +3800,12 @@
               "addOnLink": {
                 "addOn": "inventory",
                 "table": "places"
+              },
+              "default": {
+                "from": {
+                  "table": "settings",
+                  "column": "supplies_place_id"
+                }
               }
             }
           },
@@ -8204,6 +8210,13 @@
               "roomed",
               "with_clinician",
               "ready"
+            ]
+          },
+          "writableFrom": {
+            "status": [
+              "checked_in",
+              "roomed",
+              "with_clinician"
             ]
           }
         },

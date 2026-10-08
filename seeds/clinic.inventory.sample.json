@@ -4,6 +4,35 @@
   "addOn": "inventory",
   "tables": [
     {
+      "ref": "links",
+      "rows": [
+        {
+          "source_table": {
+            "@table": "visit_types"
+          },
+          "source_row": {
+            "@ref": "type:nurse"
+          },
+          "kind": "kit",
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          }
+        },
+        {
+          "source_table": {
+            "@table": "visit_types"
+          },
+          "source_row": {
+            "@ref": "type:nurse"
+          },
+          "kind": "kit",
+          "kit_id": {
+            "@ref": "kit:dressing-change"
+          }
+        }
+      ]
+    },
+    {
       "ref": "appointment_supplies",
       "own": true,
       "rows": [

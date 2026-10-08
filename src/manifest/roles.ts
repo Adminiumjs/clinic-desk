@@ -132,11 +132,18 @@ export const ROLES = [
       pii("patients"),
     ],
     // A clinician moves a visit along — into the room, with them, ready to go —
-    // and changes nothing else; the server refuses any other write. On a supply
+    // and changes nothing else; the server refuses any other write. They move it
+    // only from where they find it on their own screens: a visit that is ready is
+    // reception's to send off, and one that is seen has given its supplies to the
+    // stock list, so taking it back is a manager's. On a supply
     // line they say which item and how many, then whether it was used and from
     // which batch: where it is taken from and who recorded it are the server's.
     limits: {
-      appointments: { writable: ["status"], writableValues: { status: ["roomed", "with_clinician", "ready"] } },
+      appointments: {
+        writable: ["status"],
+        writableValues: { status: ["roomed", "with_clinician", "ready"] },
+        writableFrom: { status: ["checked_in", "roomed", "with_clinician"] },
+      },
       appointment_supplies: {
         creatable: ["appointment_id", "kit_id", "item_id", "qty", "client_key"],
         writable: ["qty", "not_used_at", "batch_id"],

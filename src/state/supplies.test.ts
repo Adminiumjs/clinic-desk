@@ -13,7 +13,7 @@ import { FLU_LINES, SUPPLIES_VISIT } from "../data/sample-supplies.ts";
 import type { Appointment, Id } from "../data/types.ts";
 import { createDemoDb, type DemoDb } from "../demo/db.ts";
 import { demoDeskReads, demoSink } from "../demo/ports.ts";
-import { DEMO_FLU_BATCH, DEMO_FLU_KIT, DEMO_SUPPLIES_VISIT, demoSuppliesPort, seedDemoSupplies } from "../demo/supplies.ts";
+import { DEMO_FLU_BATCH, DEMO_FLU_KIT, DEMO_ROOM, DEMO_SUPPLIES_VISIT, demoSuppliesPort, seedDemoSupplies } from "../demo/supplies.ts";
 import { DEMO_START, DEMO_ZONE, setClockSource, setZone } from "../lib/clock.ts";
 import { actionKey } from "../lib/keys.ts";
 import * as act from "./actions.ts";
@@ -147,6 +147,18 @@ describe("a line", () => {
     // A kit's line is never removed: it is marked not used, so the list still says the kit was opened.
     expect((await act.removeSupply({ visitId: visit.id, lineId: plaster!.line.id })).ok).toBe(false);
     expect(view(visit.id).lines.length).toBe(6);
+  });
+
+  it("is taken from where the practice says: the setting is written on the line when it is recorded, and an empty setting names no place", async () => {
+    const visit = visitAt("ready");
+    await hold(visit);
+    const first = await act.addSupply({ visitId: visit.id, itemId: 4 as Id, key: actionKey() });
+    expect(first.ok && first.value.place_id).toBeNull();
+    expect((await act.saveSettings({ supplies_place_id: DEMO_ROOM.id })).ok).toBe(true);
+    const second = await act.addSupply({ visitId: visit.id, itemId: 4 as Id, key: actionKey() });
+    expect(second.ok && second.value.place_id).toBe(DEMO_ROOM.id);
+    // The line recorded before the setting was given keeps what it said.
+    expect(db.rows.appointment_supplies.find((line) => first.ok && line.id === first.value.id)!.place_id).toBeNull();
   });
 
   it("is closed once its visit is seen: no change, no not-used, no removal — and still an addition", async () => {

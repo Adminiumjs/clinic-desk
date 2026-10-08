@@ -70,7 +70,11 @@ const PORTS_PER_RUN = 3;
 const ADMIN = { email: process.env["E2E_ADMIN_EMAIL"] ?? "e2e@adminium.local", password: process.env["E2E_ADMIN_PASSWORD"] ?? "adminium-e2e-password" };
 const PREFIX = "clinic_";
 
-/** What 0.3.0 adds to 0.2.3's tables, from the manifest: the update's plan must be exactly this. */
+/**
+ * What 0.3.0 adds to 0.2.3's tables, from the manifest: the update's plan must
+ * be exactly this. Where a supply line is taken from is filled from the
+ * practice's setting by a rule, and a rule is no column: it adds nothing here.
+ */
 const NEW_TABLES = ["appointment_supplies"];
 const NEW_COLUMNS: Record<string, string[]> = { settings: ["supplies_place_id"] };
 
@@ -396,7 +400,13 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           const left = async () => Number((await rowsOf("inventory_stock_points")).find((point) => Number(point["item_id"]) === Number(swab.id) && Number(point["place_id"]) === Number(room.id))!["available"]);
           const start = await left();
           ok(await staff.patch(`${data("appointments")}/${String(made.seen)}`, { values: { status: "ready" } }));
-          ok(await staff.post(data("appointment_supplies"), { values: { appointment_id: made.seen, item_id: swab.id, qty: "2", place_id: room.id, client_key: "44444444-4444-4444-8444-444444444445" } }), 201);
+          // The column the update added holds nothing yet; a manager says where supplies are taken from, once.
+          const [settings] = await rows("settings");
+          expect(settings!["supplies_place_id"]).toBeNull();
+          ok(await staff.patch(`${data("settings")}/${String(settings!.id)}`, { values: { supplies_place_id: room.id } }));
+          // The first line recorded after the update names no place: the server writes the practice's on it.
+          const line = ok(await staff.post<{ data: Row }>(data("appointment_supplies"), { values: { appointment_id: made.seen, item_id: swab.id, qty: "2", client_key: "44444444-4444-4444-8444-444444444445" } }), 201).data;
+          expect(Number(line["place_id"])).toBe(Number(room.id));
           // Recording it moves nothing: the shelf is counted when the visit is seen.
           expect(await left()).toBe(start);
           const seen = await staff.patch<{ postings?: { ledger: string; state: string }[] }>(`${data("appointments")}/${String(made.seen)}`, { values: { status: "seen", recall_weeks: 6 } });
