@@ -50,7 +50,7 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
   const records = useCan("appointment_supplies", "create");
   const moves = useCan("appointments", "update");
   const correcting = useSupplies((s) => s.correcting[visit.id] === true);
-  const manager = role === "manager" || role === null;
+  const manager = role === "manager";
   const seen = visit.status === "seen";
   // The clinician's own list while the patient is with them; a manager's too.
   const editable = records && (visit.status === "with_clinician" || visit.status === "ready");
@@ -61,6 +61,16 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
   const [failed, setFailed] = useState<{ retry: () => void; words: string } | null>(null);
   const [asking, setAsking] = useState(false);
   const running = useRef(false);
+  const correctButton = useRef<HTMLDivElement>(null);
+  const question = useRef<HTMLDivElement>(null);
+  // The question takes the focus when it opens, and gives it back to the button that asked.
+  useEffect(() => {
+    if (asking) question.current?.querySelector<HTMLElement>("button")?.focus();
+  }, [asking]);
+  const stopAsking = () => {
+    setAsking(false);
+    setTimeout(() => correctButton.current?.querySelector<HTMLElement>("button")?.focus(), 0);
+  };
 
   /** One save at a time; a refusal is said under the list, with the way to try again. */
   const save = (work: () => Promise<Outcome<unknown>>) => {
@@ -212,19 +222,32 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
         </Btn>
       )}
       {seen && manager && records && moves && !asking && (
-        <Btn kind="ghost" icon={Undo2} disabled={busy} style={{ ...btnGhost, width: "100%", marginBlockStart: 4 }} onClick={() => setAsking(true)}>
-          {t("supplies.correct")}
-        </Btn>
+        <div ref={correctButton} style={{ display: "flex" }}>
+          <Btn kind="ghost" icon={Undo2} disabled={busy} style={{ ...btnGhost, width: "100%", marginBlockStart: 4 }} onClick={() => setAsking(true)}>
+            {t("supplies.correct")}
+          </Btn>
+        </div>
       )}
       {asking && (
-        <div role="alertdialog" aria-label={t("supplies.correct.title")} style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 13, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+        <div
+          ref={question}
+          role="alertdialog"
+          aria-label={t("supplies.correct.title")}
+          data-keeps-escape
+          onKeyDown={(event) => {
+            // Escape answers the question, not the whole panel.
+            if (event.key !== "Escape") return;
+            event.stopPropagation();
+            stopAsking();
+          }}
+          style={{ display: "flex", flexDirection: "column", gap: 10, padding: 12, borderRadius: 13, background: "var(--surface-2)", border: "1px solid var(--border)" }}>
           <strong style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.02em" }}>{t("supplies.correct.title")}</strong>
           <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("supplies.correct.body", { name })}</p>
           <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
             <Btn busy={busy} style={{ ...btnPrimary, height: 36 }} onClick={takeBack}>
               {t("supplies.correct.confirm")}
             </Btn>
-            <Btn kind="ghost" disabled={busy} style={{ ...btnGhost, height: 36 }} onClick={() => setAsking(false)}>
+            <Btn kind="ghost" disabled={busy} style={{ ...btnGhost, height: 36 }} onClick={stopAsking}>
               {t("common.cancel")}
             </Btn>
           </div>
@@ -281,8 +304,15 @@ function Picker({ kits, taken, busy, onKit, onItem }: { kits: readonly KitOffer[
   const [hits, setHits] = useState<StockItem[] | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLDivElement>(null);
+  const opener = useRef<HTMLButtonElement>(null);
+  const wasOpen = useRef(false);
   const listId = useId();
   const typed = q.trim();
+  // Closed again (a pick, Cancel, Escape): the focus goes back to "Add an item", never out of the panel.
+  useEffect(() => {
+    if (wasOpen.current && !open) opener.current?.focus();
+    wasOpen.current = open;
+  }, [open]);
 
   useEffect(() => {
     if (!open) return;
@@ -307,6 +337,7 @@ function Picker({ kits, taken, busy, onKit, onItem }: { kits: readonly KitOffer[
   if (!open) {
     return (
       <button
+        ref={opener}
         type="button"
         className="rh-gi"
         disabled={busy}

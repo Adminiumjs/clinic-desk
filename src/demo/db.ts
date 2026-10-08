@@ -278,7 +278,8 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
       if (ref === "appointment_supplies") {
         // Once its visit is seen the line has left the shelf: it is closed until the visit is taken back.
         const changed = SUPPLY_COUNTED.find((column) => column in next && next[column] !== before[column]);
-        if (changed !== undefined && supplyClosed(before["appointment_id"] as Id)) throw new DemoRefusal(409, "POSTING_REFUSED", "This row has been handed over: put it back first.", { reason: "mapped-changed", column: changed });
+        // (A line marked not used was never taken: it has nothing open, and may still be marked used.)
+        if (changed !== undefined && before["not_used_at"] === null && supplyClosed(before["appointment_id"] as Id)) throw new DemoRefusal(409, "POSTING_REFUSED", "This row has been handed over: put it back first.", { reason: "mapped-changed", column: changed });
         if (SUPPLY_STAMPED.some((column) => column in next && next[column] !== before[column])) {
           next["changed_by"] = writer.name;
           next["changed_at"] = isoNow();

@@ -21,7 +21,8 @@ import { ensureDays, loadDesk, setDeskReads, useDesk } from "./desk.ts";
 import { venueDay } from "../data/venueTime.ts";
 import { isFeatureOn, setConnectedAddOns } from "./features.ts";
 import { SUPPLIES } from "../lib/features.ts";
-import { holdSupplies, loadSupplies, setSuppliesPort, useSupplies } from "./supplies.ts";
+import { SuppliesGone } from "../data/supplies.ts";
+import { forgetSupplies, holdSupplies, loadSupplies, setSuppliesPort, suppliesChanged, useSupplies } from "./supplies.ts";
 import { setSink } from "./writes.ts";
 
 let db: DemoDb;
@@ -56,6 +57,9 @@ function visitAt(status: Appointment["status"]): Appointment {
 const hold = async (visit: Appointment) => {
   await loadDesk();
   await ensureDays(venueDay(Date.parse(visit.starts_at), DEMO_ZONE));
+  // As a screen does: the supplies are read, and kept current, while it shows them.
+  holdSupplies(visit.id);
+  await loadSupplies(visit.id);
 };
 
 beforeEach(async () => {
@@ -67,7 +71,7 @@ beforeEach(async () => {
   setSink(demoSink(db, () => ({ origin: "desk", name: "Tom Villaseñor" })));
   setSuppliesPort(demoSuppliesPort(db));
   setConnectedAddOns({ inventory: { version: "", settings: {} } });
-  useSupplies.setState({ byVisit: {}, correcting: {} });
+  forgetSupplies();
   useDesk.setState({ me: { name: "Tom Villaseñor", email: null, role: "manager", roleName: "Clinic manager", access: null } });
   await loadDesk();
 });
@@ -196,27 +200,82 @@ describe("the demo's shelf", () => {
     expect([jab.status, SUPPLIES_VISIT.label]).toEqual(["seen", "visit:h-wren"]);
     seedDemoSupplies(db, { id: jab.id, seenAt: jab.seen_at, by: SUPPLIES_VISIT.by });
     seedDemoSupplies(db, { id: jab.id, seenAt: jab.seen_at, by: SUPPLIES_VISIT.by });
-    await loadDesk();
-    await ensureDays(venueDay(Date.parse(jab.starts_at), DEMO_ZONE));
-    await loadSupplies(jab.id);
+    await hold(jab);
     expect(view(jab.id).lines.map((shown) => [shown.line.qty, shown.batch?.code ?? null, shown.notUsed])).toEqual(FLU_LINES.map((line) => [line.qty, line.batch === undefined ? null : DEMO_FLU_BATCH.code, line.notUsed === true]));
     expect(view(jab.id).lines.every((shown) => shown.line.recorded_by === SUPPLIES_VISIT.by)).toBe(true);
   });
 
-  it("keeps a visit's supplies only while a screen shows them, and hides the feature when the stock list is gone", async () => {
+  it("keeps a visit's supplies only while a screen shows them, and reads nothing for a panel that has closed", async () => {
     const visit = visitAt("with_clinician");
-    await hold(visit);
+    await loadDesk();
+    await ensureDays(venueDay(Date.parse(visit.starts_at), DEMO_ZONE));
     const [panel, sheet] = [holdSupplies(visit.id), holdSupplies(visit.id)];
     await loadSupplies(visit.id);
     panel();
     expect(useSupplies.getState().byVisit[visit.id]).toBeDefined();
     sheet();
     expect(useSupplies.getState().byVisit[visit.id]).toBeUndefined();
+    // A save that lands after the panel closed reads nothing back: no list is kept for a screen nobody has open.
+    expect((await act.addSupply({ visitId: visit.id, itemId: 4 as Id, key: actionKey() })).ok).toBe(true);
+    expect(useSupplies.getState().byVisit[visit.id]).toBeUndefined();
+  });
+
+  it("hides the feature when the stock list is gone", async () => {
+    const visit = visitAt("with_clinician");
+    await hold(visit);
     expect(isFeatureOn(SUPPLIES)).toBe(true);
     // Inventory disconnected while the desk is open: its names can no longer be read.
     const real = demoSuppliesPort(db);
-    setSuppliesPort({ ...real, load: async () => Promise.reject(new (await import("../data/supplies.ts")).SuppliesGone()) });
+    setSuppliesPort({ ...real, load: async () => Promise.reject(new SuppliesGone()) });
     await loadSupplies(visit.id);
     expect(isFeatureOn(SUPPLIES)).toBe(false);
+    expect(useSupplies.getState().byVisit).toEqual({});
+  });
+
+  it("reads once for a burst of changes from other desks", async () => {
+    const visit = visitAt("with_clinician");
+    await hold(visit);
+    const real = demoSuppliesPort(db);
+    let reads = 0;
+    setSuppliesPort({ ...real, load: (...args) => ((reads += 1), real.load(...args)) });
+    for (let i = 0; i < 6; i += 1) suppliesChanged();
+    await new Promise((resolve) => setTimeout(resolve, 260));
+    expect(reads).toBe(1);
+  });
+});
+
+describe("a kit half on the visit", () => {
+  it("is offered again until every thing in it is there, and a confirmed batch can be taken back", async () => {
+    const visit = visitAt("ready");
+    await hold(visit);
+    const whole = demoSink(db, () => ({ origin: "desk", name: "Tom Villaseñor" }));
+    // Refused, not dropped, on its third line: the first two are saved.
+    let n = 0;
+    setSink({ ...whole, insert: async (ref, values) => ((n += 1) === 3 ? Promise.reject(new SinkError("no", "refused", 422, "VALIDATION_FAILED")) : whole.insert(ref, values)) });
+    expect((await act.addKit({ visitId: visit.id, ...kit(), key: actionKey() })).ok).toBe(false);
+    expect(view(visit.id).kits.find((offer) => offer.id === DEMO_FLU_KIT.id)!.added).toBe(false);
+    setSink(whole);
+    expect((await act.addKit({ visitId: visit.id, ...kit(), key: actionKey() })).ok).toBe(true);
+    expect(view(visit.id).kits.find((offer) => offer.id === DEMO_FLU_KIT.id)!.added).toBe(true);
+    expect(view(visit.id).lines.length).toBe(DEMO_FLU_KIT.lines.length);
+    const vaccine = view(visit.id).lines.find((shown) => shown.tracksBatches)!;
+    await act.confirmBatch({ visitId: visit.id, lineId: vaccine.line.id, batchId: DEMO_FLU_BATCH.id });
+    expect((await act.confirmBatch({ visitId: visit.id, lineId: vaccine.line.id, batchId: null })).ok).toBe(true);
+    const again = view(visit.id).lines.find((shown) => shown.tracksBatches)!;
+    expect([again.batch, again.proposals.map((batch) => batch.code)]).toEqual([null, [DEMO_FLU_BATCH.code]]);
+  });
+});
+
+describe("a visit taken back and sent off again", () => {
+  it("keeps its one recall, whatever the sheet is asked the second time", async () => {
+    const visit = visitAt("ready");
+    await hold(visit);
+    const first = await act.sendOff({ visitId: visit.id, payment: null, recallWeeks: 6, followUp: null, key: actionKey() });
+    expect(first.ok).toBe(true);
+    expect((await act.setStatus(visit.id, "ready")).ok).toBe(true);
+    // Another day, another key, the recall chosen again.
+    const second = await act.sendOff({ visitId: visit.id, payment: null, recallWeeks: 6, followUp: null, key: actionKey() });
+    expect(second.ok).toBe(true);
+    expect(db.rows.recalls.filter((recall) => recall.from_appointment_id === visit.id).length).toBe(1);
   });
 });

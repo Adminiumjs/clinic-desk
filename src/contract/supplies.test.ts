@@ -48,6 +48,9 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { FLU_LINES, SUPPLIES_VISIT } from "../data/sample-supplies.ts";
+import type { SessionTransport } from "../data/sessionSource.ts";
+import { sessionStockReads, SuppliesGone, suppliesPort } from "../data/supplies.ts";
+import type { Id } from "../data/types.ts";
 import { DEMO_START, DEMO_ZONE } from "../lib/clock.ts";
 import { ROLES } from "../manifest/roles.ts";
 import { addOnBundle, appBundle, boot, Caller, ENGINES, missing, ok, packedVersion, until, type Engine, type Server } from "./harness.ts";
@@ -210,6 +213,28 @@ describe.skipIf(why !== null)(`a visit's supplies on a built Adminium with Inven
       const one = (table: string, rowId: number) => `${data(table)}/${String(rowId)}`;
       const visitsTable = "clinic_appointments";
       const linesTable = "clinic_appointment_supplies";
+      /** The visit of the flu vaccination, once it is seen: what the desk's own reads are shown. */
+      let fluVisit: Row;
+      /**
+       * The desk's session, as one person: the three calls the desk's supplies
+       * reads make of it, answered by the real server under that person's grants.
+       */
+      const deskOf = (caller: Caller): SessionTransport =>
+        ({
+          connection: async () => connectionId,
+          get: async (path: string) => {
+            const reply = await caller.get(path);
+            if (reply.status >= 400) throw Object.assign(new Error(`GET ${path} answered ${String(reply.status)}`), { status: reply.status });
+            return reply.body;
+          },
+          port: {
+            list: async (ref: string, opts: { limit: number; offset: number; where?: unknown; order?: string }) => {
+              const query = `limit=${String(opts.limit)}&offset=${String(opts.offset)}${opts.where === undefined ? "" : `&where=${encodeURIComponent(JSON.stringify(opts.where))}`}${opts.order === undefined ? "" : `&order=${encodeURIComponent(opts.order)}`}`;
+              return { data: ok(await caller.get<{ data: Row[] }>(`${data(`clinic_${ref}`)}?${query}`)).data };
+            },
+          },
+        }) as unknown as SessionTransport;
+      const today = () => new Date(DEMO_START).toISOString().slice(0, 10);
       let stock: { items: Row[]; batches: Row[]; places: Row[]; room: Row; flu: Row; fluBatch: Row; kit: Row; kitLines: Row[] };
       const item = (sku: string) => stock.items.find((found) => found["sku"] === sku)!;
       /** What Inventory says is left of an item in the Treatment room. */
@@ -286,7 +311,51 @@ describe.skipIf(why !== null)(`a visit's supplies on a built Adminium with Inven
         expect(notesOf(sent)).toEqual([]);
         expect(await leftAll()).toEqual({ ...before, "VAC-FLU": before["VAC-FLU"]! - 1, "SYR-5": before["SYR-5"]! - 1, "NDL-23G": before["NDL-23G"]! - 1, "SWAB-ALC": before["SWAB-ALC"]! - 2, "GLV-M": before["GLV-M"]! - 1 });
         expect(await inBatch()).toBe(7);
+        fluVisit = visit;
       }, 240_000);
+
+      it("shows the desk what Inventory says, through the desk's own reads: the clinician the whole of it, reception the names and no more", async () => {
+        // The nurse's kind of visit offers the flu kit: a link an owner makes on the visit type's Stock tab.
+        ok(await staff.post(data("inventory_links"), { values: { source_table: "clinic:visit_types", source_row: String(fluVisit["visit_type_id"]), kind: "kit", kit_id: stock.kit.id } }), 201);
+        const visit = { id: Number(fluVisit.id) as Id, visitTypeId: Number(fluVisit["visit_type_id"]) as Id };
+        const context = { today: today(), defaultPlaceId: Number(stock.room.id) as Id };
+        const clinician = suppliesPort(sessionStockReads(deskOf(people["clinician"]!)));
+        const seenByClinician = await clinician.load(visit, { ...context, records: true });
+        expect(seenByClinician.lines.map((shown) => [shown.name, shown.line.qty, shown.unit, shown.kitName, shown.batch?.code ?? null, shown.notUsed])).toEqual([
+          ["Flu vaccine, single dose", 1, "each", "Flu vaccination", "FV26A", false],
+          ["Syringe 5 ml", 1, "each", "Flu vaccination", null, false],
+          ["Needle 23G", 1, "each", "Flu vaccination", null, false],
+          ["Alcohol swab", 2, "each", "Flu vaccination", null, false],
+          ["Plaster strip", 1, "each", "Flu vaccination", null, true],
+          ["Gloves, nitrile, M", 1, "pair", "Flu vaccination", null, false],
+        ]);
+        // What is left where the line was taken from, and Inventory's own low mark, as they stand after the visit.
+        expect([seenByClinician.lines[0]!.left, seenByClinician.lines[0]!.low]).toEqual([await left("VAC-FLU"), true]);
+        const flu = seenByClinician.kits.find((kit) => kit.name === "Flu vaccination")!;
+        expect([flu.linked, flu.added, flu.lines.length]).toEqual([true, true, 6]);
+        expect(seenByClinician.kits.find((kit) => kit.name === "Dressing change")).toMatchObject({ linked: false, added: false });
+        expect((await clinician.searchItems("swab")).map((found) => found.name)).toEqual(["Alcohol swab"]);
+        expect((await clinician.places()).map((place) => place.name)).toContain("Treatment room");
+        // Reception: the same lines by name and what is left; no kit to press, no batch to propose.
+        const reception = await suppliesPort(sessionStockReads(deskOf(people["reception"]!))).load(visit, { ...context, records: false });
+        expect(reception.lines.map((shown) => [shown.name, shown.kitName, shown.left !== null])).toEqual(seenByClinician.lines.map((shown) => [shown.name, shown.kitName, true]));
+        expect(reception.kits).toEqual([]);
+        // Asked as if it recorded, reception is refused the reads that are not its own, and the view is the same.
+        expect((await suppliesPort(sessionStockReads(deskOf(people["reception"]!))).load(visit, { ...context, records: true })).kits).toEqual([]);
+      }, 240_000);
+
+      it("takes a line that names no place from the item's own shelf, and lets no clinician mark a visit seen", async () => {
+        const visit = await takeVisit("ready");
+        // As the desk records it today: the clinician names no place.
+        ok(await people["clinician"]!.post(data(linesTable), { values: { appointment_id: visit.id, item_id: item("SWAB-ALC").id, qty: "2", client_key: randomBytes(18).toString("hex") } }), 201);
+        const was = await left("SWAB-ALC");
+        const tried = await people["clinician"]!.patch(one(visitsTable, visit.id), { values: { status: "seen" } });
+        expect(tried.status, JSON.stringify(tried.body).slice(0, 300)).toBe(403);
+        expect(await left("SWAB-ALC")).toBe(was);
+        const sent = await seen(visit);
+        expect(sent.status, JSON.stringify(sent.body).slice(0, 800)).toBe(200);
+        expect(await left("SWAB-ALC")).toBe(was - 2);
+      }, 180_000);
 
       it("leaves a batch nobody confirmed not known on the visit: nothing fills it in, and the dose still leaves the shelf", async () => {
         const visit = await takeVisit("ready");
@@ -513,6 +582,8 @@ describe.skipIf(why !== null)(`a visit's supplies on a built Adminium with Inven
         expect(ok(await people["reception"]!.get<{ data: Row[] }>(`${data(linesTable)}?limit=200`)).data.length).toBe(lines);
         // The roles' reads of Inventory went with it.
         expect([403, 404]).toContain((await people["clinician"]!.get(`${data("inventory_items")}?limit=1`)).status);
+        // And the desk's own reads say so, which is what hides the tab on a desk left open.
+        await expect(suppliesPort(sessionStockReads(deskOf(people["clinician"]!))).load({ id: Number(visit.id) as Id, visitTypeId: Number(visit["visit_type_id"]) as Id }, { today: today(), defaultPlaceId: null })).rejects.toBeInstanceOf(SuppliesGone);
         // A visit is seen as it always was: nothing asks an add-on that is not there.
         const sent = await people["reception"]!.patch<Saved>(one(visitsTable, visit.id), { values: { status: "seen" } });
         expect([sent.status, sent.body.postings ?? []]).toEqual([200, []]);

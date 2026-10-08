@@ -358,7 +358,9 @@ export function sendOff(input: SendOffInput): Promise<Outcome<{ visit: Appointme
     let recall: Recall | null = null;
     if (input.recallWeeks !== null && input.recallWeeks > 0 && visit.patient_id !== null && visit.clinician_id !== null) {
       const day = venueDay(Date.parse(visit.starts_at), practiceZone());
-      recall = (await insert("recalls", {
+      // A visit taken back and sent off again already has its recall: it is kept, never made a second time.
+      const earlier = Object.values(useDesk.getState().recalls).find((held) => held.from_appointment_id === visit.id && held.client_key !== stepKey(input.key, "b"));
+      recall = earlier ?? ((await insert("recalls", {
         patient_id: visit.patient_id,
         from_appointment_id: visit.id,
         visit_type_id: visit.visit_type_id,
@@ -368,8 +370,8 @@ export function sendOff(input: SendOffInput): Promise<Outcome<{ visit: Appointme
         reason: visit.reason,
         status: "due",
         client_key: stepKey(input.key, "b"),
-      })) as unknown as Recall;
-      if (input.followUp !== null) {
+      })) as unknown as Recall);
+      if (input.followUp !== null && earlier === undefined) {
         const next = await insert("appointments", {
           patient_id: visit.patient_id,
           visit_type_id: visit.visit_type_id,

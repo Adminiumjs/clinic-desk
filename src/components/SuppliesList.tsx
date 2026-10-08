@@ -23,7 +23,8 @@ import { btnGhostSm, chipStyle, iconBtnStyle, pill, Stepper } from "./ui.tsx";
 export interface SupplyEdits {
   qty(lineId: Id, qty: number): void;
   notUsed(lineId: Id, on: boolean): void;
-  confirm(lineId: Id, batchId: Id): void;
+  /** Say which batch; null takes the confirmation back, and the batches are offered again. */
+  confirm(lineId: Id, batchId: Id | null): void;
   remove(lineId: Id): void;
 }
 
@@ -57,11 +58,13 @@ function Row({ view, first, edits, busy, t }: { view: SupplyView; first: boolean
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-.015em", lineHeight: 1.35, textWrap: "pretty", ...(notUsed ? { color: "var(--fg-subtle)", textDecoration: "line-through" } : { color: "var(--fg)" }) }}>{name}</span>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ ...meta, ...(dim === undefined ? {} : { color: dim }) }}>{t("supplies.qty", { qty: num(line.qty), unit: view.unit }).trim()}</span>
-            {view.batch !== null && (
-              <span style={{ ...meta, display: "inline-flex", alignItems: "center", gap: 4, ...(dim === undefined ? {} : { color: dim }) }}>
-                {editing && !notUsed && <Check size={12} aria-hidden="true" />}
+            {view.batch !== null && !(editing && !notUsed) && <span style={{ ...meta, ...(dim === undefined ? {} : { color: dim }) }}>{t("supplies.batch", { code: view.batch.code })}</span>}
+            {view.batch !== null && editing && !notUsed && (
+              // Confirmed by this clinician — and theirs to take back, if it was the wrong one.
+              <button type="button" className="rh-gi rh-touch" disabled={busy} aria-label={t("supplies.changeBatch", { name })} title={t("supplies.changeBatch", { name })} onClick={() => edits.confirm(line.id, null)} style={{ ...btnGhostSm, height: 26, paddingInline: 8, gap: 4, fontFamily: meta.fontFamily, fontSize: 11.5, fontWeight: 600 }}>
+                <Check size={12} aria-hidden="true" />
                 {t("supplies.batch", { code: view.batch.code })}
-              </span>
+              </button>
             )}
             {unknown && <span style={meta}>{t("supplies.batchUnknown")}</span>}
             {!notUsed && short && <span style={{ ...meta, color: "var(--warn)" }}>{t("supplies.leftNone")}</span>}

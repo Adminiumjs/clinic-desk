@@ -96,7 +96,7 @@ export interface KitOffer {
   linked: boolean;
   /** The lines pressing it would add, in the kit's order. */
   lines: { itemId: Id; qty: number }[];
-  /** Already on the visit. */
+  /** Already on the visit, every line of it. */
   added: boolean;
 }
 
@@ -231,19 +231,26 @@ export async function loadVisitSupplies(reads: StockReads, visit: { id: Id; visi
     };
   });
 
-  const onVisit = new Set(lines.map((line) => line.kit_id).filter((kit): kit is Id => kit !== null));
   const kits: KitOffer[] =
     linkRows === null
       ? []
       : kitRows
           .map((kit) => {
             const kitId = id(kit["id"])!;
+            // A kit that lists an item twice asks for it once, with both amounts: a visit holds an item of a kit once.
+            const amounts = new Map<Id, number>();
+            for (const line of kitLines) {
+              const item = id(line["item_id"]);
+              if (id(line["kit_id"]) === kitId && item !== null) amounts.set(item, (amounts.get(item) ?? 0) + num(line["qty"]));
+            }
+            const held = new Set(lines.filter((line) => line.kit_id === kitId).map((line) => line.item_id));
             return {
               id: kitId,
               name: text(kit["name"]),
               linked: linked.has(kitId),
-              lines: kitLines.filter((line) => id(line["kit_id"]) === kitId && id(line["item_id"]) !== null).map((line) => ({ itemId: id(line["item_id"])!, qty: num(line["qty"]) })),
-              added: onVisit.has(kitId),
+              lines: [...amounts].map(([itemId, qty]) => ({ itemId, qty })),
+              // Whole only when every thing in it is on the visit: a kit half added can be pressed again for the rest.
+              added: amounts.size > 0 && [...amounts.keys()].every((item) => held.has(item)),
             };
           })
           .filter((kit) => kit.lines.length > 0)
@@ -301,7 +308,7 @@ export function sessionStockReads(transport: SessionTransport): StockReads {
     } catch (error) {
       // Not this person's to read, or not here at all: the caller decides what that hides.
       const status = (error as ErrorLike).status;
-      if (status === 403 || status === 404 || status === 422) return null;
+      if (status === 403 || status === 404) return null;
       throw error;
     }
     return out;

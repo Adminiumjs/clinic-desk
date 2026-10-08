@@ -96,7 +96,7 @@ async function readRows(ref: TableRef, ids: Set<Id>): Promise<{ id: Id }[] | nul
 export function applyFrame(frame: LiveFrame): void {
   // A supply line is not held by the desk: the visits whose supplies are open read theirs again.
   if (frame.table === "appointment_supplies") {
-    void suppliesChanged();
+    suppliesChanged();
     return;
   }
   if (frame.id === null) return;

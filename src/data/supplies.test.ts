@@ -205,10 +205,12 @@ describe("kits", () => {
     ]);
   });
 
-  it("marks a kit already on the visit, and names it on its lines", async () => {
-    const view = await loadVisitSupplies(reads([line(1, { item_id: 1 as Id, kit_id: 21 as Id }), line(2, { item_id: 3 as Id })]), VISIT, CONTEXT);
+  it("marks a kit on the visit only when every thing in it is there, and names it on its lines", async () => {
+    const half = await loadVisitSupplies(reads([line(1, { item_id: 1 as Id, kit_id: 21 as Id })]), VISIT, CONTEXT);
+    expect(half.kits.find((kit) => kit.id === 21)!.added).toBe(false);
+    const view = await loadVisitSupplies(reads([line(1, { item_id: 1 as Id, kit_id: 21 as Id }), line(3, { item_id: 2 as Id, kit_id: 21 as Id }), line(2, { item_id: 3 as Id })]), VISIT, CONTEXT);
     expect(view.kits.find((kit) => kit.id === 21)!.added).toBe(true);
-    expect(view.lines.map((shown) => shown.kitName)).toEqual(["Flu vaccination", null]);
+    expect(view.lines.map((shown) => shown.kitName)).toEqual(["Flu vaccination", "Flu vaccination", null]);
   });
 
   it("offers reception none: it reads the lines and their names, not what a kit holds", async () => {

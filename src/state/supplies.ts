@@ -52,7 +52,8 @@ const put = (visitId: Id, entry: SuppliesEntry) => useSupplies.setState((s) => (
 /** Read one visit's supplies. Hides the feature when Inventory turns out not to be there. */
 export async function loadSupplies(visitId: Id): Promise<void> {
   const visit = useDesk.getState().visits[visitId];
-  if (port === null || visit === undefined) return;
+  // Read only for a screen that shows it: a save that lands after its panel closed keeps nothing.
+  if (port === null || visit === undefined || !shown.has(visitId)) return;
   const mine = (counter += 1);
   asked.set(visitId, mine);
   const held = useSupplies.getState().byVisit[visitId];
@@ -65,7 +66,7 @@ export async function loadSupplies(visitId: Id): Promise<void> {
     if (error instanceof SuppliesGone) {
       // Disconnected while the desk was open: the tab and the section go with it.
       forgetAddOn("inventory");
-      useSupplies.setState({ byVisit: {}, correcting: {} });
+      forgetSupplies();
       return;
     }
     put(visitId, { state: "failed", view: useSupplies.getState().byVisit[visitId]?.view ?? null });
@@ -98,6 +99,13 @@ export function holdSupplies(visitId: Id): () => void {
   };
 }
 
+/** Let go of every visit's supplies: Inventory is gone, or the desk starts over. */
+export function forgetSupplies(): void {
+  shown.clear();
+  asked.clear();
+  useSupplies.setState({ byVisit: {}, correcting: {} });
+}
+
 /** A manager took a seen visit back to correct its supplies, or finished doing so. */
 export function setCorrecting(visitId: Id, on: boolean): void {
   useSupplies.setState((s) => {
@@ -107,7 +115,15 @@ export function setCorrecting(visitId: Id, on: boolean): void {
   });
 }
 
-/** Someone changed a supply line (this desk or another): read the open visits again. */
-export function suppliesChanged(): Promise<void> {
-  return Promise.all(Object.keys(useSupplies.getState().byVisit).map((visitId) => loadSupplies(Number(visitId) as Id))).then(() => undefined);
+/** How long supply frames gather before one read answers them all (a kit is six lines, and six frames). */
+const GATHER_MS = 150;
+let gathering: ReturnType<typeof setTimeout> | null = null;
+
+/** Someone changed a supply line (this desk or another): the visits on screen read theirs again, once for the burst. */
+export function suppliesChanged(): void {
+  if (gathering !== null) return;
+  gathering = setTimeout(() => {
+    gathering = null;
+    for (const visitId of shown.keys()) void loadSupplies(visitId);
+  }, GATHER_MS);
 }

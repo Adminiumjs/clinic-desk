@@ -183,7 +183,18 @@ function VisitPanel({ visit }: { visit: Appointment }) {
       case "correct":
         // The correction is made where the supplies are: the button takes the manager there.
         return (
-          <Btn key={action} kind="ghost" icon={Undo2} disabled={busy !== null} style={ghost} onClick={() => setTab("supplies")}>
+          <Btn
+            key={action}
+            kind="ghost"
+            icon={Undo2}
+            disabled={busy !== null}
+            style={ghost}
+            onClick={() => {
+              setTab("supplies");
+              // This button leaves with its tab: the focus goes to the tab now shown, not out of the panel.
+              setTimeout(() => document.getElementById(tabs.tabId("supplies"))?.focus(), 0);
+            }}
+          >
             {t("supplies.correct")}
           </Btn>
         );

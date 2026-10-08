@@ -62,7 +62,11 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
 
   // What an earlier try of this send-off already saved, found by its key.
   const savedPayment = useMemo(() => savedByKey(Object.values(desk.payments), stepKey(key, "a")), [desk.payments, key]);
-  const savedRecall = useMemo(() => savedByKey(Object.values(desk.recalls), stepKey(key, "b")), [desk.recalls, key]);
+  // The recall this send-off saved — or one an earlier send-off of the same visit made, when the visit was taken back and is sent off again.
+  const savedRecall = useMemo(() => {
+    const recalls = Object.values(desk.recalls);
+    return savedByKey(recalls, stepKey(key, "b")) ?? recalls.find((recall) => recall.from_appointment_id === sheet.visitId);
+  }, [desk.recalls, key, sheet.visitId]);
 
   if (visit === undefined) {
     return (
