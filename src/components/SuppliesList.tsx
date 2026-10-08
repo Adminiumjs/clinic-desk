@@ -53,7 +53,7 @@ function Row({ view, first, edits, busy, t }: { view: SupplyView; first: boolean
   return (
     <li style={{ padding: "11px 12px", display: "flex", flexDirection: "column", gap: 8, ...(first ? {} : { borderBlockStart: "1px solid var(--border)" }) }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-        <div style={{ flex: "1 1 170px", minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
+        <div style={{ flex: "1 1 120px", minWidth: 0, display: "flex", flexDirection: "column", gap: 5 }}>
           <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: "-.015em", lineHeight: 1.35, textWrap: "pretty", ...(notUsed ? { color: "var(--fg-subtle)", textDecoration: "line-through" } : { color: "var(--fg)" }) }}>{name}</span>
           <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span style={{ ...meta, ...(dim === undefined ? {} : { color: dim }) }}>{t("supplies.qty", { qty: num(line.qty), unit: view.unit }).trim()}</span>
