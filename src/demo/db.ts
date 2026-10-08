@@ -40,6 +40,7 @@ export class DemoRefusal extends Error {
 const DEFAULTS: Partial<Record<TableRef, Row>> = {
   appointments: { status: "booked", channel: "desk", late_cancel: false, waived: 0, paid: 0, check_status: null },
   payments: { method: "card", voided: false },
+  appointment_supplies: { kit_id: null, qty: 1, not_used_at: null, batch_id: null, place_id: null, changed_by: null, changed_at: null },
   registrations: { status: "new" },
   recalls: { status: "due" },
   waiting_list: { status: "waiting", channel: "desk", part_of_day: "any" },
@@ -55,6 +56,7 @@ const STAMP_TIME: Record<string, string> = { checked_in: "checked_in_at", roomed
 const STAMP_WHO: Partial<Record<TableRef, string>> = {
   appointments: "booked_by",
   payments: "taken_by",
+  appointment_supplies: "recorded_by",
   write_offs: "written_by",
   check_notes: "written_by",
   messages: "created_by",
@@ -71,9 +73,14 @@ const MADE_AT: Partial<Record<TableRef, string[]>> = {
   waiting_list: ["created_at"],
   messages: ["created_at"],
   payments: ["paid_at"],
+  appointment_supplies: ["recorded_at"],
   write_offs: ["written_at"],
   day_closes: ["closed_at"],
 };
+
+/** What a supply line hands to the stock list (closed once its visit is seen), and what a change of it stamps. */
+const SUPPLY_COUNTED = ["qty", "not_used_at", "batch_id", "place_id", "item_id"];
+const SUPPLY_STAMPED = ["qty", "not_used_at", "batch_id"];
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 
@@ -99,6 +106,8 @@ export interface DemoDb {
 
 export function createDemoDb(start: Rows, now: () => number, zone: string, random: () => number = Math.random): DemoDb {
   const rows = structuredClone(start) as Rows;
+  // A table the sample holds no rows of is still a table.
+  (rows as Partial<Rows>).appointment_supplies ??= [];
   const listeners = new Set<(ref: TableRef, change: DemoChange) => void>();
   const tell = (ref: TableRef, kind: DemoChange["kind"], id: Id) => listeners.forEach((l) => l(ref, { kind, id }));
   const table = <R extends TableRef>(ref: R) => rows[ref] as unknown as Row[];
@@ -200,6 +209,9 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
     if (ref === "payments" && next["voided"] === true && before?.["voided"] !== true) row["voided_by"] = writer.name;
   }
 
+  /** A seen visit's supply lines have been taken off the shelf. */
+  const supplyClosed = (appointmentId: Id): boolean => rows.appointments.find((visit) => visit.id === appointmentId)?.status === "seen";
+
   return {
     rows,
     now,
@@ -225,6 +237,12 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
         row["balance"] = Number(row["fee"] ?? 0);
       }
       if (ref === "registrations") row["ref"] = code(ref, "RG-");
+      if (ref === "appointment_supplies") {
+        // A line always says what was used; a visit holds an item of a kit once.
+        if (row["item_id"] === undefined || row["item_id"] === null) throw new DemoRefusal(422, "VALIDATION_FAILED", "A value this needs is missing.", { fields: { item_id: { code: "required" } } });
+        const twin = rows.appointment_supplies.find((line) => row["kit_id"] !== null && line.appointment_id === row["appointment_id"] && line.kit_id === row["kit_id"] && line.item_id === row["item_id"]);
+        if (twin !== undefined) throw new DemoRefusal(409, "UNIQUE_VIOLATION", "A record with this value already exists.", { column: "item_id" });
+      }
       if (ref === "payments") copyFromVisit(row);
       const who = STAMP_WHO[ref];
       if (who !== undefined && writer.origin === "desk") row[who] = writer.name;
@@ -257,6 +275,15 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
         }
       }
       if ("client_key" in next) unique(ref, "client_key", next["client_key"], id);
+      if (ref === "appointment_supplies") {
+        // Once its visit is seen the line has left the shelf: it is closed until the visit is taken back.
+        const changed = SUPPLY_COUNTED.find((column) => column in next && next[column] !== before[column]);
+        if (changed !== undefined && supplyClosed(before["appointment_id"] as Id)) throw new DemoRefusal(409, "POSTING_REFUSED", "This row has been handed over: put it back first.", { reason: "mapped-changed", column: changed });
+        if (SUPPLY_STAMPED.some((column) => column in next && next[column] !== before[column])) {
+          next["changed_by"] = writer.name;
+          next["changed_at"] = isoNow();
+        }
+      }
       if (ref === "appointments") {
         const moved = ["starts_at", "clinician_id", "visit_type_id"].some((c) => c in next && next[c] !== before[c]);
         const recounted = "status" in next && !COUNTED.includes(before["status"] as Appointment["status"]) && COUNTED.includes(next["status"] as Appointment["status"]);
@@ -283,6 +310,10 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
     },
 
     remove(ref, id) {
+      if (ref === "appointment_supplies") {
+        const line = rows.appointment_supplies.find((found) => found.id === id);
+        if (line !== undefined && supplyClosed(line.appointment_id)) throw new DemoRefusal(409, "POSTING_REFUSED", "This row has been handed over: put it back first.", { reason: "receipt-open" });
+      }
       const list = table(ref);
       const at = list.findIndex((r) => r["id"] === id);
       if (at !== -1) {

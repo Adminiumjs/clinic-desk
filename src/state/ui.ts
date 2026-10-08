@@ -68,6 +68,8 @@ export interface UiState {
   sheet: Sheet | null;
   /** The visit panel: which visit it shows. */
   panel: Id | null;
+  /** The view of the visit the panel opens on (it has two only where a visit's supplies are counted). */
+  panelTab: "visit" | "supplies";
   /** The phone-width menu (desk, standalone only). */
   menu: boolean;
   placing: Placing | null;
@@ -88,6 +90,7 @@ export const useUi = create<UiState>(() => ({
   toasts: [],
   sheet: null,
   panel: null,
+  panelTab: "visit",
   menu: false,
   placing: null,
   sheetDay: null,
@@ -120,8 +123,8 @@ export function openSheet(sheet: Sheet): void {
 export function closeSheet(): void {
   useUi.setState({ sheet: null });
 }
-export function openPanel(visitId: Id): void {
-  useUi.setState({ panel: visitId, sheet: null });
+export function openPanel(visitId: Id, tab: "visit" | "supplies" = "visit"): void {
+  useUi.setState({ panel: visitId, panelTab: tab, sheet: null });
 }
 export function closePanel(): void {
   useUi.setState({ panel: null });

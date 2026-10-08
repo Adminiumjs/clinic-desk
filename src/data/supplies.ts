@@ -113,9 +113,21 @@ export interface StockItem {
   unit: string;
 }
 
+export interface LoadContext {
+  today: Day;
+  /** The practice's own shelf (its setting), for a line that names none. */
+  defaultPlaceId: Id | null;
+  /**
+   * Whether the reader records supplies. Someone who only reads them (reception)
+   * is not asked what a kit holds or which batch to propose: those reads are
+   * not theirs, and asking would only be refused.
+   */
+  records?: boolean;
+}
+
 export interface SuppliesPort {
   /** Everything the Supplies tab of one visit shows. Throws `SuppliesGone` when Inventory is not there. */
-  load(visit: { id: Id; visitTypeId: Id }, context: { today: Day; defaultPlaceId: Id | null }): Promise<VisitSupplies>;
+  load(visit: { id: Id; visitTypeId: Id }, context: LoadContext): Promise<VisitSupplies>;
   /** Items to add by hand: the active ones whose name holds `text`, by name. */
   searchItems(text: string): Promise<StockItem[]>;
   /** The places supplies can be taken from (the Settings picker). */
@@ -153,12 +165,13 @@ export function proposalsOf(levels: readonly Raw[], batches: ReadonlyMap<Id, Bat
 }
 
 /** The view of one visit's supplies, from the reads. */
-export async function loadVisitSupplies(reads: StockReads, visit: { id: Id; visitTypeId: Id }, context: { today: Day; defaultPlaceId: Id | null }): Promise<VisitSupplies> {
+export async function loadVisitSupplies(reads: StockReads, visit: { id: Id; visitTypeId: Id }, context: LoadContext): Promise<VisitSupplies> {
   const lines = await reads.lines(visit.id);
+  const records = context.records !== false;
   // Which kits this visit's type offers, and what each holds. Only someone who records reads these.
   const [kitRows, linkRows] = await Promise.all([
     reads.rows("kits", { column: "active", op: "eq", value: true }, "name.asc", 200),
-    reads.rows("links", { and: [{ column: "source_table", op: "eq", value: VISIT_TYPES_REF }, { column: "source_row", op: "eq", value: String(visit.visitTypeId) }, { column: "kind", op: "eq", value: "kit" }] }),
+    records ? reads.rows("links", { and: [{ column: "source_table", op: "eq", value: VISIT_TYPES_REF }, { column: "source_row", op: "eq", value: String(visit.visitTypeId) }, { column: "kind", op: "eq", value: "kit" }] }) : Promise.resolve(null),
   ]);
   // The kits are names: a person with a clinic role reads them whenever Inventory is here for this app.
   if (kitRows === null) throw new SuppliesGone();
@@ -179,7 +192,7 @@ export async function loadVisitSupplies(reads: StockReads, visit: { id: Id; visi
         ]);
   if (items === null) throw new SuppliesGone();
   const pointIds = (points ?? []).map((point) => id(point["id"])!);
-  const levels = pointIds.length === 0 ? [] : ((await reads.rows("levels", oneOf("stock_point_id", pointIds), undefined, 1000)) ?? []);
+  const levels = pointIds.length === 0 || !records ? [] : ((await reads.rows("levels", oneOf("stock_point_id", pointIds), undefined, 1000)) ?? []);
 
   const itemOf = new Map(items.map((item) => [id(item["id"])!, item]));
   const kitName = new Map(kitRows.map((kit) => [id(kit["id"])!, text(kit["name"])]));

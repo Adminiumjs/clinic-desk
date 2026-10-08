@@ -213,9 +213,12 @@ describe("kits", () => {
 
   it("offers reception none: it reads the lines and their names, not what a kit holds", async () => {
     const asked = reads([line(1, { item_id: 1 as Id, kit_id: 21 as Id })], { hidden: ["links", "kit_lines", "levels"] });
-    const view = await loadVisitSupplies(asked, VISIT, CONTEXT);
+    const view = await loadVisitSupplies(asked, VISIT, { ...CONTEXT, records: false });
     expect(view.kits).toEqual([]);
-    expect(asked.asked).not.toContain("kit_lines");
+    // Never asked: a read that is not theirs is not sent to be refused.
+    expect(asked.asked.filter((table) => ["links", "kit_lines", "levels"].includes(table))).toEqual([]);
+    // And a reader who was not told apart is refused quietly, with the same result.
+    expect((await loadVisitSupplies(reads([line(1, { item_id: 1 as Id, kit_id: 21 as Id })], { hidden: ["links", "kit_lines", "levels"] }), VISIT, CONTEXT)).kits).toEqual([]);
     // The line still reads whole: its name, its kit, what is left — and no batch to propose.
     expect([view.lines[0]!.name, view.lines[0]!.kitName, view.lines[0]!.left, view.lines[0]!.proposals]).toEqual(["Flu vaccine, single dose", "Flu vaccination", 8, []]);
   });

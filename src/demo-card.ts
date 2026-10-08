@@ -91,7 +91,11 @@ export const DEMO_SCREENS: DemoCardScreen[] = [
     { id: "jump-to-now", icon: "locate-fixed", labelKey: "demo.do.jumpToNow" },
     { id: "race", icon: "timer", labelKey: "demo.do.race" },
   ]),
-  desk("waiting", "armchair", [{ id: "someone-arrives", icon: "log-in", labelKey: "demo.do.someoneArrives" }]),
+  desk("waiting", "armchair", [
+    { id: "someone-arrives", icon: "log-in", labelKey: "demo.do.someoneArrives" },
+    { id: "supplies-recording", icon: "package-plus", labelKey: "demo.do.suppliesRecording" },
+    { id: "supplies-seen", icon: "package-check", labelKey: "demo.do.suppliesSeen" },
+  ]),
   desk("patients", "users"),
   desk("week", "calendar-range"),
   desk("waitlist", "list-ordered"),

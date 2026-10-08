@@ -17,7 +17,7 @@ import { create } from "zustand";
 import { SuppliesGone, type SuppliesPort, type VisitSupplies } from "../data/supplies.ts";
 import type { Id } from "../data/types.ts";
 import { today } from "../lib/clock.ts";
-import { useDesk } from "./desk.ts";
+import { can, useDesk } from "./desk.ts";
 import { forgetAddOn } from "./features.ts";
 
 export interface SuppliesEntry {
@@ -58,7 +58,7 @@ export async function loadSupplies(visitId: Id): Promise<void> {
   const held = useSupplies.getState().byVisit[visitId];
   put(visitId, { state: held?.view == null ? "loading" : "ready", view: held?.view ?? null });
   try {
-    const view = await port.load({ id: visitId, visitTypeId: visit.visit_type_id }, { today: today(), defaultPlaceId: useDesk.getState().settings?.supplies_place_id ?? null });
+    const view = await port.load({ id: visitId, visitTypeId: visit.visit_type_id }, { today: today(), defaultPlaceId: useDesk.getState().settings?.supplies_place_id ?? null, records: can("appointment_supplies", "create") });
     if (asked.get(visitId) === mine) put(visitId, { state: "ready", view });
   } catch (error) {
     if (asked.get(visitId) !== mine) return;

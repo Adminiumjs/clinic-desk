@@ -297,6 +297,18 @@ async function bootDemo(): Promise<void> {
   // The demo's kiosk keeps the real one's rules; its "Staff" goes straight back to the desk (there is no sign-in to leave).
   const [{ setKioskPort }, { demoKioskPort }, { go }] = await Promise.all([import("./data/kiosk.ts"), import("./demo/kiosk.ts"), import("./state/ui.ts")]);
   setKioskPort(demoKioskPort(db, async () => go("daysheet")));
+  /*
+   * A visit's supplies, on the demo's own shelf. A real practice connects
+   * Inventory for this; the demo says it is connected so the same screens
+   * show, and answers them from its own fixed figures — nothing is asked of
+   * any add-on.
+   */
+  const [{ demoSuppliesPort, seedDemoSupplies, DEMO_SUPPLIES_VISIT }, { setSuppliesPort }, { setConnectedAddOns }] = await Promise.all([import("./demo/supplies.ts"), import("./state/supplies.ts"), import("./state/features.ts")]);
+  const jab = db.rows.appointments.find((visit) => visit.ref === DEMO_SUPPLIES_VISIT);
+  const nurse = jab === undefined ? undefined : db.rows.clinicians.find((clinician) => clinician.id === jab.clinician_id);
+  if (jab !== undefined) seedDemoSupplies(db, { id: jab.id, seenAt: jab.seen_at, by: nurse?.name ?? DEMO_DESK.name });
+  setSuppliesPort(demoSuppliesPort(db));
+  setConnectedAddOns({ inventory: { version: "", settings: {} } });
   useDesk.setState({
     me: {
       name: DEMO_DESK.name,

@@ -104,7 +104,7 @@ function VisitPanel({ visit }: { visit: Appointment }) {
   // With Inventory connected the panel has two views of the visit; without it, it is the panel it always was.
   const supplies = useFeature(SUPPLIES);
   const recordsSupplies = useCan("appointment_supplies", "update");
-  const [tab, setTab] = useState<"visit" | "supplies">("visit");
+  const [tab, setTab] = useState<"visit" | "supplies">(() => useUi.getState().panelTab);
   const tabs = useTabs();
 
   const fee = visit.fee ?? type?.fee ?? 0;

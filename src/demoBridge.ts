@@ -19,10 +19,11 @@ import { now, today } from "./lib/clock.ts";
 import { DEMO_CODE, demoRace } from "./demo/ports.ts";
 import { scanReminders, type DemoDb } from "./demo/db.ts";
 import type { Id, View } from "./data/types.ts";
+import { ensureDays } from "./state/desk.ts";
 import { resync } from "./state/live.ts";
 import { loadCatalogue, usePatients } from "./state/patients.ts";
 import { sendDemoSignal } from "./state/demoSignal.ts";
-import { go, overlayOpen, setPersona, toast, useUi } from "./state/ui.ts";
+import { go, openPanel, overlayOpen, setPersona, toast, useUi } from "./state/ui.ts";
 import { instantOf } from "./data/publicPatients.ts";
 
 interface Bridge {
@@ -126,6 +127,23 @@ function shortcuts(bridge: Bridge): Record<DemoShortcutId, () => void> {
         .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0];
       if (due !== undefined) db.update("appointments", due.id as Id, { status: "checked_in" }, { origin: "desk", name: "Demo" });
       void changed();
+    },
+    // A patient in with the nurse: their visit opens on its Supplies tab, ready to record.
+    "supplies-recording": () => {
+      const day = today();
+      const todays = db.rows.appointments.filter((a) => dayOf(a.starts_at) === day && a.patient_id !== null).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+      const visit = todays.find((a) => a.status === "with_clinician" || a.status === "ready") ?? todays.find((a) => a.status === "roomed" || a.status === "checked_in") ?? todays.find((a) => a.status === "booked");
+      if (visit === undefined) return;
+      if (visit.status !== "with_clinician" && visit.status !== "ready") db.update("appointments", visit.id as Id, { status: "with_clinician" }, { origin: "desk", name: "Demo" });
+      void changed().then(() => openPanel(visit.id as Id, "supplies"));
+    },
+    // The flu jab of last week, seen: what was recorded, closed.
+    "supplies-seen": () => {
+      const line = db.rows.appointment_supplies.find((found) => db.rows.appointments.find((a) => a.id === found.appointment_id)?.status === "seen");
+      const visit = line === undefined ? undefined : db.rows.appointments.find((a) => a.id === line.appointment_id);
+      if (visit === undefined) return;
+      // The desk holds today's visits; one of last week is read with its day.
+      void ensureDays(dayOf(visit.starts_at)).then(() => openPanel(visit.id as Id, "supplies"));
     },
     "sample-closure": () => fill("hours.sampleClosure"),
     "fill-cormac": () => sendDemoSignal("sooner.fill", { mobile: DEMO_FILLS.returning.mobile, bornOn: DEMO_FILLS.returning.bornOn }),
