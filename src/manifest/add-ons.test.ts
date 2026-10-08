@@ -201,6 +201,16 @@ describe("a visit's supplies, counted by Inventory", () => {
     expect(tablesOf("manager")).toEqual(tablesOf("clinician"));
   });
 
+  it("opens nothing of a visit's supplies to a patient's page, the kiosk's key or any anonymous door", () => {
+    const text = JSON.stringify(manifest.publicAccess);
+    expect(manifest.publicAccess.filter((entry) => entry.table === "appointment_supplies")).toEqual([]);
+    // Not as a table, not as a column selected through another entry, not as rows shown with a visit.
+    expect(text).not.toContain("appointment_supplies");
+    expect(text).not.toContain("supplies_place_id");
+    // No email, document or outbox link reads a supply line either: what a visit used never leaves the desk.
+    for (const part of [manifest.outbox, manifest.emailTemplates, manifest.documents]) expect(JSON.stringify(part)).not.toContain("appointment_supplies");
+  });
+
   it("ships its sample lines in a second file, loaded only with Inventory", () => {
     expect(manifest.sampleData).toEqual({ file: "seeds/clinic.sample.json", addOns: { inventory: { file: "seeds/clinic.inventory.sample.json" } } });
   });

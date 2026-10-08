@@ -58,7 +58,7 @@ connected to (Postgres, MySQL or SQLite).
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
    ([Installing apps](https://docs.adminium.dev/self-hosting/installing-apps/)).
    It creates its eighteen `clinic_*` tables, the Clinic section's pages, four
-   roles and two browser keys. It offers two add-ons, neither needed
+   roles and two browser keys. It offers three add-ons, none of them needed
    ([Add-ons](#add-ons)): tick them, or add them later.
 2. Optionally tick **Add sample data** (or add it later from the app's settings
    page) — Rowan Health's clinicians, patients and a busy day, with statuses
@@ -83,7 +83,7 @@ connected to (Postgres, MySQL or SQLite).
 | Role | What it may do |
 | --- | --- |
 | **Clinic reception** | The desk and the Records pages: book, move, check in, send off, take payments, registrations, recalls, the waiting list, closures, the outbox, end of day. Not: void a payment, write off, change opening hours or the desk settings. |
-| **Clinic clinician** | The day sheet, the waiting room and patients (reading), and moving a visit along: in the room, with them, ready to go. |
+| **Clinic clinician** | The day sheet, the waiting room and patients (reading), moving a visit along (in the room, with them, ready to go), and — with Inventory — recording what the visit used. |
 | **Clinic manager** | Everything, the Manage pages included: voiding, write-offs, hours, settings. |
 | **Clinic kiosk** | The arrivals kiosk and nothing else — no table at all. |
 
@@ -116,9 +116,9 @@ domains (`example.com`) are never sent to.
 
 ## Add-ons
 
-Clinic Desk runs a practice's day on its own. Two add-ons are offered when
-you install it; you may leave out either, and add it later from Adminium's
-add-ons.
+Clinic Desk runs a practice's day on its own. Three add-ons are offered when
+you install it; you may leave out any of them, and add it later from
+Adminium's add-ons.
 
 - **Holiday calendars** — *Mark public holidays as closures.* A country's
   public holidays, shown on **Hours & closures** as suggestions. **Add as a
@@ -145,6 +145,72 @@ add-ons.
   address, policy number and clinician: the receipt reads them from links a
   payment has carried since. Clinic Desk 0.2.1 needs Invoices & Receipts 1.0.4
   or later for this.
+
+- **Inventory** — *Record the supplies a visit uses and keep the cupboard
+  counted.* With it connected, a visit has a **Supplies** tab. The clinician
+  records what the visit used while the patient is with them: a kit pressed
+  (the kits linked to the kind of visit are offered; any other is found by
+  search), an item added by hand, how many, a line marked **Not used**, and
+  for an item kept in batches the batch, which they confirm and nobody
+  confirms for them. Reception sees the same list, read-only, on the visit
+  and on the send-off sheet. Nothing leaves the shelf until the visit is
+  **seen**; then Inventory takes every line that is not marked not used, and
+  puts it all back if the visit is taken back.
+
+  A visit is never held up by a count. If the books say there is none left,
+  the visit is seen all the same and Inventory marks the shelf for a count.
+  Once a visit is seen its lines are closed. A manager can still add what was
+  forgotten, or use **Correct supplies**: the visit goes back to Ready to go,
+  the list is put right, and **Done** marks it seen again — the visit's
+  payment and recall are not touched, but its "seen at" time becomes the time
+  of the correction.
+
+  What the practice keeps is a link: a supply line names an item of Inventory
+  and holds no name, batch code or cost of its own, and no stock record says
+  which visit or patient a supply was for. No clinic role reads what anything
+  cost. While Inventory is disconnected the lines stay, shown by number.
+
+  **Setting it up.** In Inventory, make the items and (if you use them) the
+  kits; on a visit type's page in Adminium, its **Stock** tab links the kits
+  that kind of visit offers. In **Desk settings**, *Where supplies are taken
+  from* names the shelf; left empty, Inventory's own default place is used.
+
+  **Taking it away.** Switch Inventory off for Clinic Desk first (Adminium
+  refuses to remove it while the desk's supplies are on), then remove it. If
+  Inventory is switched off, updating or without its files while still
+  connected, a visit is still seen and its supplies are worked out when
+  Inventory is back (**Record them now**, on Inventory's rules page) — unless
+  one of its items is set to stop when there is none, which stops the visit
+  being seen until Inventory answers or the owner switches the stock rule off
+  on that same page.
+
+  Without Inventory the tab, the section and the setting are not there, and
+  the desk is the desk it was. Clinic Desk 0.3.0 needs Inventory 1.0.8 or
+  later for this.
+
+## Moving from 0.2.x
+
+0.3.0 updates a 0.2.0 – 0.2.3 install in place. It needs Adminium 0.3.20 or
+later.
+
+- **What the update adds:** one table (the supplies a visit used, empty), and
+  one column on the practice's settings (where supplies are taken from,
+  empty). Nothing else is created, and no row, column or figure you have is
+  changed: the update is checked against a 0.2.3 practice with its data on
+  SQLite, Postgres and MySQL, row by row.
+- **Update Holiday calendars first.** Holiday calendars up to 1.0.7 says it
+  works with Clinic Desk 0.2, and Adminium will not let an update leave an
+  add-on behind: the update of Clinic Desk is refused, with nothing changed,
+  until Holiday calendars is 1.0.8 or later. Update the add-on, then the app.
+  Invoices & Receipts needs no change.
+- **Nothing shows until Inventory is connected.** The update does not install
+  Inventory. Connect it when you want a visit's supplies counted; no visit
+  seen before then takes anything off a shelf, and nothing is worked out
+  backwards.
+- **Roles.** The clinician's role gains the right to record a visit's
+  supplies, and each clinic role gains read-only access to the names, units,
+  kits, batches and counts in Inventory — given when Inventory is connected,
+  taken back when it is removed.
 
 ## The demo
 
@@ -187,12 +253,19 @@ drift test fails when the two disagree.
 
 `src/contract/` installs this manifest on a built Adminium, with the add-ons
 packed from a checkout of the add-ons repository, and drives it over HTTP on
-SQLite, Postgres and MySQL: the install with both add-ons, the sample, a
+SQLite, Postgres and MySQL: the install with its add-ons, the sample, a
 receipt drawn from the desk's door and one emailed with its receipt attached,
-the feature switched off, and an update from 0.2.0. It skips unless
-`ADMINIUM_REPO` points at a built Adminium checkout (`ADD_ONS_REPO` at the
-add-ons, `../add-ons` by default); `TEST_POSTGRES_URL` and `TEST_MYSQL_URL`
-add the other two engines.
+the feature switched off, an update from 0.2.0 (`contract.test.ts`); a
+visit's supplies with Inventory, as a clinician, reception and a manager
+(`supplies.test.ts`); and the update of a live 0.2.3 practice, row by row
+(`update.test.ts`). It skips unless `ADMINIUM_REPO` points at a built
+Adminium checkout (`ADD_ONS_REPO` at the add-ons, `../add-ons` by default);
+`TEST_POSTGRES_URL` and `TEST_MYSQL_URL` add the other two engines. The
+update test also needs the published 0.2.3 package
+(`CONTRACT_FROM_TARBALL`, from
+`https://downloads.adminium.dev/apps/clinic/clinic-0.2.3.tgz`; it is refused
+unless it matches `RELEASES.json`) and a built checkout of Adminium v0.3.9,
+the release 0.2.3 was made for (`CONTRACT_FROM_ADMINIUM`).
 
 ## Self-host stack
 

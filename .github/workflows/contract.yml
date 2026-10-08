@@ -15,16 +15,25 @@
 #                  0.2.0. It skips without the two checkouts; here
 #                  `ADMINIUM_REQUIRE_CONTRACT=1` makes a skip a failure, so it
 #                  cannot go quietly green.
+#   supplies       `src/contract/supplies.test.ts`: the same, with Inventory —
+#                  a visit's supplies recorded and taken off the shelf when it
+#                  is seen, as each clinic role.
+#   the update     `src/contract/update.test.ts`: the PUBLISHED 0.2.3 package
+#                  (downloaded here, refused unless it matches RELEASES.json)
+#                  installed on the Adminium it was released for, that Adminium
+#                  replaced in place by this one, and the app updated — every
+#                  row as it was. So a second Adminium is built: `FROM_REF`.
 #   the outline    `src/manifest/add-ons.test.ts` holds the receipt's mapping
 #                  to Invoices & Receipts' own outline when the add-ons are
 #                  built beside it.
 #
-# The add-ons checkout is taken at `ADD_ONS_REF`: the add-ons release this
-# version of the app was built against (1.0.4: the receipt's date of service,
-# who attended and the patient's reference). The update step reads the released
-# 0.2.0 from this repo's history, so the checkout is a full one.
+# Adminium is taken at `ADMINIUM_REF`, the release this version of the app
+# asks for, and the add-ons at `ADD_ONS_REF`, the add-ons release it was built
+# against (Inventory, and a Holiday calendars that works with this app's 0.3).
+# The 0.2.0 update step reads the released 0.2.0 from this repo's history, so
+# the checkout is a full one.
 #
-# Both product checkouts are moved out of the workspace before the suite runs:
+# The product checkouts are moved out of the workspace before the suite runs:
 # vitest collects every `*.test.ts` under the repo root, and the products' own
 # suites are not this repo's to run.
 
@@ -37,13 +46,17 @@ on:
   workflow_dispatch:
 
 env:
-  ADD_ONS_REF: v1.0.4
+  ADMINIUM_REF: v0.3.20
+  ADD_ONS_REF: v1.0.9
+  # What the update starts from: the released app, and the Adminium it was released for.
+  FROM_VERSION: 0.2.3
+  FROM_REF: v0.3.9
 
 jobs:
   contract:
     name: three-engine contract
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     services:
       postgres:
@@ -82,7 +95,15 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: MoSofi/Adminium
+          ref: ${{ env.ADMINIUM_REF }}
           path: .adminium-product
+
+      - name: Check out the Adminium the released app was made for
+        uses: actions/checkout@v4
+        with:
+          repository: MoSofi/Adminium
+          ref: ${{ env.FROM_REF }}
+          path: .adminium-from
 
       - name: Check out the add-ons
         uses: actions/checkout@v4
@@ -100,15 +121,26 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm turbo run build --filter="@adminium/e2e..."
 
+      - name: Build that earlier Adminium
+        run: |
+          cd .adminium-from
+          corepack enable
+          pnpm install --frozen-lockfile
+          pnpm turbo run build --filter="@adminium/e2e..."
+
+      - name: Fetch the released package
+        run: curl -fsSL "https://downloads.adminium.dev/apps/clinic/clinic-${FROM_VERSION}.tgz" -o "$RUNNER_TEMP/clinic-${FROM_VERSION}.tgz"
+
       - name: Build the add-ons
         run: |
           cd .add-ons
           npm ci
           npm run build
 
-      - name: Move both checkouts out of the workspace
+      - name: Move the checkouts out of the workspace
         run: |
           mv "$GITHUB_WORKSPACE/.adminium-product" "$RUNNER_TEMP/adminium-product"
+          mv "$GITHUB_WORKSPACE/.adminium-from" "$RUNNER_TEMP/adminium-from"
           mv "$GITHUB_WORKSPACE/.add-ons" "$RUNNER_TEMP/add-ons"
 
       - name: Types
@@ -119,6 +151,8 @@ jobs:
           ADMINIUM_REPO: ${{ runner.temp }}/adminium-product
           ADD_ONS_REPO: ${{ runner.temp }}/add-ons
           ADMINIUM_REQUIRE_CONTRACT: "1"
+          CONTRACT_FROM_ADMINIUM: ${{ runner.temp }}/adminium-from
+          CONTRACT_FROM_TARBALL: ${{ runner.temp }}/clinic-${{ env.FROM_VERSION }}.tgz
           TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
           TEST_MYSQL_URL: mysql://root@127.0.0.1:3306
         run: npx vitest run
