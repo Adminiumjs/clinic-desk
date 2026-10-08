@@ -88,7 +88,14 @@ connected to (Postgres, MySQL or SQLite).
 | **Clinic kiosk** | The arrivals kiosk and nothing else — no table at all. |
 
 The desk shows each person the buttons their role allows, but the server is
-what refuses: a hidden button is not a lock.
+what refuses: a hidden button is not a lock. A clinician's moves are locked:
+the server takes a visit from them only while it is checked in, in the room
+or with them, so a visit that is ready or seen is not theirs to move — taking
+a seen visit back, which puts its supplies back on the shelf, is a manager's.
+One thing is the desk's alone: a clinician is offered **Add an item** and the
+kits only while the patient is with them or ready to go. That is a button the
+desk does not show, not a lock: the server would take a supply line from a
+clinician for a visit in any state.
 
 ## The arrivals kiosk
 
@@ -174,6 +181,11 @@ Adminium's add-ons.
   kits; on a visit type's page in Adminium, its **Stock** tab links the kits
   that kind of visit offers. In **Desk settings**, *Where supplies are taken
   from* names the shelf; left empty, Inventory's own default place is used.
+  The shelf is written on each line as it is recorded — nobody who records
+  chooses it — so a change of the setting moves the lines recorded after it,
+  never one already on a visit. The sample practice comes with its nurse's
+  kind of visit (*Nurse — dressing or vaccination*) linked to two of
+  Inventory's sample kits, Flu vaccination and Dressing change.
 
   **Taking it away.** Switch Inventory off for Clinic Desk first (Adminium
   refuses to remove it while the desk's supplies are on), then remove it. If
