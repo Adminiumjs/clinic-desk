@@ -47,6 +47,12 @@ export function timeRange(at: Instant, minutes: number): string {
 export function dayShort(day: Day): string {
   return dtf({ weekday: "short", day: "numeric", month: "short" }, "UTC").format(noon(day));
 }
+/** `Tue 27 Oct 2026` — a day far enough off that its year matters (a batch's expiry). */
+export function dayShortYear(day: Day): string {
+  const parts = dtf({ weekday: "short", day: "numeric", month: "short", year: "numeric" }, "UTC").formatToParts(noon(day));
+  const english = locale().startsWith("en");
+  return parts.map((p, i) => (english && p.type === "literal" && parts[i - 1]?.type === "weekday" ? " " : p.value)).join("");
+}
 /** `Tuesday 28 July 2026` */
 export function dayLong(day: Day): string {
   const parts = dtf({ weekday: "long", day: "numeric", month: "long", year: "numeric" }, "UTC").formatToParts(noon(day));

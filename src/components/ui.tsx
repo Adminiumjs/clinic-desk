@@ -15,7 +15,7 @@
  */
 import { useEffect, useId, useRef, type CSSProperties, type ReactNode, type RefObject } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Check, CheckCheck, Circle, CircleX, DoorOpen, Loader2, LogIn, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { Check, CheckCheck, Circle, CircleX, DoorOpen, Loader2, LogIn, Minus, Plus, UserRoundCheck, UserRoundX, X } from "lucide-react";
 
 import type { AppointmentStatus } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -304,6 +304,95 @@ export function Chip({ on, onClick, children, icon: Icon, style, disabled }: { o
   );
 }
 
+/**
+ * Tabs: two or more views of one thing, in the design's segmented track.
+ *
+ * Real tabs, not pressed buttons: one tab stop for the strip, Left and Right
+ * (mirrored in a right-to-left page), Home and End move between tabs and show
+ * the one landed on, and each tab names the panel it shows. The panel itself
+ * is the caller's: `tabId(id)` and `panelId(id)` from `useTabs` tie the two.
+ */
+export function useTabs(): { tabId: (id: string) => string; panelId: (id: string) => string } {
+  const base = useId();
+  return { tabId: (id) => `${base}-tab-${id}`, panelId: (id) => `${base}-panel-${id}` };
+}
+
+export function Tabs<T extends string>({
+  label,
+  tabs,
+  value,
+  onChange,
+  ids,
+  style,
+}: {
+  label: string;
+  tabs: readonly { id: T; label: string; icon?: LucideIcon }[];
+  value: T;
+  onChange: (next: T) => void;
+  ids: { tabId: (id: string) => string; panelId: (id: string) => string };
+  style?: CSSProperties;
+}) {
+  const track = useRef<HTMLDivElement>(null);
+  const move = (to: number) => {
+    const next = tabs[(to + tabs.length) % tabs.length];
+    if (next === undefined) return;
+    onChange(next.id);
+    // Focus follows the tab shown, so the arrow keys keep working from where the eye is.
+    track.current?.querySelector<HTMLElement>(`#${CSS.escape(ids.tabId(next.id))}`)?.focus();
+  };
+  return (
+    <div
+      ref={track}
+      role="tablist"
+      aria-label={label}
+      style={{ ...segTrack, ...style }}
+      onKeyDown={(event) => {
+        const at = tabs.findIndex((tab) => tab.id === value);
+        const rtl = getComputedStyle(event.currentTarget).direction === "rtl";
+        const step = event.key === "ArrowRight" ? (rtl ? -1 : 1) : event.key === "ArrowLeft" ? (rtl ? 1 : -1) : 0;
+        if (step !== 0) move(at + step);
+        else if (event.key === "Home") move(0);
+        else if (event.key === "End") move(tabs.length - 1);
+        else return;
+        event.preventDefault();
+      }}
+    >
+      {tabs.map(({ id, label: text, icon: Icon }) => (
+        <button
+          key={id}
+          type="button"
+          role="tab"
+          id={ids.tabId(id)}
+          aria-selected={id === value}
+          aria-controls={ids.panelId(id)}
+          tabIndex={id === value ? 0 : -1}
+          className="rh-chip"
+          onClick={() => onChange(id)}
+          style={segWide(id === value)}
+        >
+          {Icon !== undefined && <Icon size={13} aria-hidden="true" />}
+          {text}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** One fewer, one more: a count changed a step at a time, never typed. Each button says what it changes. */
+export function Stepper({ fewer, more, onFewer, onMore, canFewer = true, disabled = false }: { fewer: string; more: string; onFewer: () => void; onMore: () => void; canFewer?: boolean; disabled?: boolean }) {
+  const button: CSSProperties = { ...iconBtnStyle, width: 30, height: 30 };
+  return (
+    <span className="rh-stepper" style={{ display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
+      <button type="button" className="rh-gi rh-touch" onClick={onFewer} aria-label={fewer} title={fewer} disabled={disabled || !canFewer} style={{ ...button, ...(disabled || !canFewer ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}>
+        <Minus size={14} aria-hidden="true" />
+      </button>
+      <button type="button" className="rh-gi rh-touch" onClick={onMore} aria-label={more} title={more} disabled={disabled} style={{ ...button, ...(disabled ? { opacity: 0.45, cursor: "not-allowed" } : {}) }}>
+        <Plus size={14} aria-hidden="true" />
+      </button>
+    </span>
+  );
+}
+
 /** The design's switch (52 × 30), a real `role="switch"` with its state. */
 export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
   return (
@@ -416,6 +505,8 @@ export function useModal(root: RefObject<HTMLElement | null>, onClose: () => voi
     first?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // A part inside the layer that has its own use for Escape (a search that closes first) keeps it.
+        if ((e.target as Element | null)?.closest?.("[data-keeps-escape]") != null) return;
         e.stopPropagation();
         close.current();
         return;

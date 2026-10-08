@@ -28,9 +28,11 @@ export interface SuppliesEntry {
 
 interface SuppliesState {
   byVisit: Record<Id, SuppliesEntry>;
+  /** Seen visits a manager took back to put their supplies right: the tab offers "Done" until they are seen again. */
+  correcting: Record<Id, true>;
 }
 
-export const useSupplies = create<SuppliesState>(() => ({ byVisit: {} }));
+export const useSupplies = create<SuppliesState>(() => ({ byVisit: {}, correcting: {} }));
 
 let port: SuppliesPort | null = null;
 /** Set once at boot: Inventory's reads on a hosted desk, the demo's own figures in the demo. */
@@ -63,20 +65,45 @@ export async function loadSupplies(visitId: Id): Promise<void> {
     if (error instanceof SuppliesGone) {
       // Disconnected while the desk was open: the tab and the section go with it.
       forgetAddOn("inventory");
-      useSupplies.setState({ byVisit: {} });
+      useSupplies.setState({ byVisit: {}, correcting: {} });
       return;
     }
     put(visitId, { state: "failed", view: useSupplies.getState().byVisit[visitId]?.view ?? null });
   }
 }
 
-/** A visit's panel closed: its supplies are no longer kept current. */
-export function closeSupplies(visitId: Id): void {
-  asked.delete(visitId);
+/** How many screens show each visit's supplies now (its panel's tab, the send-off sheet). */
+const shown = new Map<Id, number>();
+
+/**
+ * Show a visit's supplies on a screen: read now, kept current while any
+ * screen shows them, and let go when the last one closes. Answers the release.
+ */
+export function holdSupplies(visitId: Id): () => void {
+  shown.set(visitId, (shown.get(visitId) ?? 0) + 1);
+  void loadSupplies(visitId);
+  return () => {
+    const left = (shown.get(visitId) ?? 1) - 1;
+    if (left > 0) {
+      shown.set(visitId, left);
+      return;
+    }
+    shown.delete(visitId);
+    asked.delete(visitId);
+    useSupplies.setState((s) => {
+      if (s.byVisit[visitId] === undefined) return s;
+      const { [visitId]: _gone, ...rest } = s.byVisit;
+      return { byVisit: rest };
+    });
+  };
+}
+
+/** A manager took a seen visit back to correct its supplies, or finished doing so. */
+export function setCorrecting(visitId: Id, on: boolean): void {
   useSupplies.setState((s) => {
-    if (s.byVisit[visitId] === undefined) return s;
-    const { [visitId]: _gone, ...rest } = s.byVisit;
-    return { byVisit: rest };
+    if ((s.correcting[visitId] === true) === on) return s;
+    const { [visitId]: _was, ...rest } = s.correcting;
+    return { correcting: on ? { ...rest, [visitId]: true } : rest };
   });
 }
 

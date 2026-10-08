@@ -49,6 +49,7 @@ import { patient } from "../strings/patient.ts";
 import { demo } from "../strings/demo.ts";
 import { waitlist } from "../strings/waitlist.ts";
 import { kiosk } from "../strings/kiosk.ts";
+import { supplies } from "../strings/supplies.ts";
 
 /**
  * Parity guard. `en-US` defines the keys; the other seven must each carry a
@@ -71,7 +72,8 @@ const AREAS: [
   Area<(typeof demo)["en-US"]>,
   Area<(typeof waitlist)["en-US"]>,
   Area<(typeof kiosk)["en-US"]>,
-] = [nav, common, deskDay, deskWork, deskSheets, patient, demo, waitlist, kiosk];
+  Area<(typeof supplies)["en-US"]>,
+] = [nav, common, deskDay, deskWork, deskSheets, patient, demo, waitlist, kiosk, supplies];
 
 export const MESSAGES = Object.fromEntries(
   LOCALE_TAGS.map((t) => [t, Object.assign({}, ...AREAS.map((a) => a[t] ?? {}))]),
@@ -87,7 +89,8 @@ export type MessageKey =
   | keyof (typeof patient)["en-US"]
   | keyof (typeof demo)["en-US"]
   | keyof (typeof waitlist)["en-US"]
-  | keyof (typeof kiosk)["en-US"];
+  | keyof (typeof kiosk)["en-US"]
+  | keyof (typeof supplies)["en-US"];
 
 /** One add-on's bundle, as it travels on the add-on object. */
 export type AddOnMessages = Readonly<Record<string, Readonly<Record<string, string>>>>;

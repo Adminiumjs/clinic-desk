@@ -29,6 +29,9 @@ import { openSheet, startPlacing, stopPlacing, toast, type Sheet as SheetKind } 
 import { Btn, Sheet, Tile, btnGhost, chipStyle, fieldStyle, kicker, monoPill, mono, segTrack, segWide } from "../components/ui.tsx";
 import { halfOf, lastBookableDay, parseAmount, savedByKey } from "./bits/logic.ts";
 import { Note, TickBox, labelText, useRefusal, useSaving } from "./bits/ui.tsx";
+import { SuppliesSection } from "../components/SuppliesTab.tsx";
+import { SUPPLIES } from "../lib/features.ts";
+import { useFeature } from "../state/features.ts";
 
 const METHODS: { id: PayMethod; icon: LucideIcon }[] = [
   { id: "card", icon: CreditCard },
@@ -44,6 +47,7 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
   const desk = useDesk();
   const visit = desk.visits[sheet.visitId];
   const refusal = useRefusal();
+  const suppliesOn = useFeature(SUPPLIES);
   const { busy, run } = useSaving();
 
   const [method, setMethod] = useState<PayMethod>("card");
@@ -127,6 +131,9 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
         if (outcome.balance !== undefined) setBalanceFromServer(outcome.balance);
         for (const row of await deskReads().visits([visit.id]).catch(() => [])) upsert("appointments", row);
         setError(t("sendOff.over", { most: money(outcome.balance ?? visit.balance) }));
+      } else if (outcome.reason === "supplies") {
+        // The payment and the recall are saved; only the last step waits. "Done" stays, to try it again.
+        setError(t("sendOff.suppliesRefused", { name: first }));
       } else setError(refusal(outcome.reason));
       return;
     }
@@ -205,6 +212,8 @@ export default function SendOff({ sheet, onClose }: { sheet: Extract<SheetKind, 
           {t("sendOff.already")}
         </Note>
       )}
+
+      {suppliesOn && <SuppliesSection visit={visit} />}
 
       {hasBalance && !alreadyDone && (
         <section aria-labelledby="co-pay" style={{ display: "flex", flexDirection: "column", gap: 10 }}>

@@ -166,7 +166,7 @@ export function mayAdvance(role: DeskRole | null, from: AppointmentStatus): bool
   return role !== "clinician" || CLINICIAN_STEPS.includes(to);
 }
 
-export type PanelAction = "checkIn" | "advance" | "sendOff" | "move" | "noShow" | "cancel" | "patient" | "payment";
+export type PanelAction = "checkIn" | "advance" | "sendOff" | "move" | "noShow" | "cancel" | "patient" | "payment" | "correct";
 
 /**
  * The visit panel's buttons, in the design's order, for a visit and the
@@ -176,7 +176,7 @@ export type PanelAction = "checkIn" | "advance" | "sendOff" | "move" | "noShow" 
  */
 export function panelActions(
   visit: Pick<Appointment, "status" | "patient_id" | "balance">,
-  who: { role: DeskRole | null; update: boolean; pay: boolean; seePatients: boolean },
+  who: { role: DeskRole | null; update: boolean; pay: boolean; seePatients: boolean; /** The visit's supplies are counted (Inventory is connected), and this person may change them. */ supplies?: boolean },
 ): PanelAction[] {
   const out: PanelAction[] = [];
   const st = visit.status;
@@ -189,6 +189,8 @@ export function panelActions(
   }
   if (visit.patient_id !== null && who.seePatients) out.push("patient");
   if (st === "seen" && visit.balance > 0 && who.pay && !clinician) out.push("payment");
+  // A seen visit's supplies are closed; a manager, and nobody else, takes the visit back to put them right.
+  if (st === "seen" && who.supplies === true && who.update && who.role === "manager") out.push("correct");
   return out;
 }
 

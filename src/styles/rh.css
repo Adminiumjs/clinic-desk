@@ -114,3 +114,8 @@
 .rh-slot-fill + .rh-slot-fill {
   margin-block-start: 12px;
 }
+
+/* Small controls a clinician presses with gloves on: 36 px on a narrow screen. */
+@media (max-width: 900px) {
+  .rh-touch { min-width: 36px !important; min-height: 36px !important; }
+}

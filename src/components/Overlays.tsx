@@ -10,7 +10,7 @@
  */
 import { useEffect, useId, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CalendarSync, CalendarX, Check, CheckCheck, Circle, DoorOpen, HandHeart, LogIn, Receipt, ShieldAlert, TriangleAlert, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
+import { CalendarDays, CalendarSync, CalendarX, Check, CheckCheck, Circle, DoorOpen, HandHeart, LogIn, Package, Receipt, ShieldAlert, TriangleAlert, Undo2, UserRound, UserRoundCheck, UserRoundX, X } from "lucide-react";
 
 import type { Appointment, AppointmentStatus } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -19,8 +19,11 @@ import { clinicianOf, patientOf, typeOf, visitName } from "../lib/desk.ts";
 import { dayOf, dayShort, money, num, timeRange } from "../lib/format.ts";
 import { cancelVisit, onSignedOut } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
+import { useFeature } from "../state/features.ts";
+import { SUPPLIES } from "../lib/features.ts";
+import SuppliesTab from "./SuppliesTab.tsx";
 import { closePanel, go, openSheet, startPlacing, toast, useUi, type Sheet } from "../state/ui.ts";
-import { Btn, btnGhost, btnPrimary, iconBtnStyle, kicker, mono, monoPill, pill, STATUS_META, Tile, Toasts, Dialog, useModal } from "./ui.tsx";
+import { Btn, btnGhost, btnPrimary, iconBtnStyle, kicker, mono, monoPill, pill, STATUS_META, Tabs, Tile, Toasts, Dialog, useModal, useTabs } from "./ui.tsx";
 import { toastIcon } from "./desk/icons.ts";
 import { advanceVisit, checkInVisit, noShowVisit } from "./desk/moves.ts";
 import { insideWindow, panelActions, type PanelAction } from "../screens/daysheet/model.ts";
@@ -98,10 +101,15 @@ function VisitPanel({ visit }: { visit: Appointment }) {
   const pay = useCan("payments", "create");
   const seePatients = useCan("patients", "read");
   const [busy, setBusy] = useState<PanelAction | null>(null);
+  // With Inventory connected the panel has two views of the visit; without it, it is the panel it always was.
+  const supplies = useFeature(SUPPLIES);
+  const recordsSupplies = useCan("appointment_supplies", "update");
+  const [tab, setTab] = useState<"visit" | "supplies">("visit");
+  const tabs = useTabs();
 
   const fee = visit.fee ?? type?.fee ?? 0;
   const note = visit.status === "seen" ? (visit.balance > 0 ? t("panel.owing", { amount: money(visit.balance) }) : t("panel.settled")) : t("panel.atDesk");
-  const actions = panelActions(visit, { role, update, pay, seePatients });
+  const actions = panelActions(visit, { role, update, pay, seePatients, supplies: supplies && recordsSupplies });
 
   const run = (action: PanelAction, work: () => Promise<unknown>) => {
     setBusy(action);
@@ -172,6 +180,13 @@ function VisitPanel({ visit }: { visit: Appointment }) {
             {t("panel.payment")}
           </Btn>
         );
+      case "correct":
+        // The correction is made where the supplies are: the button takes the manager there.
+        return (
+          <Btn key={action} kind="ghost" icon={Undo2} disabled={busy !== null} style={ghost} onClick={() => setTab("supplies")}>
+            {t("supplies.correct")}
+          </Btn>
+        );
     }
   };
 
@@ -208,21 +223,42 @@ function VisitPanel({ visit }: { visit: Appointment }) {
             </span>
           )}
         </div>
-        <div style={{ marginBlockStart: 14, padding: 14, borderRadius: 14, background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 7 }}>
-          <span style={{ ...mono(12.5, 600, "var(--fg)"), direction: "inherit", whiteSpace: "normal" }}>
-            {t("panel.when", { day: dayShort(dayOf(visit.starts_at)), range: timeRange(visit.starts_at, visit.minutes), minutes: num(visit.minutes) })}
-          </span>
-          <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.02em", color: "var(--fg)", textWrap: "pretty" }}>{visit.reason ?? type?.name ?? ""}</span>
-          <span style={{ display: "flex", alignItems: "baseline", gap: 9, marginBlockStart: 4 }}>
-            <span style={mono(13.5, 600, "var(--fg)")}>{money(fee)}</span>
-            <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{note}</span>
-          </span>
-        </div>
-        <div style={{ marginBlockStart: 18 }}>
-          <h3 style={{ ...kicker, margin: 0 }}>{t("panel.where")}</h3>
-          <Chain status={visit.status} />
-        </div>
-        {actions.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBlockStart: 18 }}>{actions.map(button)}</div>}
+        {supplies && (
+          <Tabs
+            label={t("panel.tabs")}
+            ids={tabs}
+            value={tab}
+            onChange={setTab}
+            style={{ marginBlockStart: 14 }}
+            tabs={[
+              { id: "visit", label: t("panel.tab.visit"), icon: CalendarDays },
+              { id: "supplies", label: t("panel.tab.supplies"), icon: Package },
+            ]}
+          />
+        )}
+        {supplies && tab === "supplies" ? (
+          <div role="tabpanel" id={tabs.panelId("supplies")} aria-labelledby={tabs.tabId("supplies")} tabIndex={0} style={{ marginBlockStart: 16, outline: "none" }}>
+            <SuppliesTab visit={visit} name={name} />
+          </div>
+        ) : (
+          <div {...(supplies ? { role: "tabpanel", id: tabs.panelId("visit"), "aria-labelledby": tabs.tabId("visit") } : {})}>
+          <div style={{ marginBlockStart: 14, padding: 14, borderRadius: 14, background: "var(--surface-2)", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 7 }}>
+            <span style={{ ...mono(12.5, 600, "var(--fg)"), direction: "inherit", whiteSpace: "normal" }}>
+              {t("panel.when", { day: dayShort(dayOf(visit.starts_at)), range: timeRange(visit.starts_at, visit.minutes), minutes: num(visit.minutes) })}
+            </span>
+            <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.02em", color: "var(--fg)", textWrap: "pretty" }}>{visit.reason ?? type?.name ?? ""}</span>
+            <span style={{ display: "flex", alignItems: "baseline", gap: 9, marginBlockStart: 4 }}>
+              <span style={mono(13.5, 600, "var(--fg)")}>{money(fee)}</span>
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{note}</span>
+            </span>
+          </div>
+          <div style={{ marginBlockStart: 18 }}>
+            <h3 style={{ ...kicker, margin: 0 }}>{t("panel.where")}</h3>
+            <Chain status={visit.status} />
+          </div>
+          {actions.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBlockStart: 18 }}>{actions.map(button)}</div>}
+          </div>
+        )}
       </div>
     </div>
   );

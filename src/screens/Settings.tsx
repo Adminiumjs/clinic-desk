@@ -7,7 +7,7 @@
  * everyone else the screen shows them as they are, with a line saying who can
  * change them. A control shows its new value once the server has saved it.
  */
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Clock } from "lucide-react";
 
 import type { Settings as Row } from "../data/types.ts";
@@ -17,6 +17,10 @@ import { visitsOn } from "../lib/desk.ts";
 import { useNow } from "../lib/useNow.ts";
 import { saveSettings } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
+import { SuppliesGone } from "../data/supplies.ts";
+import { SUPPLIES } from "../lib/features.ts";
+import { forgetAddOn, useFeature } from "../state/features.ts";
+import { suppliesPort } from "../state/supplies.ts";
 import { go, toast } from "../state/ui.ts";
 import { Chip, Skeleton, Switch, btnGhostSm } from "../components/ui.tsx";
 import { counted } from "./deskwork/dates.ts";
@@ -34,6 +38,23 @@ export default function Settings() {
   const desk = useDesk();
   const manager = useCan("settings", "update");
   const [saving, setSaving] = useState<string | null>(null);
+  // The shelves supplies can come off: Inventory's places, read only where Inventory is connected.
+  const supplies = useFeature(SUPPLIES);
+  const [places, setPlaces] = useState<{ id: number; name: string }[] | null>(null);
+  useEffect(() => {
+    const port = suppliesPort();
+    if (!supplies || port === null) return;
+    let live = true;
+    port
+      .places()
+      .then((found) => live && setPlaces(found))
+      .catch((error: unknown) => {
+        if (error instanceof SuppliesGone) forgetAddOn("inventory");
+      });
+    return () => {
+      live = false;
+    };
+  }, [supplies]);
 
   const save = async (id: string, patch: Patch) => {
     if (!manager || saving !== null) return;
@@ -86,6 +107,29 @@ export default function Settings() {
           </div>
           <p style={{ margin: "10px 0 0", fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("settings.cancelNote", counted(settings.cancel_hours), settings.cancel_hours)}</p>
         </Part>
+        {supplies && places !== null && (
+          <Part id="st-sp" title={t("settings.suppliesPlace")} body={t("settings.suppliesPlace.hint")}>
+            <div role="group" aria-labelledby="st-sp" style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 11 }}>
+              <Chip on={settings.supplies_place_id === null} disabled={!manager || saving !== null} onClick={() => void save("sp", { supplies_place_id: null })}>
+                {t("settings.suppliesPlace.default")}
+              </Chip>
+              {places.map((place) => (
+                <Chip
+                  key={place.id}
+                  on={settings.supplies_place_id === place.id}
+                  disabled={!manager || saving !== null}
+                  onClick={() =>
+                    void save("sp", { supplies_place_id: place.id }).then(() => {
+                      if (useDesk.getState().settings?.supplies_place_id === place.id) toast(t("settings.suppliesPlace.saved", { place: place.name }), { icon: "circle-check" });
+                    })
+                  }
+                >
+                  {place.name}
+                </Chip>
+              ))}
+            </div>
+          </Part>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: 14, paddingBlockStart: 18, borderBlockStart: "1px solid var(--border)" }}>
           <Toggle
             label={t("settings.reminders")}
