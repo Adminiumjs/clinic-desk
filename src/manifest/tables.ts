@@ -19,13 +19,14 @@
  * clock; the weekly hours are `HH:MM` text, because a weekly rule is not an
  * instant.
  */
+import { SUPPLIES } from "../lib/features.ts";
 import { l, type Labels } from "./labels.ts";
 
 type Tone = "pos" | "warn" | "danger" | "info" | "neutral" | "accent";
 
 export interface Column {
   ref: string;
-  type: "int" | "text" | "money" | "bool" | "enum" | "date" | "timestamptz" | "fk";
+  type: "int" | "text" | "money" | "decimal" | "bool" | "enum" | "date" | "timestamptz" | "fk";
   role?: "pk" | "created_at";
   semantic?: "name" | "email" | "image" | "money";
   nullable?: true;
@@ -33,6 +34,7 @@ export interface Column {
   references?: string;
   default?: string | number | boolean;
   maxLength?: number;
+  scale?: number;
   unique?: true;
   rules?: Record<string, unknown>;
   label?: Labels;
@@ -44,6 +46,10 @@ export interface Table {
   labelPlural: Labels;
   keyField?: string;
   booking?: Record<string, unknown>;
+  /** Sets of columns that together name one row. */
+  unique?: string[][];
+  /** What the table's rows hand to an add-on's ledger, and when. */
+  postings?: Record<string, unknown>[];
   columns: Column[];
 }
 
@@ -140,10 +146,22 @@ const APPOINTMENT_STATUSES = {
   no_show: "No-show",
   cancelled: "Cancelled",
 };
+const APPOINTMENT_STATUS_VALUES = Object.keys(APPOINTMENT_STATUSES);
+/** What a clinician changes on a supply line; each change is stamped with who and when. */
+const SUPPLY_EDITS = ["qty", "not_used_at", "batch_id"];
 /** The statuses that hold a clinician's time. A no-show or a cancellation frees it. */
 export const COUNTED = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
 
 const setting = (column: string) => ({ table: "settings", column });
+
+/**
+ * A link to a row of Inventory: a plain number with no foreign key, because a
+ * practice may run the desk without Inventory, and connect it a year later.
+ * Adminium refuses a value written here while Inventory is not connected.
+ */
+function stockLink(ref: string, table: string, label: string): Column {
+  return { ref, type: "int", nullable: true, label: l(label), rules: { addOnLink: { addOn: "inventory", table } } };
+}
 
 // ── the tables ──────────────────────────────────────────────────────────────
 
@@ -179,6 +197,8 @@ export const TABLES: Table[] = [
       bool("reminders_on", "Send reminders", true),
       picked("default_lead_hours", "Remind (hours before)", [12, 24, 48], 24),
       bool("kiosk_on", "Arrivals kiosk", false),
+      // The shelf a visit's supplies come off. Empty: Inventory's own default place.
+      stockLink("supplies_place_id", "places", "Where supplies are taken from"),
     ],
   },
   {
@@ -428,6 +448,46 @@ export const TABLES: Table[] = [
       ),
       clientKey,
       createdAt,
+    ],
+  },
+  {
+    // What a visit used, recorded by the clinician on the visit. A line names
+    // an item of Inventory and nothing about it: no name, no batch code, so the
+    // practice's own tables hold a link and never a medicine. Nothing leaves
+    // the shelf until the visit is seen; taking the visit back puts it all back.
+    ref: "appointment_supplies",
+    label: l("Supply used"),
+    labelPlural: l("Supplies used"),
+    // One line per item of a kit, however often the kit is pressed. A line
+    // added by hand has no kit, and so never collides.
+    unique: [["appointment_id", "kit_id", "item_id"]],
+    postings: [
+      {
+        id: "supplies",
+        into: { addOn: "inventory", ledger: "stock", action: "use-item" },
+        needs: SUPPLIES,
+        via: "appointment_id",
+        post: { on: { column: "status", in: ["seen"] } },
+        reverse: { on: { column: "status", from: ["seen"], in: APPOINTMENT_STATUS_VALUES.filter((status) => status !== "seen") } },
+        // A line marked not used is left out: nothing is taken for it.
+        unlessSet: "not_used_at",
+        map: { item: "item_id", quantity: "qty", batch: "batch_id", place: "place_id" },
+      },
+    ],
+    columns: [
+      id,
+      fk("appointment_id", "appointments", "Appointment"),
+      stockLink("kit_id", "kits", "Kit"),
+      stockLink("item_id", "items", "Item"),
+      { ref: "qty", type: "decimal", scale: 3, default: 1, label: l("Quantity"), rules: { validation: { min: 0.001 } } },
+      at("not_used_at", "Marked not used at", opt),
+      stockLink("batch_id", "batches", "Batch"),
+      stockLink("place_id", "places", "Taken from"),
+      text("recorded_by", 120, "Recorded by", { ...opt, rules: stampWho }),
+      at("recorded_at", "Recorded at", { ...opt, rules: { stamp: { set: "now", on: "create" } } }),
+      text("changed_by", 120, "Changed by", { ...opt, rules: { stamp: { set: "user-name", on: { columns: SUPPLY_EDITS } } } }),
+      at("changed_at", "Changed at", { ...opt, rules: { stamp: { set: "now", on: { columns: SUPPLY_EDITS } } } }),
+      clientKey,
     ],
   },
   {

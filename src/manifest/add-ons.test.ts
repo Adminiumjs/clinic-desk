@@ -22,16 +22,41 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { FEATURES, INSURER_RECEIPTS } from "../lib/features.ts";
+import { FEATURES, INSURER_RECEIPTS, SUPPLIES } from "../lib/features.ts";
 import { buildManifest, MIN_ADMINIUM, VERSION } from "./build.ts";
 import { LOCALES } from "./labels.ts";
 
 type Labels = Record<string, string>;
 type Column = { ref: string; type: string; references?: string; nullable?: boolean; rules?: Record<string, unknown> };
-type Table = { ref: string; columns: Column[] };
+interface Posting {
+  id: string;
+  into: { addOn: string; ledger: string; action: string };
+  needs?: string;
+  via?: string;
+  post?: { on: Record<string, unknown> };
+  reserve?: unknown;
+  reverse?: { on: Record<string, unknown> };
+  unlessSet?: string;
+  map: Record<string, unknown>;
+}
+type Table = { ref: string; columns: Column[]; unique?: string[][]; postings?: Posting[]; label: Labels; labelPlural: Labels };
+interface StockGrant {
+  addOn: string;
+  table: string;
+  actions: string[];
+  limit?: { readable?: string[] };
+}
+interface Role {
+  key: string;
+  permissions: string[];
+  limits?: Record<string, { creatable?: string[]; writable?: string[] }>;
+  tables?: StockGrant[];
+}
 interface Manifest {
   version: string;
-  compatibility: { minAdminiumVersion: string };
+  compatibility: { minAdminiumVersion: string; updatesFrom: string };
+  roles: Role[];
+  sampleData: { file: string; addOns?: Record<string, { file: string }> };
   addOns: {
     requires?: unknown[];
     suggests: { key: string; range: string; checked?: boolean; reason: Labels }[];
@@ -57,26 +82,125 @@ function translated(labels: Labels): string[] {
 }
 
 describe("the add-ons Clinic Desk works with", () => {
-  it("requires none, and offers Holiday calendars and Invoices & Receipts, each with its reason", () => {
+  it("requires none, and offers Holiday calendars, Invoices & Receipts and Inventory, each with its reason", () => {
     expect(manifest.addOns.requires).toBeUndefined();
     expect(manifest.addOns.suggests.map((s) => [s.key, s.range, s.checked])).toEqual([
-      ["holiday-calendars", ">=1.0.2", true],
+      ["holiday-calendars", ">=1.0.8", true],
       ["invoices", ">=1.0.4", false],
+      ["inventory", ">=1.0.8", false],
     ]);
     expect(manifest.addOns.suggests.find((s) => s.key === "holiday-calendars")!.reason["en-US"]).toBe("Mark public holidays as closures");
     expect(manifest.addOns.suggests.find((s) => s.key === "invoices")!.reason["en-US"]).toBe("Email or print a receipt a patient can claim with");
+    expect(manifest.addOns.suggests.find((s) => s.key === "inventory")!.reason["en-US"]).toBe("Record the supplies a visit uses and keep the cupboard counted");
     for (const s of manifest.addOns.suggests) expect(translated(s.reason), s.key).toEqual([]);
   });
 
-  it("switches off receipts for insurers without Invoices & Receipts — the same list the desk reads", () => {
-    expect(manifest.addOns.features.map((f) => [f.id, f.requires])).toEqual([[INSURER_RECEIPTS, [...FEATURES[INSURER_RECEIPTS]]]]);
+  it("switches off receipts for insurers without Invoices & Receipts, and a visit's supplies without Inventory — the same list the desk reads", () => {
+    expect(manifest.addOns.features.map((f) => [f.id, f.requires])).toEqual([
+      [INSURER_RECEIPTS, [...FEATURES[INSURER_RECEIPTS]]],
+      [SUPPLIES, [...FEATURES[SUPPLIES]]],
+    ]);
     for (const f of manifest.addOns.features) expect(translated(f.label), f.id).toEqual([]);
   });
 
-  it("asks for the Adminium that reads a switched-off kiosk at once, as a patch of 0.2", () => {
-    expect([VERSION, MIN_ADMINIUM, manifest.version, manifest.compatibility.minAdminiumVersion]).toEqual(["0.2.3", "0.3.9", "0.2.3", "0.3.9"]);
+  it("asks for the Adminium that posts a row into an add-on's ledger, as 0.3.0, and still updates a 0.2 install in place", () => {
+    expect([VERSION, MIN_ADMINIUM, manifest.version, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.0", "0.3.20", "0.3.0", "0.3.20"]);
+    expect(manifest.compatibility.updatesFrom).toBe(">=0.2.0");
     const pkg = JSON.parse(readFileSync(join(REPO, "package.json"), "utf8")) as { version: string; repository?: unknown };
     expect(pkg.version).toBe(VERSION);
+  });
+});
+
+describe("a visit's supplies, counted by Inventory", () => {
+  const supplies = table("appointment_supplies");
+  const links = (t: Table) => t.columns.filter((c) => c.rules?.["addOnLink"] !== undefined);
+  const role = (key: string) => manifest.roles.find((r) => r.key === key)!;
+
+  it("keeps the lines in the practice's own table: a link to an item, a kit, a batch and a place, and no name of any of them", () => {
+    expect(translated(supplies.label)).toEqual([]);
+    expect(translated(supplies.labelPlural)).toEqual([]);
+    expect(Object.fromEntries(links(supplies).map((c) => [c.ref, c.rules!["addOnLink"]]))).toEqual({
+      kit_id: { addOn: "inventory", table: "kits" },
+      item_id: { addOn: "inventory", table: "items" },
+      batch_id: { addOn: "inventory", table: "batches" },
+      place_id: { addOn: "inventory", table: "places" },
+    });
+    // Nothing that reads as a medicine: no text column but who recorded and changed it, and the action key.
+    expect(supplies.columns.filter((c) => c.type === "text").map((c) => c.ref)).toEqual(["recorded_by", "changed_by", "client_key"]);
+    expect(column("appointment_supplies", "appointment_id")).toMatchObject({ type: "fk", references: "appointments" });
+    expect(supplies.unique).toEqual([["appointment_id", "kit_id", "item_id"]]);
+  });
+
+  it("makes every link a plain number with no foreign key, so the app installs, and updates, without Inventory", () => {
+    const all = manifest.requiredSchema.tables.flatMap((t) => links(t).map((c) => [`${t.ref}.${c.ref}`, c.type, c.nullable, c.references]));
+    expect(all).toEqual([
+      ["settings.supplies_place_id", "int", true, undefined],
+      ["appointment_supplies.kit_id", "int", true, undefined],
+      ["appointment_supplies.item_id", "int", true, undefined],
+      ["appointment_supplies.batch_id", "int", true, undefined],
+      ["appointment_supplies.place_id", "int", true, undefined],
+    ]);
+  });
+
+  it("takes the supplies when the visit is seen and puts them back when it leaves seen, and at no other moment", () => {
+    expect(supplies.postings).toHaveLength(1);
+    const [posting] = supplies.postings!;
+    expect(posting).toMatchObject({
+      id: "supplies",
+      into: { addOn: "inventory", ledger: "stock", action: "use-item" },
+      needs: SUPPLIES,
+      via: "appointment_id",
+      post: { on: { column: "status", in: ["seen"] } },
+      reverse: { on: { column: "status", from: ["seen"] } },
+      unlessSet: "not_used_at",
+      map: { item: "item_id", quantity: "qty", batch: "batch_id", place: "place_id" },
+    });
+    // A visit is never promised stock: nothing is held before it is seen, so nothing can run out on a patient in the room.
+    expect(posting!.reserve).toBeUndefined();
+    // Every status but seen puts it back, and only from seen: a booked visit cancelled gives back nothing.
+    const statuses = (column("appointments", "status") as Column & { enum: string[] }).enum;
+    expect([...(posting!.reverse!.on["in"] as string[])].sort()).toEqual(statuses.filter((s) => s !== "seen").sort());
+    // No other table of the practice posts anywhere.
+    expect(manifest.requiredSchema.tables.filter((t) => t.postings !== undefined).map((t) => t.ref)).toEqual(["appointment_supplies"]);
+  });
+
+  it("lets a clinician record a line and change how many, whether it was used and from which batch — never where from or by whom", () => {
+    const clinician = role("clinician");
+    expect(clinician.permissions.filter((p) => p.includes("appointment_supplies")).sort()).toEqual(
+      ["create", "delete", "read", "update"].map((action) => `table:@appointment_supplies:${action}`),
+    );
+    expect(clinician.limits!["appointment_supplies"]).toEqual({
+      creatable: ["appointment_id", "kit_id", "item_id", "qty", "client_key"],
+      writable: ["qty", "not_used_at", "batch_id"],
+    });
+    // Reception reads the lines and writes none; the kiosk has no table at all.
+    expect(role("reception").permissions.filter((p) => p.includes("appointment_supplies"))).toEqual(["table:@appointment_supplies:read"]);
+    expect(role("kiosk").permissions.filter((p) => p.startsWith("table:"))).toEqual([]);
+    expect(role("kiosk").tables).toBeUndefined();
+  });
+
+  it("grants each role only reads of Inventory, column by column: no cost, no movement, no receipt", () => {
+    const COSTS = ["cost_avg", "supplier_cost", "value", "amount", "unit_cost", "on_hand"];
+    const HISTORY = ["postings", "movements", "uses", "reservations", "receipts", "receipt_lines"];
+    for (const key of ["reception", "clinician", "manager"]) {
+      const grants = role(key).tables!;
+      expect(grants.length, key).toBeLessThanOrEqual(12);
+      for (const grant of grants) {
+        expect(grant.addOn, `${key} ${grant.table}`).toBe("inventory");
+        expect(grant.actions, `${key} ${grant.table}`).toEqual(["read"]);
+        expect(grant.limit?.readable, `${key} ${grant.table}`).toBeDefined();
+        expect(grant.limit!.readable!.filter((c) => COSTS.includes(c)), `${key} ${grant.table}`).toEqual([]);
+        expect(HISTORY, `${key} ${grant.table}`).not.toContain(grant.table);
+      }
+    }
+    const tablesOf = (key: string) => role(key).tables!.map((g) => g.table);
+    expect(tablesOf("reception")).toEqual(["items", "units", "kits", "batches", "stock_points", "places"]);
+    expect(tablesOf("clinician")).toEqual(["items", "units", "kits", "batches", "stock_points", "places", "kit_lines", "links", "levels"]);
+    expect(tablesOf("manager")).toEqual(tablesOf("clinician"));
+  });
+
+  it("ships its sample lines in a second file, loaded only with Inventory", () => {
+    expect(manifest.sampleData).toEqual({ file: "seeds/clinic.sample.json", addOns: { inventory: { file: "seeds/clinic.inventory.sample.json" } } });
   });
 });
 

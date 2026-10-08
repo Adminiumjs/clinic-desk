@@ -8,8 +8,8 @@
 
 BEGIN;
 
-INSERT INTO clinic_settings (id, practice_name, mark, address, phone, email, intro, directions, map_link, entrance_photo, pay_note, insurer_note, privacy_link, currency, language, slot_minutes, booking_days, min_notice_minutes, new_patients_online, online_booking_on, no_show_minutes, cancel_hours, reminders_on, default_lead_hours, kiosk_on) VALUES
-  (1, 'Rowan Health', 'RH', '12 Rowan Walk, Ashgrove BS7 4QN', '0117 496 0142', 'rowan.desk@example.com', 'A small practice on Rowan Walk with a level entrance.', 'Two minutes from the Ashgrove bus stop. Bicycle stands by the side gate; no car park, but the street is unrestricted after 10.', NULL, NULL, 'Card, cash or a transfer on the day. We can take part of it now and the rest later.', 'Bring your policy number and we will send the paperwork on for you.', NULL, 'GBP', 'en-US', 15, 10, 60, TRUE, TRUE, 15, 24, TRUE, 24, TRUE);
+INSERT INTO clinic_settings (id, practice_name, mark, address, phone, email, intro, directions, map_link, entrance_photo, pay_note, insurer_note, privacy_link, currency, language, slot_minutes, booking_days, min_notice_minutes, new_patients_online, online_booking_on, no_show_minutes, cancel_hours, reminders_on, default_lead_hours, kiosk_on, supplies_place_id) VALUES
+  (1, 'Rowan Health', 'RH', '12 Rowan Walk, Ashgrove BS7 4QN', '0117 496 0142', 'rowan.desk@example.com', 'A small practice on Rowan Walk with a level entrance.', 'Two minutes from the Ashgrove bus stop. Bicycle stands by the side gate; no car park, but the street is unrestricted after 10.', NULL, NULL, 'Card, cash or a transfer on the day. We can take part of it now and the rest later.', 'Bring your policy number and we will send the paperwork on for you.', NULL, 'GBP', 'en-US', 15, 10, 60, TRUE, TRUE, 15, 24, TRUE, 24, TRUE, NULL);
 
 INSERT INTO clinic_opening_hours (id, weekday, open, opens, closes, break_start, break_end) VALUES
   (1, 'mon', TRUE, '08:30', '17:30', '12:30', '13:15'),

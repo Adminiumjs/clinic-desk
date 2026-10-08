@@ -5,6 +5,7 @@
  *   src/data/sampleRows.ts     its column list, between its marker lines:
  *                              what the database fills each column with
  *   seeds/clinic.sample.json   the bundle an operator adds from Adminium
+ *   seeds/clinic.inventory.sample.json   its rows for Inventory, added with it while Inventory is connected
  *   db/schema.sql              the stand-alone stack's tables (from manifest.json)
  *   db/seed.sql                the stand-alone stack's rows (the bundle, resolved)
  *
@@ -55,11 +56,13 @@ const after = withColumns(before);
 if (after !== before) writeFileSync(resolver, after);
 
 const { buildSample } = await import("../src/data/sample.ts");
+const { buildSupplySample } = await import("../src/data/sample-supplies.ts");
 const { schemaSql, seedSql } = await import("../src/data/sample-sql.ts");
 const bundle = buildSample();
 
 mkdirSync(join(root, "seeds"), { recursive: true });
 writeFileSync(join(root, "seeds", "clinic.sample.json"), `${JSON.stringify(bundle, null, 2)}\n`);
+writeFileSync(join(root, "seeds", "clinic.inventory.sample.json"), `${JSON.stringify(buildSupplySample(), null, 2)}\n`);
 writeFileSync(join(root, "db", "schema.sql"), schemaSql(manifest));
 writeFileSync(join(root, "db", "seed.sql"), seedSql(bundle, manifest));
 

@@ -1,0 +1,147 @@
+{
+  "format": "adminium.sample/1",
+  "app": "clinic",
+  "addOn": "inventory",
+  "tables": [
+    {
+      "ref": "appointment_supplies",
+      "own": true,
+      "rows": [
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:VAC-FLU"
+          },
+          "qty": 1,
+          "batch_id": {
+            "@ref": "batch:FV26A"
+          },
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        },
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:SYR-5"
+          },
+          "qty": 1,
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        },
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:NDL-23G"
+          },
+          "qty": 1,
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        },
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:SWAB-ALC"
+          },
+          "qty": 2,
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        },
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:PLST"
+          },
+          "qty": 1,
+          "not_used_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          },
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        },
+        {
+          "appointment_id": {
+            "@ref": "visit:h-wren"
+          },
+          "kit_id": {
+            "@ref": "kit:flu-vaccination"
+          },
+          "item_id": {
+            "@ref": "item:GLV-M"
+          },
+          "qty": 1,
+          "place_id": {
+            "@ref": "place:treatment-room"
+          },
+          "recorded_by": "Tom Villaseñor",
+          "recorded_at": {
+            "@day": -3,
+            "@time": "11:40",
+            "@workdays": true
+          }
+        }
+      ]
+    }
+  ]
+}

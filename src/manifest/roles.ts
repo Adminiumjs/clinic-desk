@@ -67,6 +67,34 @@ const CLINICIAN_READS = [
   "recalls",
 ];
 
+/**
+ * What each role reads of Inventory, table by table and column by column.
+ *
+ * These are grants on another package's tables, so each says exactly which
+ * columns: the names, the units, the kits, the batches and what is left —
+ * never what anything cost (`cost_avg`, `supplier_cost`, `value`), never a
+ * stock movement, and never the receipts that say which visit a movement was
+ * for. Read only: no clinic role writes anything of Inventory's. Adminium
+ * makes the grants when Inventory is connected to this app and takes them
+ * back when it is disconnected.
+ */
+const stock = (table: string, readable: string[]) => ({ addOn: "inventory", table, actions: ["read"], limit: { readable } });
+const STOCK_NAMES = [
+  stock("items", ["id", "name", "unit_id", "unit", "decimals", "tracks_batches", "active"]),
+  stock("units", ["id", "code", "name", "decimals"]),
+  stock("kits", ["id", "name", "active"]),
+  stock("batches", ["id", "item_id", "code", "unassigned", "expires_on"]),
+  stock("stock_points", ["id", "item_id", "place_id", "available", "low"]),
+  stock("places", ["id", "name"]),
+];
+/** What recording a visit's supplies reads beside the names: a kit's lines, which kits a visit type offers, and what each batch has left. */
+const STOCK_RECORDING = [
+  ...STOCK_NAMES,
+  stock("kit_lines", ["id", "kit_id", "item_id", "qty", "per", "action"]),
+  stock("links", ["id", "source_table", "source_row", "kind", "kit_id", "item_id"]),
+  stock("levels", ["id", "stock_point_id", "batch_id", "qty", "expires_on"]),
+];
+
 /** Holiday Calendars' own (non-secret) settings: the days picked on Hours & closures are kept there. */
 const HOLIDAY_SETTINGS = "addOn:holiday-calendars:settings";
 
@@ -86,6 +114,8 @@ export const ROLES = [
       // The days Holiday Calendars suggests are picked on Hours & closures, and kept in the add-on's own settings.
       HOLIDAY_SETTINGS,
     ],
+    // Reception sees what a visit used, by name; it records none of it.
+    tables: STOCK_NAMES,
   },
   {
     key: "clinician",
@@ -93,10 +123,26 @@ export const ROLES = [
     screensOnly: true,
     // The allergy note is what a clinician must see; the grant is per table, so
     // the patient's contact details come with it.
-    permissions: ["app:@:staff", ...CLINICIAN_READS.map(read), ...grant("appointments", "update"), pii("patients")],
+    permissions: [
+      "app:@:staff",
+      ...CLINICIAN_READS.map(read),
+      ...grant("appointments", "update"),
+      // What the visit used is the clinician's to record: they saw it used.
+      ...grant("appointment_supplies", "read", "create", "update", "delete"),
+      pii("patients"),
+    ],
     // A clinician moves a visit along — into the room, with them, ready to go —
-    // and changes nothing else; the server refuses any other write.
-    limits: { appointments: { writable: ["status"], writableValues: { status: ["roomed", "with_clinician", "ready"] } } },
+    // and changes nothing else; the server refuses any other write. On a supply
+    // line they say which item and how many, then whether it was used and from
+    // which batch: where it is taken from and who recorded it are the server's.
+    limits: {
+      appointments: { writable: ["status"], writableValues: { status: ["roomed", "with_clinician", "ready"] } },
+      appointment_supplies: {
+        creatable: ["appointment_id", "kit_id", "item_id", "qty", "client_key"],
+        writable: ["qty", "not_used_at", "batch_id"],
+      },
+    },
+    tables: STOCK_RECORDING,
   },
   {
     key: "manager",
@@ -111,6 +157,7 @@ export const ROLES = [
       ...DESK_PII.map(pii),
       HOLIDAY_SETTINGS,
     ],
+    tables: STOCK_RECORDING,
   },
   {
     key: "kiosk",

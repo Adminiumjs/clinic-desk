@@ -16,14 +16,16 @@
  * clinician, a visit outside the hours or over lunch or off the grid, a
  * clinician booked for a visit they do not do, a payment beyond the fee.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
 import { LOCALE_TAGS } from "../i18n/locales.ts";
-import { sampleBundleIssues, sampleBundleSchema } from "../testing/manifest/sample.ts";
-import type { Manifest } from "../testing/manifest/schema.ts";
+import { sampleBundleIssues, sampleBundleSchema, sampleSectionIssues } from "../testing/manifest/sample.ts";
+import type { AddOnManifest, AppManifest, Manifest } from "../testing/manifest/schema.ts";
+import { buildSupplySample, FLU_LINES, SUPPLIES_VISIT } from "./sample-supplies.ts";
 import { SAMPLE_MOMENT, SAMPLE_ZONE, buildSample, type SampleRow } from "./sample.ts";
 import { schemaSql, seedSql, type ManifestTables } from "./sample-sql.ts";
 import { COLUMNS, COPIES, ROLLUPS, resolveSample, type ResolvedSample } from "./sampleRows.ts";
@@ -53,7 +55,7 @@ describe("the committed files are what `npm run sample` writes today", () => {
 
 describe("the bundle is one Adminium will add", () => {
   it("is the file the manifest names", () => {
-    expect(manifest.sampleData).toEqual({ file: "seeds/clinic.sample.json" });
+    expect((manifest.sampleData as { file: string }).file).toBe("seeds/clinic.sample.json");
   });
 
   it("passes the product’s own checks against this manifest", () => {
@@ -454,5 +456,70 @@ describe("the Overview has something in every card at the demo moment", () => {
     expect(close["day"]).toBe("2026-07-27");
     const cash = rows["payments"]!.filter((p) => p["method"] === "cash" && p["voided"] !== true && String(p["paid_at"]).startsWith("2026-07-27"));
     expect(close["cash_expected"]).toBe(cash.reduce((sum, p) => sum + Number(p["amount"]), 0));
+  });
+});
+
+/*
+ * The practice's rows for Inventory: a second file, added with the sample
+ * only while Inventory is connected. Checked as Adminium checks it at the
+ * upload — and, with an add-ons checkout beside this repo, against Inventory's
+ * own tables and its own sample, whose labels the file names.
+ */
+describe("the sample's rows for Inventory", () => {
+  const supplies = buildSupplySample();
+  const app = manifest as unknown as AppManifest;
+
+  it("seeds/clinic.inventory.sample.json is what `npm run sample` writes today", () => {
+    expect(read("../../seeds/clinic.inventory.sample.json") === `${JSON.stringify(supplies, null, 2)}\n`).toBe(true);
+  });
+
+  it("is a file Adminium accepts for this app and that add-on", () => {
+    const parsed = sampleBundleSchema.safeParse(supplies);
+    expect(parsed.success ? [] : parsed.error.issues).toEqual([]);
+    expect(sampleSectionIssues(parsed.data!, app)).toEqual([]);
+  });
+
+  it("names a visit the sample holds, seen, with the nurse who gives the jab", () => {
+    const visit = rowsOf("appointments").find((row) => row["@label"] === SUPPLIES_VISIT.label)!;
+    expect(visit).toMatchObject({ status: "seen", clinician_id: { "@ref": "clinician:tom" }, visit_type_id: { "@ref": "type:nurse" } });
+    expect(rowsOf("clinicians").find((row) => row["@label"] === "clinician:tom")!["name"]).toBe(SUPPLIES_VISIT.by);
+  });
+
+  it("records the six lines of the flu vaccination: the vaccine from its batch, the plaster not used, and no cost anywhere", () => {
+    const lines = supplies.tables.find((t) => t.ref === "appointment_supplies")!;
+    expect(lines.own).toBe(true);
+    expect(lines.rows.map((row) => [labelOf(row["item_id"]), row["qty"], labelOf(row["batch_id"]), row["not_used_at"] !== undefined])).toEqual(
+      FLU_LINES.map((line) => [`item:${line.sku}`, line.qty, line.batch ?? null, line.notUsed === true]),
+    );
+    expect(lines.rows.filter((row) => row["not_used_at"] !== undefined).map((row) => labelOf(row["item_id"]))).toEqual(["item:PLST"]);
+    expect(JSON.stringify(supplies)).not.toMatch(/cost|price|value|amount/);
+    // It adds nothing of Inventory's: the practice's own lines, never an item, a link, a movement, a level or a receipt.
+    expect(supplies.tables.map((t) => [t.ref, t.own])).toEqual([["appointment_supplies", true]]);
+  });
+
+  const ADD_ONS = process.env["ADD_ONS_REPO"] ?? fileURLToPath(new URL("../../../add-ons", import.meta.url));
+  const INVENTORY = join(ADD_ONS, "packages", "inventory");
+  describe.skipIf(!existsSync(join(INVENTORY, "manifest.json")))(`against Inventory's own manifest and sample${existsSync(join(INVENTORY, "manifest.json")) ? "" : " — skipped: no add-ons checkout"}`, () => {
+    const inventory = () => JSON.parse(readFileSync(join(INVENTORY, "manifest.json"), "utf8")) as AddOnManifest & { sampleData?: { file: string } };
+
+    it("is accepted beside Inventory's own tables", () => {
+      expect(sampleSectionIssues(sampleBundleSchema.parse(supplies), app, inventory())).toEqual([]);
+    });
+
+    it("names only rows Inventory's own sample holds: the kit, the items, the batch and the place", () => {
+      const theirs = new Set<string>();
+      JSON.parse(readFileSync(join(INVENTORY, inventory().sampleData!.file), "utf8"), (key: string, value: unknown) => {
+        if (key === "@label" && typeof value === "string") theirs.add(value);
+        return value;
+      });
+      const ours = new Set(bundle.tables.flatMap((t) => t.rows.map((row) => row["@label"])).filter((label): label is string => typeof label === "string"));
+      const named: string[] = [];
+      JSON.stringify(supplies, (key: string, value: unknown) => {
+        if (key === "@ref" && typeof value === "string") named.push(value);
+        return value;
+      });
+      expect(named.filter((label) => !theirs.has(label) && !ours.has(label))).toEqual([]);
+      expect(named.filter((label) => theirs.has(label)).length).toBeGreaterThan(0);
+    });
   });
 });

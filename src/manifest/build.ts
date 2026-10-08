@@ -18,17 +18,22 @@ import { PUBLIC_ACCESS, PUBLIC_KEYS } from "./public.ts";
 import { ROLES } from "./roles.ts";
 import { TABLES } from "./tables.ts";
 
-/** This release. The version moved 0.1.4 → 0.2.0 once (its tables were new); since then, patches. */
-export const VERSION = "0.2.3";
+/**
+ * This release. The version moved 0.1.4 → 0.2.0 once (its tables were new),
+ * and 0.2.3 → 0.3.0 when a visit's supplies arrived with Inventory.
+ */
+export const VERSION = "0.3.0";
 
 /**
  * The Adminium release that first reads everything below: booking, the
  * outbox and claims (0.3.0), the add-ons an app works with, the documents it
  * ships and an email that carries one (0.3.1), and an update that rebuilds a
  * SQLite table, a document switched on when its add-on is connected later, and
- * a print copy that opens in a tab (0.3.2).
+ * a print copy that opens in a tab (0.3.2); and rows that post into an
+ * add-on's ledger, links into an add-on's tables and a role's grants on them
+ * (0.3.18 to 0.3.20).
  */
-export const MIN_ADMINIUM = "0.3.9";
+export const MIN_ADMINIUM = "0.3.20";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
@@ -107,7 +112,7 @@ export function buildManifest(): Record<string, unknown> {
     outbox: OUTBOX,
     emailTemplates: emailTemplates(),
     documents: DOCUMENTS,
-    sampleData: { file: "seeds/clinic.sample.json" },
+    sampleData: { file: "seeds/clinic.sample.json", addOns: { inventory: { file: "seeds/clinic.inventory.sample.json" } } },
   };
 }
 

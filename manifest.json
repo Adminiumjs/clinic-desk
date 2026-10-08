@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "key": "clinic",
   "name": "Clinic Desk",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "publisher": {
     "id": "adminium",
     "name": "Adminium",
@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.9",
+    "minAdminiumVersion": "0.3.20",
     "engines": [
       "sqlite",
       "postgres",
@@ -123,7 +123,7 @@
     "suggests": [
       {
         "key": "holiday-calendars",
-        "range": ">=1.0.2",
+        "range": ">=1.0.8",
         "checked": true,
         "reason": {
           "en-US": "Mark public holidays as closures",
@@ -150,6 +150,21 @@
           "zh-CN": "通过电子邮件发送或打印收据，供患者向保险公司报销",
           "zh-TW": "以電子郵件寄送或列印收據，讓病患向保險公司申請理賠"
         }
+      },
+      {
+        "key": "inventory",
+        "range": ">=1.0.8",
+        "checked": false,
+        "reason": {
+          "en-US": "Record the supplies a visit uses and keep the cupboard counted",
+          "de-DE": "Das bei einem Termin verbrauchte Material erfassen und den Bestand im Schrank aktuell halten",
+          "fr-FR": "Enregistrer les fournitures utilisées lors d’une consultation et tenir le compte de l’armoire",
+          "da-DK": "Registrér de materialer, et besøg bruger, og hold skabet talt op",
+          "cs-CZ": "Zapisujte materiál použitý při návštěvě a mějte přehled o stavu ve skříni",
+          "ar-EG": "سجّل المستلزمات التي تستخدمها الزيارة وأبقِ جرد الخزانة محدّثًا",
+          "zh-CN": "记录每次就诊用掉的耗材，并让柜中库存保持准确",
+          "zh-TW": "記錄每次看診用掉的耗材，並讓櫃中庫存保持準確"
+        }
       }
     ],
     "features": [
@@ -167,6 +182,22 @@
         },
         "requires": [
           "invoices"
+        ]
+      },
+      {
+        "id": "supplies",
+        "label": {
+          "en-US": "Supplies used",
+          "de-DE": "Verbrauchtes Material",
+          "fr-FR": "Fournitures utilisées",
+          "da-DK": "Brugte materialer",
+          "cs-CZ": "Použitý materiál",
+          "ar-EG": "المستلزمات المستخدمة",
+          "zh-CN": "已用耗材",
+          "zh-TW": "已用耗材"
+        },
+        "requires": [
+          "inventory"
         ]
       }
     ]
@@ -680,6 +711,27 @@
               "ar-EG": "جهاز تسجيل الوصول",
               "zh-CN": "自助签到机",
               "zh-TW": "自助報到機"
+            }
+          },
+          {
+            "ref": "supplies_place_id",
+            "type": "int",
+            "nullable": true,
+            "label": {
+              "en-US": "Where supplies are taken from",
+              "de-DE": "Woher das Material genommen wird",
+              "fr-FR": "D’où viennent les fournitures",
+              "da-DK": "Hvor materialerne tages fra",
+              "cs-CZ": "Odkud se materiál bere",
+              "ar-EG": "المكان الذي تؤخذ منه المستلزمات",
+              "zh-CN": "耗材取用地点",
+              "zh-TW": "耗材取用地點"
+            },
+            "rules": {
+              "addOnLink": {
+                "addOn": "inventory",
+                "table": "places"
+              }
             }
           }
         ]
@@ -3532,6 +3584,337 @@
               "ar-EG": "تاريخ الإنشاء",
               "zh-CN": "创建时间",
               "zh-TW": "建立時間"
+            }
+          }
+        ]
+      },
+      {
+        "ref": "appointment_supplies",
+        "label": {
+          "en-US": "Supply used",
+          "de-DE": "Verbrauchtes Material",
+          "fr-FR": "Fourniture utilisée",
+          "da-DK": "Brugt materiale",
+          "cs-CZ": "Použitý materiál",
+          "ar-EG": "مستلزم مستخدم",
+          "zh-CN": "已用耗材",
+          "zh-TW": "已用耗材"
+        },
+        "labelPlural": {
+          "en-US": "Supplies used",
+          "de-DE": "Verbrauchtes Material",
+          "fr-FR": "Fournitures utilisées",
+          "da-DK": "Brugte materialer",
+          "cs-CZ": "Použitý materiál",
+          "ar-EG": "المستلزمات المستخدمة",
+          "zh-CN": "已用耗材",
+          "zh-TW": "已用耗材"
+        },
+        "unique": [
+          [
+            "appointment_id",
+            "kit_id",
+            "item_id"
+          ]
+        ],
+        "postings": [
+          {
+            "id": "supplies",
+            "into": {
+              "addOn": "inventory",
+              "ledger": "stock",
+              "action": "use-item"
+            },
+            "needs": "supplies",
+            "via": "appointment_id",
+            "post": {
+              "on": {
+                "column": "status",
+                "in": [
+                  "seen"
+                ]
+              }
+            },
+            "reverse": {
+              "on": {
+                "column": "status",
+                "from": [
+                  "seen"
+                ],
+                "in": [
+                  "booked",
+                  "checked_in",
+                  "roomed",
+                  "with_clinician",
+                  "ready",
+                  "no_show",
+                  "cancelled"
+                ]
+              }
+            },
+            "unlessSet": "not_used_at",
+            "map": {
+              "item": "item_id",
+              "quantity": "qty",
+              "batch": "batch_id",
+              "place": "place_id"
+            }
+          }
+        ],
+        "columns": [
+          {
+            "ref": "id",
+            "type": "int",
+            "role": "pk"
+          },
+          {
+            "ref": "appointment_id",
+            "type": "fk",
+            "references": "appointments",
+            "label": {
+              "en-US": "Appointment",
+              "de-DE": "Termin",
+              "fr-FR": "Rendez-vous",
+              "da-DK": "Aftale",
+              "cs-CZ": "Termín",
+              "ar-EG": "الموعد",
+              "zh-CN": "预约",
+              "zh-TW": "預約"
+            }
+          },
+          {
+            "ref": "kit_id",
+            "type": "int",
+            "nullable": true,
+            "label": {
+              "en-US": "Kit",
+              "de-DE": "Set",
+              "fr-FR": "Ensemble",
+              "da-DK": "Sæt",
+              "cs-CZ": "Sada",
+              "ar-EG": "الطقم",
+              "zh-CN": "套件",
+              "zh-TW": "套件"
+            },
+            "rules": {
+              "addOnLink": {
+                "addOn": "inventory",
+                "table": "kits"
+              }
+            }
+          },
+          {
+            "ref": "item_id",
+            "type": "int",
+            "nullable": true,
+            "label": {
+              "en-US": "Item",
+              "de-DE": "Artikel",
+              "fr-FR": "Article",
+              "da-DK": "Vare",
+              "cs-CZ": "Položka",
+              "ar-EG": "الصنف",
+              "zh-CN": "物品",
+              "zh-TW": "物品"
+            },
+            "rules": {
+              "addOnLink": {
+                "addOn": "inventory",
+                "table": "items"
+              }
+            }
+          },
+          {
+            "ref": "qty",
+            "type": "decimal",
+            "scale": 3,
+            "default": 1,
+            "label": {
+              "en-US": "Quantity",
+              "de-DE": "Menge",
+              "fr-FR": "Quantité",
+              "da-DK": "Antal",
+              "cs-CZ": "Množství",
+              "ar-EG": "الكمية",
+              "zh-CN": "数量",
+              "zh-TW": "數量"
+            },
+            "rules": {
+              "validation": {
+                "min": 0.001
+              }
+            }
+          },
+          {
+            "ref": "not_used_at",
+            "type": "timestamptz",
+            "label": {
+              "en-US": "Marked not used at",
+              "de-DE": "Als nicht verwendet markiert am",
+              "fr-FR": "Marquée non utilisée le",
+              "da-DK": "Markeret som ikke brugt",
+              "cs-CZ": "Označeno jako nepoužité",
+              "ar-EG": "وقت وسمه بأنه لم يُستخدم",
+              "zh-CN": "标记为未使用的时间",
+              "zh-TW": "標記為未使用的時間"
+            },
+            "nullable": true
+          },
+          {
+            "ref": "batch_id",
+            "type": "int",
+            "nullable": true,
+            "label": {
+              "en-US": "Batch",
+              "de-DE": "Charge",
+              "fr-FR": "Lot",
+              "da-DK": "Parti",
+              "cs-CZ": "Šarže",
+              "ar-EG": "التشغيلة",
+              "zh-CN": "批号",
+              "zh-TW": "批號"
+            },
+            "rules": {
+              "addOnLink": {
+                "addOn": "inventory",
+                "table": "batches"
+              }
+            }
+          },
+          {
+            "ref": "place_id",
+            "type": "int",
+            "nullable": true,
+            "label": {
+              "en-US": "Taken from",
+              "de-DE": "Entnommen aus",
+              "fr-FR": "Pris dans",
+              "da-DK": "Taget fra",
+              "cs-CZ": "Vzato z",
+              "ar-EG": "أُخذ من",
+              "zh-CN": "取用地点",
+              "zh-TW": "取用地點"
+            },
+            "rules": {
+              "addOnLink": {
+                "addOn": "inventory",
+                "table": "places"
+              }
+            }
+          },
+          {
+            "ref": "recorded_by",
+            "type": "text",
+            "maxLength": 120,
+            "label": {
+              "en-US": "Recorded by",
+              "de-DE": "Erfasst von",
+              "fr-FR": "Enregistré par",
+              "da-DK": "Registreret af",
+              "cs-CZ": "Zapsal(a)",
+              "ar-EG": "سجّله",
+              "zh-CN": "记录人",
+              "zh-TW": "記錄人"
+            },
+            "nullable": true,
+            "rules": {
+              "stamp": {
+                "set": "user-name",
+                "on": "create"
+              }
+            }
+          },
+          {
+            "ref": "recorded_at",
+            "type": "timestamptz",
+            "label": {
+              "en-US": "Recorded at",
+              "de-DE": "Erfasst am",
+              "fr-FR": "Enregistré le",
+              "da-DK": "Registreret",
+              "cs-CZ": "Zapsáno",
+              "ar-EG": "وقت التسجيل",
+              "zh-CN": "记录时间",
+              "zh-TW": "記錄時間"
+            },
+            "nullable": true,
+            "rules": {
+              "stamp": {
+                "set": "now",
+                "on": "create"
+              }
+            }
+          },
+          {
+            "ref": "changed_by",
+            "type": "text",
+            "maxLength": 120,
+            "label": {
+              "en-US": "Changed by",
+              "de-DE": "Geändert von",
+              "fr-FR": "Modifié par",
+              "da-DK": "Ændret af",
+              "cs-CZ": "Změnil(a)",
+              "ar-EG": "عدّله",
+              "zh-CN": "修改人",
+              "zh-TW": "修改人"
+            },
+            "nullable": true,
+            "rules": {
+              "stamp": {
+                "set": "user-name",
+                "on": {
+                  "columns": [
+                    "qty",
+                    "not_used_at",
+                    "batch_id"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "ref": "changed_at",
+            "type": "timestamptz",
+            "label": {
+              "en-US": "Changed at",
+              "de-DE": "Geändert am",
+              "fr-FR": "Modifié le",
+              "da-DK": "Ændret",
+              "cs-CZ": "Změněno",
+              "ar-EG": "وقت التعديل",
+              "zh-CN": "修改时间",
+              "zh-TW": "修改時間"
+            },
+            "nullable": true,
+            "rules": {
+              "stamp": {
+                "set": "now",
+                "on": {
+                  "columns": [
+                    "qty",
+                    "not_used_at",
+                    "batch_id"
+                  ]
+                }
+              }
+            }
+          },
+          {
+            "ref": "client_key",
+            "type": "text",
+            "maxLength": 36,
+            "nullable": true,
+            "unique": true,
+            "label": {
+              "en-US": "Action key",
+              "de-DE": "Aktionsschlüssel",
+              "fr-FR": "Clé d’action",
+              "da-DK": "Handlingsnøgle",
+              "cs-CZ": "Klíč akce",
+              "ar-EG": "مفتاح الإجراء",
+              "zh-CN": "操作标识码",
+              "zh-TW": "操作識別碼"
             }
           }
         ]
@@ -7651,6 +8034,7 @@
         "table:@patients:read",
         "table:@registrations:read",
         "table:@appointments:read",
+        "table:@appointment_supplies:read",
         "table:@payments:read",
         "table:@write_offs:read",
         "table:@check_notes:read",
@@ -7690,6 +8074,100 @@
         "table:@appointments:read_pii",
         "table:@messages:read_pii",
         "addOn:holiday-calendars:settings"
+      ],
+      "tables": [
+        {
+          "addOn": "inventory",
+          "table": "items",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "unit_id",
+              "unit",
+              "decimals",
+              "tracks_batches",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "units",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "code",
+              "name",
+              "decimals"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "kits",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "batches",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "code",
+              "unassigned",
+              "expires_on"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "stock_points",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "place_id",
+              "available",
+              "low"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "places",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name"
+            ]
+          }
+        }
       ]
     },
     {
@@ -7709,6 +8187,10 @@
         "table:@appointments:read",
         "table:@recalls:read",
         "table:@appointments:update",
+        "table:@appointment_supplies:read",
+        "table:@appointment_supplies:create",
+        "table:@appointment_supplies:update",
+        "table:@appointment_supplies:delete",
         "table:@patients:read_pii"
       ],
       "limits": {
@@ -7723,8 +8205,166 @@
               "ready"
             ]
           }
+        },
+        "appointment_supplies": {
+          "creatable": [
+            "appointment_id",
+            "kit_id",
+            "item_id",
+            "qty",
+            "client_key"
+          ],
+          "writable": [
+            "qty",
+            "not_used_at",
+            "batch_id"
+          ]
         }
-      }
+      },
+      "tables": [
+        {
+          "addOn": "inventory",
+          "table": "items",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "unit_id",
+              "unit",
+              "decimals",
+              "tracks_batches",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "units",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "code",
+              "name",
+              "decimals"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "kits",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "batches",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "code",
+              "unassigned",
+              "expires_on"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "stock_points",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "place_id",
+              "available",
+              "low"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "places",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "kit_lines",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "kit_id",
+              "item_id",
+              "qty",
+              "per",
+              "action"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "links",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "source_table",
+              "source_row",
+              "kind",
+              "kit_id",
+              "item_id"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "levels",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "stock_point_id",
+              "batch_id",
+              "qty",
+              "expires_on"
+            ]
+          }
+        }
+      ]
     },
     {
       "key": "manager",
@@ -7775,6 +8415,10 @@
         "table:@appointments:create",
         "table:@appointments:update",
         "table:@appointments:delete",
+        "table:@appointment_supplies:read",
+        "table:@appointment_supplies:create",
+        "table:@appointment_supplies:update",
+        "table:@appointment_supplies:delete",
         "table:@payments:read",
         "table:@payments:create",
         "table:@payments:update",
@@ -7837,6 +8481,150 @@
         "table:@appointments:read_pii",
         "table:@messages:read_pii",
         "addOn:holiday-calendars:settings"
+      ],
+      "tables": [
+        {
+          "addOn": "inventory",
+          "table": "items",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "unit_id",
+              "unit",
+              "decimals",
+              "tracks_batches",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "units",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "code",
+              "name",
+              "decimals"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "kits",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name",
+              "active"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "batches",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "code",
+              "unassigned",
+              "expires_on"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "stock_points",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "item_id",
+              "place_id",
+              "available",
+              "low"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "places",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "name"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "kit_lines",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "kit_id",
+              "item_id",
+              "qty",
+              "per",
+              "action"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "links",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "source_table",
+              "source_row",
+              "kind",
+              "kit_id",
+              "item_id"
+            ]
+          }
+        },
+        {
+          "addOn": "inventory",
+          "table": "levels",
+          "actions": [
+            "read"
+          ],
+          "limit": {
+            "readable": [
+              "id",
+              "stock_point_id",
+              "batch_id",
+              "qty",
+              "expires_on"
+            ]
+          }
+        }
       ]
     },
     {
@@ -11090,6 +11878,11 @@
     }
   ],
   "sampleData": {
-    "file": "seeds/clinic.sample.json"
+    "file": "seeds/clinic.sample.json",
+    "addOns": {
+      "inventory": {
+        "file": "seeds/clinic.inventory.sample.json"
+      }
+    }
   }
 }

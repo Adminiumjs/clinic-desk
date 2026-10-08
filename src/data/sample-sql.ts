@@ -27,6 +27,7 @@ interface Column {
   enum?: string[];
   default?: string | number | boolean;
   maxLength?: number;
+  scale?: number;
   unique?: boolean;
   rules?: Record<string, unknown>;
 }
@@ -77,6 +78,9 @@ function columnSql(manifest: ManifestTables, column: Column): string {
       break;
     case "money":
       type = "NUMERIC(12, 2)";
+      break;
+    case "decimal":
+      type = `NUMERIC(18, ${String(column.scale ?? 2)})`;
       break;
     case "bool":
       type = "BOOLEAN";

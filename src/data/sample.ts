@@ -122,7 +122,7 @@ const hhmm = (minutes: number): string => `${String(Math.floor(minutes / 60)).pa
 const shift = (time: string, minutes: number): string => hhmm(minutesOf(time) + minutes);
 
 /** A wall time on the practice's clock, on a working day. */
-const wall = (date: string, time: string) => ({ "@day": workdaysFromToday(date), "@time": time, "@workdays": true });
+export const wall = (date: string, time: string) => ({ "@day": workdaysFromToday(date), "@time": time, "@workdays": true });
 /** A working day, as a date. */
 const workday = (date: string) => ({ "@day": workdaysFromToday(date), "@workdays": true });
 const ago = (duration: string) => ({ "@ago": duration });

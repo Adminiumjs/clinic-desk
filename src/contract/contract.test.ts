@@ -59,7 +59,7 @@ import { addDays, venueDay, venueTime } from "../data/venueTime.ts";
 import { days as demoDays, slots as demoSlots, type Practice } from "../demo/booking.ts";
 import { DEMO_START, DEMO_ZONE } from "../lib/clock.ts";
 import { resolveSurfaceConfig } from "../publicConfig.ts";
-import { addOnBundle, appBundle, boot, Caller, ENGINES, missing, ok, packedFloor, packedVersion, RELEASED, releasedReadable, until, type Engine, type Reply, type Server } from "./harness.ts";
+import { addOnBundle, appBundle, boot, Caller, ENGINES, missing, ok, packedFloor, packedVersion, rehearsedAttach, RELEASED, releasedReadable, until, type Engine, type Reply, type Server } from "./harness.ts";
 
 type Row = Record<string, unknown> & { id: number };
 interface SinkMessage {
@@ -81,7 +81,12 @@ const REHEARSAL = (() => {
   if (why !== null) return "";
   const invoices = packedVersion("invoices");
   const floor = packedFloor();
+  const calendars = packedVersion("holiday-calendars");
+  const attach = rehearsedAttach("holiday-calendars");
   return [
+    calendars.rehearsed || attach !== null
+      ? ` (the add-ons checkout's Holiday calendars, ${calendars.checkout}, packed as ${calendars.version}${attach === null ? "" : `, working with clinic ${attach.range} where it says ${attach.asked}`}: its release not yet stamped)`
+      : "",
     invoices.rehearsed ? ` (the add-ons checkout's Invoices & Receipts, ${invoices.checkout}, packed as ${invoices.version}: its release not yet stamped)` : "",
     floor.rehearsed ? ` (this app's floor, ${floor.asked}, packed as the Adminium checkout's ${floor.floor}: its release not yet stamped)` : "",
   ].join("");
@@ -253,6 +258,8 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(plan.installable).toBe(true);
           expect(plan.addOns.map((a) => [a.key, a.need, a.checked, a.action]).sort()).toEqual([
             ["holiday-calendars", "suggests", true, "install"],
+            // Offered, and not on this server: the practice runs without it, and nothing of it shows.
+            ["inventory", "feature", false, null],
             ["invoices", "feature", false, "install"],
           ]);
           const invoices = plan.addOns.find((a) => a.key === "invoices")!;
@@ -272,7 +279,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(installed.outbox.defined).toBe(true);
           expect(installed.addOns?.installed.map((a) => a.key).sort()).toEqual(["holiday-calendars", "invoices"]);
           await tablesOf(at);
-          expect(Object.keys(at.tableIds).length).toBe(18);
+          expect(Object.keys(at.tableIds).length).toBe(19);
           await letterhead(at);
         }, 180_000);
 

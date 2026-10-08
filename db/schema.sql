@@ -12,6 +12,7 @@ DROP TABLE IF EXISTS clinic_recalls CASCADE;
 DROP TABLE IF EXISTS clinic_check_notes CASCADE;
 DROP TABLE IF EXISTS clinic_write_offs CASCADE;
 DROP TABLE IF EXISTS clinic_payments CASCADE;
+DROP TABLE IF EXISTS clinic_appointment_supplies CASCADE;
 DROP TABLE IF EXISTS clinic_appointments CASCADE;
 DROP TABLE IF EXISTS clinic_registrations CASCADE;
 DROP TABLE IF EXISTS clinic_patients CASCADE;
@@ -49,7 +50,8 @@ CREATE TABLE clinic_settings (
   cancel_hours INTEGER NOT NULL DEFAULT 24,
   reminders_on BOOLEAN NOT NULL DEFAULT TRUE,
   default_lead_hours INTEGER NOT NULL DEFAULT 24,
-  kiosk_on BOOLEAN NOT NULL DEFAULT FALSE
+  kiosk_on BOOLEAN NOT NULL DEFAULT FALSE,
+  supplies_place_id INTEGER
 );
 
 CREATE TABLE clinic_opening_hours (
@@ -198,6 +200,22 @@ CREATE TABLE clinic_appointments (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE clinic_appointment_supplies (
+  id SERIAL PRIMARY KEY,
+  appointment_id INTEGER NOT NULL REFERENCES clinic_appointments (id),
+  kit_id INTEGER,
+  item_id INTEGER,
+  qty NUMERIC(18, 3) NOT NULL DEFAULT 1,
+  not_used_at TIMESTAMPTZ,
+  batch_id INTEGER,
+  place_id INTEGER,
+  recorded_by VARCHAR(120),
+  recorded_at TIMESTAMPTZ,
+  changed_by VARCHAR(120),
+  changed_at TIMESTAMPTZ,
+  client_key VARCHAR(36) UNIQUE
+);
+
 CREATE TABLE clinic_payments (
   id SERIAL PRIMARY KEY,
   appointment_id INTEGER NOT NULL REFERENCES clinic_appointments (id),
@@ -301,6 +319,7 @@ CREATE INDEX idx_registrations_patient_id ON clinic_registrations (patient_id);
 CREATE INDEX idx_appointments_patient_id ON clinic_appointments (patient_id);
 CREATE INDEX idx_appointments_clinician_id ON clinic_appointments (clinician_id);
 CREATE INDEX idx_appointments_visit_type_id ON clinic_appointments (visit_type_id);
+CREATE INDEX idx_appointment_supplies_appointment_id ON clinic_appointment_supplies (appointment_id);
 CREATE INDEX idx_payments_appointment_id ON clinic_payments (appointment_id);
 CREATE INDEX idx_payments_patient_id ON clinic_payments (patient_id);
 CREATE INDEX idx_payments_visit_type_id ON clinic_payments (visit_type_id);

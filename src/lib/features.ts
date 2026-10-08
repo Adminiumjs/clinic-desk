@@ -15,9 +15,13 @@
 /** A receipt a patient can send to their insurer: drawn and emailed by Invoices & Receipts. */
 export const INSURER_RECEIPTS = "insurer-receipts";
 
+/** What a visit used, recorded on the visit and taken off the shelf when it is seen: counted by Inventory. */
+export const SUPPLIES = "supplies";
+
 /** Each feature and the add-on keys it needs, every one of them. */
 export const FEATURES = {
   [INSURER_RECEIPTS]: ["invoices"],
+  [SUPPLIES]: ["inventory"],
 } as const satisfies Record<string, readonly string[]>;
 
 export type FeatureId = keyof typeof FEATURES;
