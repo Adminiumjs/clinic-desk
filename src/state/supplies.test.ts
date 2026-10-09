@@ -22,7 +22,7 @@ import { venueDay } from "../data/venueTime.ts";
 import { isFeatureOn, setConnectedAddOns } from "./features.ts";
 import { SUPPLIES } from "../lib/features.ts";
 import { SuppliesGone } from "../data/supplies.ts";
-import { forgetSupplies, holdSupplies, loadSupplies, setSuppliesPort, suppliesChanged, useSupplies } from "./supplies.ts";
+import { forgetSupplies, holdSupplies, isBehind, loadSupplies, setSuppliesPort, suppliesChanged, useSupplies } from "./supplies.ts";
 import { setSink } from "./writes.ts";
 
 let db: DemoDb;
@@ -61,6 +61,10 @@ const hold = async (visit: Appointment) => {
   holdSupplies(visit.id);
   await loadSupplies(visit.id);
 };
+
+/** The person at the desk, by the one clinic role they hold. */
+const setDeskAs = (role: "clinician" | "manager") =>
+  useDesk.setState({ me: { name: role === "clinician" ? "Dr Amara Osei" : "Tom Villaseñor", email: null, role, roleName: role === "clinician" ? "Clinic clinician" : "Clinic manager", access: null } });
 
 beforeEach(async () => {
   const rows = resolveSample(bundle as never, { now: DEMO_START, zone: DEMO_ZONE, locale: "en-US" });
@@ -117,6 +121,59 @@ describe("a kit", () => {
     // The lines that were saved stay, and show.
     expect(view(visit.id).lines.length).toBe(3);
     setSink(whole);
+    expect((await act.addKit({ visitId: visit.id, ...kit(), key })).ok).toBe(true);
+    expect(view(visit.id).lines.map((shown) => shown.line.item_id)).toEqual(DEMO_FLU_KIT.lines.map(([itemId]) => itemId));
+  });
+});
+
+describe("a kit refused midway while Adminium also refuses the reads", () => {
+  /** The fifth line is answered "too many requests", as a clinician's burst met the minute's limit. */
+  const limited = (inner: DataSink): DataSink => {
+    let n = 0;
+    return {
+      ...inner,
+      insert: async (ref, values) => {
+        n += 1;
+        if (n === 5) throw new SinkError("Too many requests.", "refused", 429, "RATE_LIMITED");
+        return inner.insert(ref, values);
+      },
+    };
+  };
+
+  it("says so at once, without waiting for the read that follows, and says the list on show is behind", async () => {
+    setDeskAs("clinician");
+    const visit = visitAt("with_clinician");
+    await hold(visit);
+    expect(view(visit.id).lines).toEqual([]);
+    // From here every read waits its turn out and is then refused, as the desk's reads do under the limit.
+    const real = demoSuppliesPort(db);
+    let refuse: () => void = () => undefined;
+    const reads: Promise<never>[] = [];
+    setSuppliesPort({ ...real, load: () => {
+      const read = new Promise<never>((_resolve, reject) => (refuse = () => reject(new SinkError("Too many requests.", "refused", 429, "RATE_LIMITED"))));
+      reads.push(read);
+      return read;
+    } });
+    setSink(limited(demoSink(db, () => ({ origin: "desk", name: "Dr Amara Osei" }))));
+    const key = actionKey();
+    const out = await Promise.race([act.addKit({ visitId: visit.id, ...kit(), key }), new Promise<"still waiting">((resolve) => setTimeout(() => resolve("still waiting"), 1500))]);
+    // The refusal is answered while the read is still out: the tab's note does not wait a minute behind it.
+    expect(out).toMatchObject({ ok: false });
+    expect(reads.length).toBe(1);
+    // Four of six lines are in the table, and the list on show still holds none.
+    expect(db.rows.appointment_supplies.filter((line) => line.appointment_id === visit.id).length).toBe(4);
+    expect(view(visit.id).lines).toEqual([]);
+    refuse();
+    await reads[0]!.catch(() => undefined);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // The read failed with a list held: the screen is told that list is behind, not left to call it the truth.
+    expect(isBehind(useSupplies.getState().byVisit[visit.id])).toBe(true);
+    // Read again once Adminium answers: the four lines show; the same press finishes the kit, nothing twice.
+    setSuppliesPort(real);
+    await loadSupplies(visit.id);
+    expect(isBehind(useSupplies.getState().byVisit[visit.id])).toBe(false);
+    expect(view(visit.id).lines.length).toBe(4);
+    setSink(demoSink(db, () => ({ origin: "desk", name: "Dr Amara Osei" })));
     expect((await act.addKit({ visitId: visit.id, ...kit(), key })).ok).toBe(true);
     expect(view(visit.id).lines.map((shown) => shown.line.item_id)).toEqual(DEMO_FLU_KIT.lines.map(([itemId]) => itemId));
   });

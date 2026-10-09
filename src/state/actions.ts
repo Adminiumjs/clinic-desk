@@ -269,10 +269,22 @@ export function cancelVisit(id: Id): Promise<Outcome<Appointment>> {
  */
 const kitLineKey = (action: string, index: number): string => `${index.toString(16).padStart(2, "0")}${action.slice(2)}`;
 
-/** One supply save, then what Inventory says of the visit's lines read again (what is left moved, or will). */
+/** How long a save waits for the read that follows it before it answers. */
+const SUPPLIES_READ_WAIT_MS = 400;
+
+/**
+ * One supply save, then what Inventory says of the visit's lines read again
+ * (what is left moved, or will). The save answers when it is known, not when
+ * that read is: under Adminium's limit of requests a read waits its turn out
+ * for up to a minute, and a refusal kept behind it left the tab saying
+ * "Nothing recorded yet" over four saved lines, with no word of what went
+ * wrong. The read lands when it lands, and a read that fails marks the list
+ * as behind (`isBehind`).
+ */
 async function supplyAttempt<T>(visitId: Id, steps: () => Promise<T>): Promise<Outcome<T>> {
   const outcome = await attempt(steps);
-  await loadSupplies(visitId).catch(() => undefined);
+  const read = loadSupplies(visitId).catch(() => undefined);
+  await Promise.race([read, new Promise<void>((resolve) => setTimeout(resolve, SUPPLIES_READ_WAIT_MS))]);
   return outcome;
 }
 

@@ -26,6 +26,11 @@ export interface SuppliesEntry {
   view: VisitSupplies | null;
 }
 
+/** Whether the list on show is older than what is stored: its last read failed, so a save may be missing from it. */
+export function isBehind(entry: SuppliesEntry | undefined): boolean {
+  return entry !== undefined && entry.state === "failed" && entry.view !== null;
+}
+
 interface SuppliesState {
   byVisit: Record<Id, SuppliesEntry>;
   /** Seen visits a manager took back to put their supplies right: the tab offers "Done" until they are seen again. */

@@ -29,7 +29,7 @@ import { mayCorrectSupplies } from "../screens/daysheet/model.ts";
 import { addKit, addSupply, confirmBatch, removeSupply, setNotUsed, setStatus, setSupplyQty, type Outcome } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
 import { forgetAddOn } from "../state/features.ts";
-import { holdSupplies, loadSupplies, setCorrecting, suppliesPort, useSupplies } from "../state/supplies.ts";
+import { holdSupplies, isBehind, loadSupplies, setCorrecting, suppliesPort, useSupplies } from "../state/supplies.ts";
 import { openSheet, toast } from "../state/ui.ts";
 import { Note, labelText, monoText } from "../sheets/bits/ui.tsx";
 import SuppliesList, { type SupplyEdits } from "./SuppliesList.tsx";
@@ -86,14 +86,14 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
   }, [busy]);
 
   /** One save at a time; a refusal is said under the list, with the way to try again. */
-  const save = (work: () => Promise<Outcome<unknown>>) => {
+  const save = (work: () => Promise<Outcome<unknown>>, unsaved: string = t("supplies.failed")) => {
     if (running.current) return;
     running.current = true;
     setBusy(true);
     setFailed(null);
     void work()
       .then((out) => {
-        if (!out.ok) setFailed({ retry: () => save(work), words: out.reason === "supplies-closed" || out.reason === "supplies" || out.reason === "not-allowed" || out.reason === "signed-out" ? t(`refusal.${out.reason}`) : t("supplies.failed") });
+        if (!out.ok) setFailed({ retry: () => save(work, unsaved), words: out.reason === "supplies-closed" || out.reason === "supplies" || out.reason === "not-allowed" || out.reason === "signed-out" ? t(`refusal.${out.reason}`) : unsaved });
       })
       .finally(() => {
         running.current = false;
@@ -109,7 +109,8 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
   };
   const pressKit = (kit: KitOffer) => {
     const key = actionKey();
-    save(() => addKit({ visitId: visit.id, kitId: kit.id, lines: kit.lines, key }));
+    // A kit is a line per item: stopped midway, part of it is saved, and the same press finishes it.
+    save(() => addKit({ visitId: visit.id, kitId: kit.id, lines: kit.lines, key }), t("supplies.kitFailed"));
   };
   const pickItem = (item: StockItem) => {
     const key = actionKey();
@@ -215,6 +216,15 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
       )}
 
       {mayAdd && <Picker kits={editable ? others : []} taken={view.lines.filter((shown) => shown.line.kit_id === null).map((shown) => shown.line.item_id)} busy={busy} onKit={pressKit} onItem={pickItem} />}
+
+      {isBehind(entry) && (
+        <Note tone="danger" icon={CircleAlert} role="alert">
+          {t("supplies.behind")}{" "}
+          <button type="button" className="rh-gi" onClick={() => void loadSupplies(visit.id)} style={{ ...btnGhostSm, height: 28, marginInlineStart: 6 }}>
+            {t("supplies.readAgain")}
+          </button>
+        </Note>
+      )}
 
       {failed !== null && (
         <Note tone="danger" icon={CircleAlert} role="alert">
