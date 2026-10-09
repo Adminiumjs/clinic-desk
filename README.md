@@ -178,9 +178,12 @@ Adminium's add-ons.
   cost. While Inventory is disconnected the lines stay, shown by number.
 
   **Setting it up.** In Inventory, make the items and (if you use them) the
-  kits; on a visit type's page in Adminium, its **Stock** tab links the kits
-  that kind of visit offers. In **Desk settings**, *Where supplies are taken
-  from* names the shelf; left empty, Inventory's own default place is used.
+  kits. Every kit and every item is found by search on a visit's **Supplies**
+  tab, whatever the kind of visit. A kind of visit can also *offer* kits, so
+  they show first without a search, but no screen sets that up yet: only the
+  sample practice's nurse visit comes with offered kits. In **Desk
+  settings**, *Where supplies are taken from* names the shelf; left empty,
+  Inventory's own default place is used.
   The shelf is written on each line as it is recorded — nobody who records
   chooses it — so a change of the setting moves the lines recorded after it,
   never one already on a visit. The sample practice comes with its nurse's
