@@ -167,6 +167,17 @@ export function mayAdvance(role: DeskRole | null, from: AppointmentStatus): bool
   return role !== "clinician" || CLINICIAN_STEPS.includes(to);
 }
 
+/**
+ * Whether this person may take a seen visit back to put its supplies right:
+ * anybody who may record supplies and move a visit, except through the
+ * clinician role, which the server lets move a visit only up to "ready".
+ * It asks what the person may do, not which role they hold: the workspace's
+ * owner holds no clinic role and may do all of it.
+ */
+export function mayCorrectSupplies(who: { role: DeskRole | null; update: boolean; supplies?: boolean }): boolean {
+  return who.supplies === true && who.update && who.role !== "clinician";
+}
+
 export type PanelAction = "checkIn" | "advance" | "sendOff" | "move" | "noShow" | "cancel" | "patient" | "payment" | "correct";
 
 /**
@@ -190,8 +201,7 @@ export function panelActions(
   }
   if (visit.patient_id !== null && who.seePatients) out.push("patient");
   if (st === "seen" && visit.balance > 0 && who.pay && !clinician) out.push("payment");
-  // A seen visit's supplies are closed; a manager, and nobody else, takes the visit back to put them right.
-  if (st === "seen" && who.supplies === true && who.update && who.role === "manager") out.push("correct");
+  if (st === "seen" && mayCorrectSupplies(who)) out.push("correct");
   return out;
 }
 

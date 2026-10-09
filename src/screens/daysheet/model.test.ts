@@ -170,14 +170,16 @@ describe("which moves a visit offers", () => {
     expect(panelActions({ status: "ready", patient_id: 1, balance: 45 }, clinician)).toEqual(["patient"]);
     expect(["booked", "checked_in", "roomed", "with_clinician", "ready"].map((st) => mayAdvance("clinician", st as AppointmentStatus))).toEqual([false, true, true, true, false]);
   });
-  it("offers Correct supplies to a manager on a seen visit, and to nobody else", () => {
+  it("offers Correct supplies by what the person may do, not by the role they hold", () => {
     const manager = { ...desk, role: "manager" as const, supplies: true };
     const seen = { status: "seen" as const, patient_id: 1, balance: 0 };
     expect(panelActions(seen, manager)).toEqual(["patient", "correct"]);
     // Not before the visit is seen: until then the list is simply open.
     expect(panelActions({ ...seen, status: "ready" }, manager)).not.toContain("correct");
-    // Not reception, not a clinician, whatever the server lets them write.
-    expect(panelActions(seen, { ...manager, role: "reception" })).not.toContain("correct");
+    // The workspace's owner holds no clinic role and may do all of it.
+    expect(panelActions(seen, { ...manager, role: null })).toEqual(["patient", "correct"]);
+    // Not reception, who may not record supplies; not a clinician, whose role moves a visit only up to "ready".
+    expect(panelActions(seen, { ...manager, role: "reception", supplies: false })).not.toContain("correct");
     expect(panelActions(seen, { ...manager, role: "clinician" })).not.toContain("correct");
     // Not without Inventory, and not for a manager who may not change visits.
     expect(panelActions(seen, { ...manager, supplies: false })).not.toContain("correct");

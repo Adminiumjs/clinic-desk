@@ -25,6 +25,7 @@ import { useI18n } from "../i18n/index.tsx";
 import { clinicianOf } from "../lib/desk.ts";
 import { dayOf, dayShort, num, time } from "../lib/format.ts";
 import { actionKey } from "../lib/keys.ts";
+import { mayCorrectSupplies } from "../screens/daysheet/model.ts";
 import { addKit, addSupply, confirmBatch, removeSupply, setNotUsed, setStatus, setSupplyQty, type Outcome } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
 import { forgetAddOn } from "../state/features.ts";
@@ -50,7 +51,8 @@ export default function SuppliesTab({ visit, name }: { visit: Appointment; name:
   const records = useCan("appointment_supplies", "create");
   const moves = useCan("appointments", "update");
   const correcting = useSupplies((s) => s.correcting[visit.id] === true);
-  const manager = role === "manager";
+  // Who may put a seen visit's supplies right is decided by what they may do, not by a role's name.
+  const manager = mayCorrectSupplies({ role, update: moves, supplies: records });
   const seen = visit.status === "seen";
   // The clinician's own list while the patient is with them; a manager's too.
   const editable = records && (visit.status === "with_clinician" || visit.status === "ready");
