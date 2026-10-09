@@ -159,6 +159,14 @@ export function rehearsedAttach(key: AddOnKey): { range: string; asked: string }
  * release this app's version waits for (`packedVersion`, `rehearsedAttach`).
  */
 export function addOnBundle(key: AddOnKey, options: { released?: boolean } = {}): Bundle {
+  // The add-on a practice had before this update, as it was shipped: its published tarball's own bytes, where
+  // the add-ons checkout is already the newer release (`CONTRACT_FROM_ADD_ONS`, a folder of `<key>-<version>.tgz`).
+  const published = options.released === true && FROM_ADD_ONS !== "" ? readdirSync(FROM_ADD_ONS).find((name) => name.startsWith(`${key}-`) && name.endsWith(".tgz")) : undefined;
+  if (published !== undefined) {
+    const buffer = readFileSync(join(FROM_ADD_ONS, published));
+    const manifest = JSON.parse(untar(buffer)["manifest.json"]!.toString("utf8")) as { key: string; version: string };
+    return { buffer, integrity: `sha512-${createHash("sha512").update(buffer).digest("base64")}`, key: manifest.key, version: manifest.version };
+  }
   const dir = addOnDir(key);
   const pkg = JSON.parse(read(join(dir, "package.json"))) as Record<string, unknown> & { name: string; files: string[] };
   const files: Record<string, Buffer> = {};
@@ -455,6 +463,9 @@ export function untar(buffer: Buffer): Record<string, Buffer> {
  * was really shipped, never from a rebuild of its tag.
  */
 export const FROM_TARBALL = process.env["CONTRACT_FROM_TARBALL"] ?? "";
+
+/** A folder of the published add-on tarballs a practice had before the update (`holiday-calendars-1.0.7.tgz`), or empty: then the add-ons checkout's own version stands for it. */
+export const FROM_ADD_ONS = process.env["CONTRACT_FROM_ADD_ONS"] ?? "";
 
 /**
  * THE ADMINIUM THE RELEASE WAS INSTALLED UNDER: a built checkout of the

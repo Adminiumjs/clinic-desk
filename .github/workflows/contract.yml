@@ -47,7 +47,7 @@ on:
 
 env:
   ADMINIUM_REF: v0.3.20
-  ADD_ONS_REF: v1.0.9
+  ADD_ONS_REF: v1.0.10
   # What the update starts from: the released app, and the Adminium it was released for.
   FROM_VERSION: 0.2.3
   FROM_REF: v0.3.9
@@ -131,6 +131,12 @@ jobs:
       - name: Fetch the released package
         run: curl -fsSL "https://downloads.adminium.dev/apps/clinic/clinic-${FROM_VERSION}.tgz" -o "$RUNNER_TEMP/clinic-${FROM_VERSION}.tgz"
 
+      # The Holiday calendars a practice had with the released version: the add-on's own published package.
+      - name: Fetch the add-on the practice had before the update
+        run: |
+          mkdir -p "$RUNNER_TEMP/add-ons-from"
+          curl -fsSL "https://downloads.adminium.dev/add-ons/holiday-calendars/holiday-calendars-1.0.7.tgz" -o "$RUNNER_TEMP/add-ons-from/holiday-calendars-1.0.7.tgz"
+
       - name: Build the add-ons
         run: |
           cd .add-ons
@@ -153,6 +159,7 @@ jobs:
           ADMINIUM_REQUIRE_CONTRACT: "1"
           CONTRACT_FROM_ADMINIUM: ${{ runner.temp }}/adminium-from
           CONTRACT_FROM_TARBALL: ${{ runner.temp }}/clinic-${{ env.FROM_VERSION }}.tgz
+          CONTRACT_FROM_ADD_ONS: ${{ runner.temp }}/add-ons-from
           TEST_POSTGRES_URL: postgres://postgres:postgres@127.0.0.1:5432/postgres
           TEST_MYSQL_URL: mysql://root@127.0.0.1:3306
         run: npx vitest run
