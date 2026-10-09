@@ -205,7 +205,8 @@ Adminium's add-ons.
 
 ## Moving from 0.2.x
 
-0.3.0 updates a 0.2.0 – 0.2.3 install in place. It needs Adminium 0.3.20 or
+0.3.1 changes no table: it updates a 0.3.0 install in place, with nothing to
+do first. 0.3.0 updates a 0.2.0 – 0.2.3 install in place. It needs Adminium 0.3.20 or
 later.
 
 - **What the update adds:** one table (the supplies a visit used, empty), and

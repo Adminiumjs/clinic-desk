@@ -21,8 +21,9 @@ import { TABLES } from "./tables.ts";
 /**
  * This release. The version moved 0.1.4 → 0.2.0 once (its tables were new),
  * and 0.2.3 → 0.3.0 when a visit's supplies arrived with Inventory.
+ * 0.3.1 changes no table: fixes in the desk's own screens.
  */
-export const VERSION = "0.3.0";
+export const VERSION = "0.3.1";
 
 /**
  * The Adminium release that first reads everything below: booking, the
