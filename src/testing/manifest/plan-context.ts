@@ -144,6 +144,38 @@ export function uniqueWithOf(column: RequiredColumn): string[] | null {
 }
 
 /**
+ * Whether a column that is there can carry a foreign key to the key a link
+ * points at: the live table's own key where the table is there, else the key
+ * the manifest declares for a table this plan makes. Their logical types must
+ * be the same; and on MySQL their own types too, to the letter — it reads
+ * `int` and `int unsigned` (and `smallint`) all as integers, and refuses a
+ * foreign key between any two of them. False when it cannot be told (a key
+ * over several columns, a type no plain column carries): no link is offered.
+ */
+function carriesLinkTo(
+  have: ExistingColumnView,
+  references: string,
+  required: readonly RequiredTable[],
+  names: Readonly<Record<string, string>>,
+  live: ReadonlyMap<string, { columns: readonly ExistingColumnView[] }>,
+  dialect: PlanContext['dialect'],
+): boolean {
+  const existing = live.get(names[references] ?? references);
+  if (existing !== undefined) {
+    const keys = existing.columns.filter((c) => c.isPrimaryKey === true);
+    const key = keys.length === 1 ? keys[0]! : null;
+    if (key === null || key.logicalType === undefined || key.logicalType !== have.logicalType) return false;
+    if (dialect !== 'mysql') return true;
+    // Not told of either: nothing is offered on a guess.
+    return key.dbType !== undefined && have.dbType !== undefined && key.dbType.trim().toLowerCase() === have.dbType.trim().toLowerCase();
+  }
+  const keys = (required.find((t) => t.ref === references)?.columns ?? []).filter((c) => c.role === 'pk');
+  if (keys.length !== 1) return false;
+  const made = keys[0]!.type === 'int' ? 'integer' : keys[0]!.type === 'bigint' ? 'bigint' : keys[0]!.type === 'uuid' ? 'uuid' : null;
+  return made !== null && have.logicalType === made;
+}
+
+/**
  * Whether the table keeps `columns` unique together already: a unique on
  * exactly those columns, or (for one column) the column read back as unique.
  * Unknown counts as kept, so nothing is offered on a guess.
@@ -528,6 +560,21 @@ export function planWithContext(
         if (column.type === 'enum' && have.enumValues !== undefined) {
           const missing = (column.enum ?? []).filter((value) => !have.enumValues!.includes(value));
           if (missing.length > 0) plan.edits.push({ kind: 'enum-values', column: column.ref, values: missing });
+        }
+        /*
+         * A column the app declares a link that the table keeps with no
+         * foreign key: linked, as a fresh install links it. Left out, the
+         * database knows no parent for the row, and everything that follows
+         * the link (a rule that posts through it, a list under its parent)
+         * finds nothing. Only on a table the app made, where the column's
+         * type is the target key's, and the server first checks every row
+         * points at a row that is there. A table the app took over from
+         * somebody else (adopted) is left as its owner keeps it: a server
+         * that may not edit such a table would refuse the whole update, and
+         * one stray row in it would stop an update that asked for nothing.
+         */
+        if (plan.action === 'reuse' && plan.adopted !== true && column.type === 'fk' && column.references !== undefined && have.linksTo === null) {
+          if (carriesLinkTo(have, column.references, required, names, live, context.dialect)) plan.edits.push({ kind: 'add-link', column: column.ref, to: column.references });
         }
         /*
          * A column the app keeps unique that the table does not: made so, as
