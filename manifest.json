@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "key": "clinic",
   "name": "Clinic Desk",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "publisher": {
     "id": "adminium",
     "name": "Adminium",
@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.20",
+    "minAdminiumVersion": "0.3.38",
     "engines": [
       "sqlite",
       "postgres",
@@ -1904,6 +1904,9 @@
       },
       {
         "ref": "patients",
+        "keep": {
+          "law": "health"
+        },
         "label": {
           "en-US": "Patient",
           "de-DE": "Patient",
@@ -2616,6 +2619,9 @@
       },
       {
         "ref": "appointments",
+        "keep": {
+          "law": "health"
+        },
         "label": {
           "en-US": "Appointment",
           "de-DE": "Termin",
@@ -3928,6 +3934,9 @@
       },
       {
         "ref": "payments",
+        "keep": {
+          "law": "tax"
+        },
         "label": {
           "en-US": "Payment",
           "de-DE": "Zahlung",
@@ -4229,6 +4238,9 @@
       },
       {
         "ref": "write_offs",
+        "keep": {
+          "law": "tax"
+        },
         "label": {
           "en-US": "Write-off",
           "de-DE": "Abschreibung",
@@ -4362,6 +4374,9 @@
       },
       {
         "ref": "check_notes",
+        "keep": {
+          "law": "health"
+        },
         "label": {
           "en-US": "Note",
           "de-DE": "Notiz",
@@ -4494,6 +4509,9 @@
       },
       {
         "ref": "recalls",
+        "keep": {
+          "law": "health"
+        },
         "label": {
           "en-US": "Recall",
           "de-DE": "Wiedervorstellung",
@@ -9223,6 +9241,54 @@
       ]
     }
   ],
+  "people": [
+    {
+      "table": "patients",
+      "kind": "people",
+      "email": "email",
+      "name": "name",
+      "firstName": "firstWordOfName",
+      "language": "language",
+      "copies": [
+        {
+          "table": "registrations",
+          "column": "name",
+          "holds": "name",
+          "via": "patient_id"
+        },
+        {
+          "table": "registrations",
+          "column": "email",
+          "holds": "email",
+          "via": "patient_id"
+        },
+        {
+          "table": "registrations",
+          "column": "mobile",
+          "holds": "phone",
+          "via": "patient_id"
+        },
+        {
+          "table": "appointments",
+          "column": "new_name",
+          "holds": "name",
+          "via": "patient_id"
+        },
+        {
+          "table": "appointments",
+          "column": "new_email",
+          "holds": "email",
+          "via": "patient_id"
+        },
+        {
+          "table": "appointments",
+          "column": "new_mobile",
+          "holds": "phone",
+          "via": "patient_id"
+        }
+      ]
+    }
+  ],
   "outbox": {
     "table": "messages",
     "columns": {
@@ -9272,6 +9338,14 @@
       "recall": "clinic-recall",
       "cancelled": "clinic-cancelled",
       "receipt": "clinic-receipt"
+    },
+    "classes": {
+      "confirmation": "service",
+      "reminder": "service",
+      "missed": "service",
+      "recall": "service",
+      "cancelled": "service",
+      "receipt": "service"
     },
     "producers": [
       {

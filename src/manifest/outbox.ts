@@ -24,6 +24,11 @@
  *                 connected; without it the message fails with the reason,
  *                 and never goes without its receipt.
  *
+ * Every kind is service mail, which the do-not-email list never stops: each
+ * is about the patient's own visit, a recall their clinician asked for, a
+ * closure that moved their visit, or a payment they made. The practice sends
+ * no newsletter.
+ *
  * The log is the dedupe: a kind already queued or sent for a visit is not
  * queued again, so the desk's early "Send now" is never followed by the
  * automatic one, and a moved visit gets a fresh reminder.
@@ -67,6 +72,15 @@ export const OUTBOX = {
     recall: "clinic-recall",
     cancelled: "clinic-cancelled",
     receipt: "clinic-receipt",
+  },
+  // About the patient's own care and money, every one: none is stopped by the do-not-email list.
+  classes: {
+    confirmation: "service",
+    reminder: "service",
+    missed: "service",
+    recall: "service",
+    cancelled: "service",
+    receipt: "service",
   },
   producers: [
     // A visit booked by the desk, or by a patient already on file.

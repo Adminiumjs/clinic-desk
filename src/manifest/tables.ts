@@ -50,8 +50,15 @@ export interface Table {
   unique?: string[][];
   /** What the table's rows hand to an add-on's ledger, and when. */
   postings?: Record<string, unknown>[];
+  /** The law makes the practice keep these rows (a patient's record, their visits, its money): an erasure leaves them as they are. */
+  keep?: { law: "tax" | "health" | "contract" | "safety" };
   columns: Column[];
 }
+
+/** A patient's health record: who they are, their visits, what was noted and what their clinician asked for. */
+const KEPT_FOR_HEALTH = { law: "health" } as const;
+/** The practice's money: what was paid and what was forgiven, kept for the tax years. */
+const KEPT_FOR_TAX = { law: "tax" } as const;
 
 // ── column makers ───────────────────────────────────────────────────────────
 
@@ -306,6 +313,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "patients",
+    keep: KEPT_FOR_HEALTH,
     label: l("Patient"),
     labelPlural: l("Patients"),
     keyField: "name",
@@ -360,6 +368,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "appointments",
+    keep: KEPT_FOR_HEALTH,
     label: l("Appointment"),
     labelPlural: l("Appointments"),
     keyField: "ref",
@@ -496,6 +505,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "payments",
+    keep: KEPT_FOR_TAX,
     label: l("Payment"),
     labelPlural: l("Payments"),
     columns: [
@@ -519,6 +529,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "write_offs",
+    keep: KEPT_FOR_TAX,
     label: l("Write-off"),
     labelPlural: l("Write-offs"),
     columns: [
@@ -533,6 +544,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "check_notes",
+    keep: KEPT_FOR_HEALTH,
     label: l("Note"),
     labelPlural: l("Notes"),
     columns: [
@@ -547,6 +559,7 @@ export const TABLES: Table[] = [
   },
   {
     ref: "recalls",
+    keep: KEPT_FOR_HEALTH,
     label: l("Recall"),
     labelPlural: l("Recalls"),
     columns: [

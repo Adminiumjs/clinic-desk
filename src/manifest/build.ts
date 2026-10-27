@@ -14,6 +14,7 @@ import { emailTemplates } from "./emails.ts";
 import { untranslated } from "./labels.ts";
 import { OUTBOX } from "./outbox.ts";
 import { NAV_GROUPS, pages } from "./pages.ts";
+import { PEOPLE } from "./people.ts";
 import { PUBLIC_ACCESS, PUBLIC_KEYS } from "./public.ts";
 import { ROLES } from "./roles.ts";
 import { TABLES } from "./tables.ts";
@@ -21,9 +22,11 @@ import { TABLES } from "./tables.ts";
 /**
  * This release. The version moved 0.1.4 → 0.2.0 once (its tables were new),
  * and 0.2.3 → 0.3.0 when a visit's supplies arrived with Inventory.
- * 0.3.1 changes no table: fixes in the desk's own screens.
+ * 0.3.1 changes no table: fixes in the desk's own screens. 0.3.2 changes no
+ * table either: it tells Adminium who the patients are, that every email is
+ * service mail, and which tables the law keeps.
  */
-export const VERSION = "0.3.1";
+export const VERSION = "0.3.2";
 
 /**
  * The Adminium release that first reads everything below: booking, the
@@ -32,9 +35,10 @@ export const VERSION = "0.3.1";
  * SQLite table, a document switched on when its add-on is connected later, and
  * a print copy that opens in a tab (0.3.2); and rows that post into an
  * add-on's ledger, links into an add-on's tables and a role's grants on them
- * (0.3.18 to 0.3.20).
+ * (0.3.18 to 0.3.20); and who the practice's patients are and where they are
+ * copied, each email's class, and the tables the law keeps (0.3.38).
  */
-export const MIN_ADMINIUM = "0.3.20";
+export const MIN_ADMINIUM = "0.3.38";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
@@ -110,6 +114,7 @@ export function buildManifest(): Record<string, unknown> {
     roles: ROLES,
     publicKeys: PUBLIC_KEYS,
     publicAccess: PUBLIC_ACCESS,
+    people: PEOPLE,
     outbox: OUTBOX,
     emailTemplates: emailTemplates(),
     documents: DOCUMENTS,
