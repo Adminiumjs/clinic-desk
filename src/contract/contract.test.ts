@@ -40,10 +40,12 @@
  *      the shelf when its visit is seen.
  *
  * And the update a practice on 0.2.0 makes: the released 0.2.0 installed with
- * its sample, then updated to this version with Holiday calendars — the new
- * links added to tables that already hold rows, on every engine — then
- * Invoices & Receipts connected afterwards, which switches the receipt on,
- * and a receipt drawn and emailed for a payment taken before and after.
+ * its sample, then updated to this version with Holiday calendars once the
+ * operator allows the roles' new reads of Inventory's tables — the new links
+ * added to tables that already hold rows, and filled from each row's visit,
+ * on every engine — then Invoices & Receipts connected afterwards, which
+ * switches the receipt on, and a receipt drawn and emailed for a payment
+ * taken before and after.
  *
  * It runs where an Adminium checkout with its built server and dashboard is
  * (`ADMINIUM_REPO`) and the add-ons checkout beside it (`ADD_ONS_REPO`), and
@@ -751,7 +753,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           await at?.server.stop();
         });
 
-        it("installs the released 0.2.0 with its sample, then updates it with Holiday calendars: the links added to tables that hold rows", async () => {
+        it("installs the released 0.2.0 with its sample, then updates it with Holiday calendars: the links added to tables that hold rows, filled from each row's visit", async () => {
           const released = appBundle(RELEASED);
           expect(released.version).toBe("0.2.0");
           await upload(at.staff, "apps", released);
@@ -769,18 +771,31 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const next = appBundle();
           await upload(at.staff, "apps", next);
           // Invoices & Receipts left out for now: the practice connects it later.
-          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", {
-            addOns: [{ key: "holiday-calendars", version: packedVersion("holiday-calendars").version }],
-          });
+          const choice = { addOns: [{ key: "holiday-calendars", version: packedVersion("holiday-calendars").version }] };
+          // The roles' reads of Inventory's tables are new since 0.2.0: Adminium asks the operator to allow them, with nothing moved until they do.
+          const asked = await at.staff.post("/api/v1/apps/clinic/update", choice);
+          expect([asked.status, asked.code, asked.details["reason"]]).toEqual([422, "VALIDATION_FAILED", "ROLE_TABLES_WIDER"]);
+          const widened = asked.details["roleTables"] as { role: string; addOn: string }[];
+          expect([...new Set(widened.map((entry) => entry.addOn))]).toEqual(["inventory"]);
+          expect([...new Set(widened.map((entry) => entry.role))].sort()).toEqual(["clinician", "manager", "reception"]);
+          expect((await rows(at, "payments")).length).toBe(before.length);
+          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true });
           // On every engine, SQLite included: the tables with a unique column are rebuilt in place.
           expect(updated.status, JSON.stringify(updated.body).slice(0, 1500)).toBe(200);
           expect([updated.body.from, updated.body.to]).toEqual(["0.2.0", next.version]);
           expect(updated.body.app.addOns?.installed.map((a) => a.key)).toEqual(["holiday-calendars"]);
           await tablesOf(at);
-          // The rows 0.2.0 wrote: the new links are there, empty — nothing fills an old row.
+          // The rows 0.2.0 wrote: the new links are there, and Adminium has worked each out from the payment's visit,
+          // as a payment written now would carry them.
           const after = await rows(at, "payments");
           expect(after.length).toBe(before.length);
-          expect(after.every((p) => p["patient_id"] === null && p["visit_type_id"] === null)).toBe(true);
+          const visits = await rows(at, "appointments");
+          const link = (value: unknown) => (value === null || value === undefined ? null : Number(value));
+          for (const p of after) {
+            const visit = visits.find((v) => v.id === Number(p["appointment_id"]))!;
+            expect([p.id, link(p["patient_id"]), link(p["visit_type_id"]), link(p["clinician_id"])]).toEqual([p.id, link(visit["patient_id"]), link(visit["visit_type_id"]), link(visit["clinician_id"])]);
+          }
+          expect(after.filter((p) => p["patient_id"] !== null).length).toBeGreaterThan(0);
         }, 360_000);
 
         it("switches the receipt on when Invoices & Receipts is connected after the update", async () => {
@@ -793,7 +808,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await render(at, payment.id)).status).toBe(201);
         }, 120_000);
 
-        it("draws a receipt for a payment taken before the update, without the patient it does not name, and one taken after, with it", async () => {
+        it("draws a receipt for a payment taken before the update and one taken after, each naming the patient the update or the payment linked", async () => {
           const [visits, payments, patients] = [await rows(at, "appointments"), await rows(at, "payments"), await rows(at, "patients")];
           const { visit, payment } = paidVisit(visits, payments);
           const patient = patients.find((p) => p.id === visit["patient_id"])!;
@@ -801,8 +816,8 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(old.status, JSON.stringify(old.body).slice(0, 600)).toBeLessThan(300);
           const oldText = await printed(at, old.body.printUrl);
           expect(oldText).toContain(`£${Number(payment["amount"]).toFixed(2)}`);
-          // Taken before the payment carried its patient: the receipt names nobody.
-          expect(oldText).not.toContain(String(patient["name"]));
+          // Taken before the payment carried its patient: the update linked it to its visit's, and the receipt names them.
+          expect(oldText).toContain(String(patient["name"]));
 
           const owing = visits.find((v) => v["status"] === "seen" && Number(v["balance"]) > 0 && v["patient_id"] !== null)!;
           const owner = patients.find((p) => p.id === owing["patient_id"])!;
