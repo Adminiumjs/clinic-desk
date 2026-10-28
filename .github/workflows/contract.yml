@@ -18,7 +18,7 @@
 #   supplies       `src/contract/supplies.test.ts`: the same, with Inventory —
 #                  a visit's supplies recorded and taken off the shelf when it
 #                  is seen, as each clinic role.
-#   the update     `src/contract/update.test.ts`: the PUBLISHED 0.2.3 package
+#   the update     `src/contract/update.test.ts`: the PUBLISHED 0.3.1 package
 #                  (downloaded here, refused unless it matches RELEASES.json)
 #                  installed on the Adminium it was released for, that Adminium
 #                  replaced in place by this one, and the app updated — every
@@ -46,11 +46,11 @@ on:
   workflow_dispatch:
 
 env:
-  ADMINIUM_REF: v0.3.20
+  ADMINIUM_REF: v0.3.38
   ADD_ONS_REF: v1.0.10
   # What the update starts from: the released app, and the Adminium it was released for.
-  FROM_VERSION: 0.2.3
-  FROM_REF: v0.3.9
+  FROM_VERSION: 0.3.1
+  FROM_REF: v0.3.20
 
 jobs:
   contract:
@@ -135,7 +135,7 @@ jobs:
       - name: Fetch the add-on the practice had before the update
         run: |
           mkdir -p "$RUNNER_TEMP/add-ons-from"
-          curl -fsSL "https://downloads.adminium.dev/add-ons/holiday-calendars/holiday-calendars-1.0.7.tgz" -o "$RUNNER_TEMP/add-ons-from/holiday-calendars-1.0.7.tgz"
+          curl -fsSL "https://downloads.adminium.dev/add-ons/holiday-calendars/holiday-calendars-1.0.10.tgz" -o "$RUNNER_TEMP/add-ons-from/holiday-calendars-1.0.10.tgz"
 
       - name: Build the add-ons
         run: |

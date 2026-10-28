@@ -1,47 +1,55 @@
 /**
- * CLINIC DESK'S UPDATE CONTRACT: THE RELEASED 0.2.3, UPDATED IN PLACE.
+ * CLINIC DESK'S UPDATE CONTRACT: THE RELEASED 0.3.1, UPDATED IN PLACE.
  *
  * On SQLite, Postgres and MySQL, along the path a practice takes:
  *
- *   1. install the RELEASED 0.2.3 — the published package's own bytes
+ *   1. install the RELEASED 0.3.1 — the published package's own bytes
  *      (`CONTRACT_FROM_TARBALL`), refused unless they hash to what
  *      RELEASES.json recorded — on the Adminium it was released for
- *      (`CONTRACT_FROM_ADMINIUM`, 0.3.9);
+ *      (`CONTRACT_FROM_ADMINIUM`, 0.3.20), with the Holiday calendars of its
+ *      day (its published package, from `CONTRACT_FROM_ADD_ONS`);
  *   2. its own sample, added at the demo's moment (09:20 on Tuesday 28 July
  *      2026 in London);
- *   3. a desk at work in 0.2.3, through 0.2.3's own doors: a payment taken, a
+ *   3. a desk at work in 0.3.1, through 0.3.1's own doors: a payment taken, a
  *      visit walked from booked to seen with a recall, a note written;
  *   4. ADMINIUM UPGRADED IN PLACE: that Adminium stopped, and the one this
- *      build needs (`ADMINIUM_REPO`) started on the same data directory,
- *      secret and database — the app still 0.2.3, and nothing in its tables
- *      moved by the upgrade;
- *   5. every table of the app read straight from the database (each value as
+ *      build needs (`ADMINIUM_REPO`, 0.3.38) started on the same data
+ *      directory, secret and database — the app still 0.3.1, and nothing in
+ *      its tables moved by the upgrade;
+ *   5. ENGINE FIRST: a patient's address put on the do-not-email list, and
+ *      the confirmation of a visit the desk books for them still reaches them
+ *      (an app that says no class is read as service mail);
+ *   6. every table of the app read straight from the database (each value as
  *      the engine spells it, each column as the engine declares it) and over
  *      HTTP: the snapshot;
- *   6. THIS build uploaded. The practice has Holiday calendars, as nearly
- *      every practice does (it is ticked at install), in the release of its
- *      day, which says it works with this app's 0.2: the update is refused by
- *      name, with nothing moved, until Holiday calendars is updated — and
- *      then the plan is exactly one new table (the supplies a visit used) and
- *      one new column (where supplies are taken from), nothing dropped,
- *      renamed or rewritten, and it applies;
- *   7. every row that was there is unchanged, byte for byte, and every column
- *      declaration too; the new table exists, with the manifest's columns,
- *      and is empty; the new column is empty on the row that was there;
- *   8. ONE WRITE ON AN OLD ROW: a visit seen under 0.2.3 is taken back and
+ *   7. THIS build uploaded: the plan is no new table, no new column and no
+ *      new enum value — nothing dropped, renamed or rewritten — the Holiday
+ *      calendars the practice has works with it as it is, and it applies;
+ *   8. every row that was there is unchanged, byte for byte, and every column
+ *      declaration too;
+ *   9. THE APP NEXT: the confirmation still reaches the patient on the
+ *      do-not-email list (every kind is service mail), and so does the
+ *      reminder of a patient who asked for reminders once its moment comes;
+ *      a patient who did not gets their confirmation and no reminder, as
+ *      before;
+ *  10. ONE WRITE ON AN OLD ROW: a visit seen under 0.3.1 is taken back and
  *      sent off again, and its money is what it was; a payment on a visit made
- *      under 0.2.3 moves its balance by exactly that payment, and one beyond
+ *      under 0.3.1 moves its balance by exactly that payment, and one beyond
  *      the balance is refused;
- *   9. THE SAMPLE ON UPDATE: the update adds no sample rows; removing the
+ *  11. A PATIENT ERASED by their address: their record and their visit stay
+ *      as the law keeps them, said so under "What stays" with the reason; the
+ *      copies of them on their registration are blanked, and so is the
+ *      address their mail went to;
+ *  12. THE SAMPLE ON UPDATE: the update adds no sample rows; removing the
  *      sample afterwards keeps what the desk itself wrote.
  *
  * It runs twice on each engine: as above, and once more with Inventory
  * installed, connected to the app and its own sample added BEFORE the update,
  * as a practice that set up its stock first would have it. Then the same must
  * hold — connecting Inventory writes nothing into the practice's rows, and no
- * visit seen long ago takes anything off the shelf — and the links the update
- * adds work at once: a supply recorded on a visit made under 0.2.3 leaves the
- * shelf when that visit is seen, and comes back when it is taken back.
+ * visit seen long ago takes anything off the shelf — and a supply recorded on
+ * a visit made under 0.3.1 leaves the shelf when that visit is seen, and comes
+ * back when it is taken back.
  *
  * It runs where the plain contract runs (`contract.test.ts`), with the
  * published package of the release it updates and a built checkout of the
@@ -55,6 +63,8 @@ import { join } from "node:path";
 
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import { instantOf } from "../data/publicPatients.ts";
+import { addDays, venueDay } from "../data/venueTime.ts";
 import { DEMO_START, DEMO_ZONE } from "../lib/clock.ts";
 import { TABLES } from "../manifest/tables.ts";
 import { addOnBundle, appBundle, boot, Caller, ENGINES, FROM_ADMINIUM, missing, ok, packedVersion, rawTables, releasedBundle, releasedMissing, until, type Engine, type RawTable, type Server } from "./harness.ts";
@@ -71,12 +81,13 @@ const ADMIN = { email: process.env["E2E_ADMIN_EMAIL"] ?? "e2e@adminium.local", p
 const PREFIX = "clinic_";
 
 /**
- * What 0.3.0 adds to 0.2.3's tables, from the manifest: the update's plan must
- * be exactly this. Where a supply line is taken from is filled from the
- * practice's setting by a rule, and a rule is no column: it adds nothing here.
+ * What 0.3.2 adds to 0.3.1's tables: nothing. It tells Adminium who the
+ * patients are, each email's class and the tables the law keeps, and none of
+ * that is a table, a column or an enum value. The update's plan must be
+ * exactly this.
  */
-const NEW_TABLES = ["appointment_supplies"];
-const NEW_COLUMNS: Record<string, string[]> = { settings: ["supplies_place_id"] };
+const NEW_TABLES: string[] = [];
+const NEW_COLUMNS: Record<string, string[]> = {};
 
 /** The yes/no columns of a table, as the manifest being installed declares them. */
 const yesNoColumns = (ref: string): string[] => (TABLES.find((t) => t.ref === ref)?.columns ?? []).filter((c) => c.type === "bool").map((c) => c.ref);
@@ -85,8 +96,8 @@ const yesNoColumns = (ref: string): string[] => (TABLES.find((t) => t.ref === re
 const realNow = () => performance.timeOrigin + performance.now();
 
 const released = why === null ? releasedBundle() : null;
-const FROM = released?.version ?? "0.2.3";
-const TO = why === null ? appBundle().version : "0.3.0";
+const FROM = released?.version ?? "0.3.1";
+const TO = why === null ? appBundle().version : "0.3.2";
 
 const RUNS = [
   { id: "plain", inventory: false, title: "" },
@@ -107,7 +118,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
         let before: Record<string, RawTable> = {};
         let beforeHttp: Record<string, Row[]> = {};
         let sampleBefore = { loaded: false, total: 0 };
-        /** What the desk did in 0.2.3: the rows the later steps come back to. */
+        /** What the desk did in 0.3.1: the rows the later steps come back to. */
         const made = { seen: 0, owing: 0, note: 0, payment: 0 };
         const startedAt = realNow();
         const practice = mkdtempSync(join(tmpdir(), `cd-update-${run.id}-${engine}-`));
@@ -147,6 +158,59 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
         /** The money of a visit, as Adminium keeps it. */
         const money = (visit: Row) => [Number(visit["fee"]), Number(visit["paid"] ?? 0), Number(visit["waived"] ?? 0), Number(visit["balance"])];
 
+        /** A fresh action key, as the desk makes one for each create. */
+        let keys = 0;
+        const key = () => `55555555-5555-4555-8555-${String((keys += 1)).padStart(12, "0")}`;
+        /**
+         * Two patients of the sample, each given an address of their own on the do-not-email list: one who asked
+         * for reminders, at the longest lead, and one who switched them off.
+         */
+        const stopped = { reminded: `stop.reminded.${run.id}.${engine}@rowan-update.dev`, quiet: `stop.quiet.${run.id}.${engine}@rowan-update.dev` };
+        const patientOf = { reminded: 0, quiet: 0 };
+        /** The day after the demo's: inside every lead a patient may choose. */
+        const tomorrow = addDays(venueDay(DEMO_START, DEMO_ZONE), 1);
+        /** A visit the desk books for a patient on file, tomorrow, at the first time a clinician and a kind of visit they offer are free. */
+        const book = async (patientId: number): Promise<Row> => {
+          let last = "";
+          for (const offered of await rows("clinician_visit_types")) {
+            for (let minute = 9 * 60; minute < 17 * 60; minute += 15) {
+              const time = `${String(Math.floor(minute / 60)).padStart(2, "0")}:${String(minute % 60).padStart(2, "0")}`;
+              const reply = await staff.post<{ data: Row }>(data("appointments"), {
+                values: { patient_id: patientId, visit_type_id: offered["visit_type_id"], clinician_id: offered["clinician_id"], starts_at: instantOf(tomorrow, time, DEMO_ZONE), client_key: key() },
+              });
+              if (reply.status === 201) return reply.body.data;
+              last = `${String(reply.status)} ${JSON.stringify(reply.body).slice(0, 300)}`;
+            }
+          }
+          throw new Error(`no time tomorrow for patient ${String(patientId)}: ${last}`);
+        };
+        interface SinkMessage {
+          to: string[];
+          subject: string;
+          text: string;
+        }
+        const sink = async () => (await (await fetch(`${server.sink}/messages`)).json()) as SinkMessage[];
+        /**
+         * The message of a kind about a visit, once the outbox is done with it — how it went, and the subject of the
+         * email that reached the address, found by the visit's reference.
+         */
+        const mailFor = async (kind: string, visit: Row, to: string) => {
+          const mine = async () => (await rows("messages")).find((m) => Number(m["appointment_id"]) === Number(visit.id) && m["kind"] === kind);
+          const made = await until(mine, `the ${kind} to ${to} to be queued`, 150_000);
+          console.info(`[${kind} queued, ${engine}${run.title}] ${JSON.stringify({ status: made["status"], to: made["to_address"], due_at: made["due_at"], starts_at: visit["starts_at"] })}`);
+          if (kind === "reminder" && made["status"] === "queued") {
+            // A reminder waits in the outbox for the moment it names: brought to now, as that moment coming would.
+            ok(await staff.patch(`${data("messages")}/${String(made.id)}`, { values: { due_at: new Date(DEMO_START - 60_000).toISOString() } }));
+          }
+          const message = await until(async () => {
+            const found = await mine();
+            return found?.["status"] === "queued" ? undefined : found;
+          }, `the ${kind} to ${to}`, 150_000);
+          const status = `${String(message["status"])}${message["error"] ? `: ${String(message["error"])}` : ""}`;
+          const mail = message["status"] === "sent" ? await until(async () => (await sink()).find((m) => m.to.includes(to) && m.text.includes(String(visit["ref"])) && m.subject.startsWith(kind === "reminder" ? "See you" : "You’re booked in")), `the ${kind} email to ${to}`, 60_000) : undefined;
+          return { status, subject: mail?.subject ?? null };
+        };
+
         beforeAll(async () => {
           server = await boot(engine as Engine, port, DEMO_START, database, { adminium: FROM_ADMINIUM, keep: practice });
           ran.from = await signIn();
@@ -159,7 +223,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           rmSync(join(tmpdir(), `adminium-e2e-source-sqlite-${String(port)}.db`), { force: true });
         });
 
-        // ── 0.2.3, released, at work ──────────────────────────────────────────
+        // ── 0.3.1, released, at work ──────────────────────────────────────────
 
         it(`installs the RELEASED ${FROM} — the published package, byte for byte — on the Adminium it was released for`, async () => {
           const app = released!;
@@ -216,6 +280,20 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           expect(await raw()).toEqual(rawUnder);
         }, 300_000);
 
+        it(`still sends ${FROM}'s confirmation to a patient on the do-not-email list: an app that says no class sends service mail`, async () => {
+          // Where emailed links point: what a practice had set up before.
+          ok(await staff.put("/api/v1/settings/email", { publicOrigin: server.base }));
+          const [reminded, quiet] = (await rows("patients")).filter((p) => p["status"] === "active");
+          patientOf.reminded = Number(reminded!.id);
+          patientOf.quiet = Number(quiet!.id);
+          ok(await staff.patch(`${data("patients")}/${String(patientOf.reminded)}`, { values: { email: stopped.reminded, language: "en-US", remind_email: true, remind_lead_hours: 48 } }));
+          ok(await staff.patch(`${data("patients")}/${String(patientOf.quiet)}`, { values: { email: stopped.quiet, language: "en-US", remind_email: false } }));
+          const added = ok(await staff.post<{ data: { added: number } }>("/api/v1/consent/stop-list", { addresses: [stopped.reminded, stopped.quiet] })).data;
+          expect(added.added).toBe(2);
+          const visit = await book(patientOf.reminded);
+          expect(await mailFor("confirmation", visit, stopped.reminded)).toEqual({ status: "sent", subject: expect.stringContaining("booked in") });
+        }, 300_000);
+
         it.skipIf(!run.inventory)("installs Inventory beside the practice, with its own sample, and writes nothing into the practice's rows", async () => {
           const rawUnder = await raw();
           await upload("add-ons", addOnBundle("inventory"));
@@ -254,29 +332,9 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           addOns?: { key: string; need: string; action: string | null }[];
         };
 
-        it(`plans the update to ${TO}: one new table and one new column, nothing dropped, renamed or rewritten`, async () => {
+        it(`plans the update to ${TO}: no new table, column or enum value, nothing dropped, renamed or rewritten, and the add-on the practice has kept as it is`, async () => {
           const app = appBundle();
           await upload("apps", app);
-          /*
-           * The Holiday calendars the practice has was released for this app's
-           * 0.2 and says so. Adminium will not let an update leave an add-on
-           * behind: the plan names it, and the update is refused by name, with
-           * nothing moved, until Holiday calendars itself is updated.
-           */
-          type AddOnLine = { key: string; state: string; installedVersion: string | null; problems: { code: string }[] };
-          const alone = ok(await staff.post<{ plan: { addOns: AddOnLine[] } }>("/api/v1/apps/plan", { key: app.key, version: app.version, connectionId })).plan;
-          const calendars = alone.addOns.find((a) => a.key === "holiday-calendars")!;
-          expect([calendars.state, calendars.installedVersion, calendars.problems.map((p) => p.code).sort()]).toEqual(["outdated", "1.0.7", ["ADD_ON_OUT_OF_RANGE", "ADD_ON_RANGE"]]);
-          const early = await staff.post("/api/v1/apps/clinic/update", {});
-          expect([early.status, early.code, early.details["addOn"]]).toEqual([409, "ADD_ON_RANGE", "holiday-calendars"]);
-          expect(await raw()).toEqual(before);
-          const next = addOnBundle("holiday-calendars");
-          await upload("add-ons", next);
-          const moved = await staff.post<{ from: string; to: string }>("/api/v1/add-ons/holiday-calendars/update", { to: next.version });
-          expect(moved.status, JSON.stringify(moved.body).slice(0, 1200)).toBe(200);
-          expect([moved.body.from, moved.body.to]).toEqual(["1.0.7", next.version]);
-          // Updating the add-on writes nothing into the practice's rows either.
-          expect(await raw()).toEqual(before);
           plan = ok(await staff.post<{ plan: typeof plan }>("/api/v1/apps/plan", { key: app.key, version: app.version, connectionId })).plan;
           console.info(
             `[update plan, ${engine}${run.title}] ` +
@@ -288,6 +346,9 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
               }),
           );
           expect([plan.installable, plan.problems]).toEqual([true, []]);
+          // The Holiday calendars of 0.3.1's day says it works with this app's 0.3: nothing to update first.
+          const calendars = (plan.addOns ?? []).find((a) => a.key === "holiday-calendars");
+          expect([calendars?.key, calendars?.action ?? null]).toEqual(["holiday-calendars", null]);
           const byRef = Object.fromEntries(plan.tables.map((t) => [t.ref, t]));
           expect(Object.keys(byRef).sort()).toEqual(TABLES.map((t) => t.ref).sort());
           for (const ref of NEW_TABLES) expect([ref, byRef[ref]!.action, byRef[ref]!.table, byRef[ref]!.class]).toEqual([ref, "create", `${PREFIX}${ref}`, "new"]);
@@ -320,7 +381,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           expect(Object.keys(desk.addOns ?? {}).sort()).toEqual(run.inventory ? ["holiday-calendars", "inventory"] : ["holiday-calendars"]);
         }, 240_000);
 
-        it("keeps every row that was there, byte for byte, and every column as it was — but for the one the plan adds", async () => {
+        it("keeps every row that was there, byte for byte, and every column as it was", async () => {
           const after = await raw();
           const added: Record<string, string[]> = {};
           const redeclared: string[] = [];
@@ -344,7 +405,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           }
           console.info(`[redeclared, ${engine}${run.title}] ${JSON.stringify(redeclared)}`);
           expect(redeclared).toEqual([]);
-          // Only the column the plan said.
+          // No column at all.
           expect(Object.fromEntries(Object.entries(added).filter(([, list]) => list.length > 0))).toEqual(Object.fromEntries(Object.entries(NEW_COLUMNS).map(([ref, list]) => [`${PREFIX}${ref}`, list])));
           // And over HTTP: every row Adminium hands out is the one it handed out before.
           const nowHttp = await all();
@@ -364,6 +425,23 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
             expect([ref, table!.rows.length]).toEqual([ref, 0]);
           }
         }, 120_000);
+
+        // ── the app's mail, now classed ───────────────────────────────────────
+
+        it(`still sends the confirmation and the reminder to a patient on the do-not-email list, now that ${TO} says every email is service mail`, async () => {
+          const visit = await book(patientOf.reminded);
+          expect(await mailFor("confirmation", visit, stopped.reminded)).toEqual({ status: "sent", subject: expect.stringContaining("booked in") });
+          expect(await mailFor("reminder", visit, stopped.reminded)).toEqual({ status: "sent", subject: expect.stringContaining("See you") });
+        }, 360_000);
+
+        it("sends a patient who switched reminders off their confirmation, and still no reminder", async () => {
+          const visit = await book(patientOf.quiet);
+          expect(await mailFor("confirmation", visit, stopped.quiet)).toEqual({ status: "sent", subject: expect.stringContaining("booked in") });
+          // A visit booked after it, of a patient who asked for reminders, is reminded: the minute's pass that did so went by this one too.
+          const after = await book(patientOf.reminded);
+          expect(await mailFor("reminder", after, stopped.reminded)).toEqual({ status: "sent", subject: expect.stringContaining("See you") });
+          expect((await rows("messages")).filter((m) => Number(m["appointment_id"]) === Number(visit.id)).map((m) => m["kind"])).toEqual(["confirmation"]);
+        }, 360_000);
 
         // ── one write on an old row ───────────────────────────────────────────
 
@@ -400,7 +478,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           const left = async () => Number((await rowsOf("inventory_stock_points")).find((point) => Number(point["item_id"]) === Number(swab.id) && Number(point["place_id"]) === Number(room.id))!["available"]);
           const start = await left();
           ok(await staff.patch(`${data("appointments")}/${String(made.seen)}`, { values: { status: "ready" } }));
-          // The column the update added holds nothing yet; a manager says where supplies are taken from, once.
+          // No place is set yet; a manager says where supplies are taken from, once.
           const [settings] = await rows("settings");
           expect(settings!["supplies_place_id"]).toBeNull();
           ok(await staff.patch(`${data("settings")}/${String(settings!.id)}`, { values: { supplies_place_id: room.id } }));
@@ -416,6 +494,44 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           ok(await staff.patch(`${data("appointments")}/${String(made.seen)}`, { values: { status: "ready" } }));
           expect(await left()).toBe(start);
         }, 180_000);
+
+        // ── a patient erased ──────────────────────────────────────────────────
+
+        it("erases a patient by their address: their record and visit stay as the law keeps them, their registration's copies and their mail's address go", async () => {
+          const address = `erase.${run.id}.${engine}@rowan-update.dev`;
+          const name = `Ines Okafor ${engine}`;
+          const typed = { name, born_on: "1979-03-02", mobile: "07700 900777", email: address };
+          const patient = ok(await staff.post<{ data: Row }>(data("patients"), { values: { ...typed, allergies_note: "Penicillin", language: "en-US", client_key: key() } }), 201).data;
+          const registration = ok(await staff.post<{ data: Row }>(data("registrations"), { values: { ...typed, address: "3 Kiln Lane, Leeds", status: "accepted", patient_id: patient.id } }), 201).data;
+          const visit = await book(Number(patient.id));
+          expect(await mailFor("confirmation", visit, address)).toEqual({ status: "sent", subject: expect.stringContaining("booked in") });
+          const was = { patient: await row("patients", Number(patient.id)), visit: await row("appointments", Number(visit.id)) };
+
+          /** A table of the app, by the name or the id Adminium gives it. */
+          const named = (table?: string) => Object.entries(tableIds).find(([name2, id]) => id === table || name2 === table)?.[0]?.slice(PREFIX.length) ?? table;
+          type Item = { kind: string; table?: string; count: number | null; reason?: string };
+          const preview = ok(await staff.post<{ data: { found: boolean; goes: Item[]; stays: Item[] } }>("/api/v1/privacy/erase/preview", { address })).data;
+          console.info(`[erase preview, ${engine}${run.title}] ${JSON.stringify({ goes: preview.goes.map((g) => [g.kind, named(g.table), g.count]), stays: preview.stays.map((g) => [g.kind, named(g.table), g.reason, g.count]) })}`);
+          expect(preview.found).toBe(true);
+          // Their own record is not among what goes: it is the practice's health record.
+          expect(preview.goes.filter((g) => g.kind === "people")).toEqual([]);
+          expect(preview.goes.filter((g) => g.kind === "copy").map((g) => [named(g.table), g.count])).toEqual([["registrations", 1]]);
+          // And it says why it stays: the patient and their visit, kept for health.
+          const kept = preview.stays.filter((g) => g.kind === "app-rows").map((g) => [named(g.table), g.reason]);
+          expect(kept).toEqual(expect.arrayContaining([["patients", "health"], ["appointments", "health"]]));
+
+          ok(await staff.post("/api/v1/privacy/erase", { address, confirm: address }));
+          // The patient's record and their visit, as they were.
+          expect(await row("patients", Number(patient.id))).toEqual(was.patient);
+          expect(await row("appointments", Number(visit.id))).toEqual(was.visit);
+          // The copies of them on the registration: not one of name, address or mobile is theirs any more.
+          const after = await row("registrations", Number(registration.id));
+          expect([after["name"] === name, after["email"] === address, after["mobile"] === typed.mobile]).toEqual([false, false, false]);
+          console.info(`[survives an erasure, ${engine}${run.title}] ${JSON.stringify({ registration: { born_on: after["born_on"], address: after["address"], emergency_contact: after["emergency_contact"] } })}`);
+          // Their mail's address is gone from the outbox; the message's record of being sent stays.
+          const mail = (await rows("messages")).filter((m) => Number(m["appointment_id"]) === Number(visit.id));
+          expect(mail.map((m) => [m["kind"], m["status"], m["to_address"] === address])).toEqual([["confirmation", "sent", false]]);
+        }, 300_000);
 
         // ── the sample on update ──────────────────────────────────────────────
 
