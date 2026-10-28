@@ -52,7 +52,7 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.2 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.38 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
@@ -120,6 +120,22 @@ missed-visit notes, not booking confirmations. A first visit booked online is
 confirmed only once the desk has checked it (an address nobody has proved gets
 no mail). Sample rows never produce a message, and addresses on reserved
 domains (`example.com`) are never sent to.
+
+Every email the practice sends is service mail: a confirmation, a reminder, a
+missed-visit note, a recall, a closure's cancellation and a receipt are each
+about the patient's own care or money, so Adminium's do-not-email list never
+stops them. *Remind me by email* is the patient's switch for reminders only; it
+is not a yes to any other mail, and the practice sends no newsletter.
+
+Adminium knows the patients as the practice's people: their address, name and
+language, and the copies of them on a registration and on a first visit booked
+online. Finding, exporting or erasing a person by their address reaches all of
+it. A patient's record, their visits, the notes on them and their recalls are
+health records the law makes the practice keep, and the payments and
+write-offs are kept for tax: an erasure leaves those as they are and says so,
+and blanks the name, email address and mobile copied onto a registration (the
+postal address, date of birth and person to ring typed on it stay: Adminium
+0.3.38 blanks only an address, a name or a phone copied there).
 
 ## Add-ons
 
@@ -204,6 +220,12 @@ Adminium's add-ons.
   later for this.
 
 ## Moving from 0.2.x
+
+0.3.2 changes no table: it updates in place whatever 0.3.1 did. Update
+Adminium to 0.3.38 first, then the app. It tells Adminium who the patients
+are, that every email is service mail and which tables the law keeps; no row,
+column or figure you have is changed, and the update is checked against a
+0.3.1 practice with its data on SQLite, Postgres and MySQL, row by row.
 
 0.3.1 changes no table: it updates a 0.3.0 install in place, with nothing to
 do first. 0.3.0 updates a 0.2.0 – 0.2.3 install in place. It needs Adminium 0.3.20 or
