@@ -199,8 +199,10 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           const made = await until(mine, `the ${kind} to ${to} to be queued`, 150_000);
           console.info(`[${kind} queued, ${engine}${run.title}] ${JSON.stringify({ status: made["status"], to: made["to_address"], due_at: made["due_at"], starts_at: visit["starts_at"] })}`);
           if (kind === "reminder" && made["status"] === "queued") {
-            // A reminder waits in the outbox for the moment it names: brought to now, as that moment coming would.
-            ok(await staff.patch(`${data("messages")}/${String(made.id)}`, { values: { due_at: new Date(DEMO_START - 60_000).toISOString() } }));
+            // Up to Adminium 0.3.38 a reminder waits in the outbox for the visit itself: brought to now, as the
+            // visit coming would. A later Adminium sends it as soon as it is queued, so it may have gone already.
+            const moved = await staff.patch(`${data("messages")}/${String(made.id)}`, { values: { due_at: new Date(DEMO_START - 60_000).toISOString() } });
+            if (moved.status !== 200 && (await mine())?.["status"] === "queued") ok(moved);
           }
           const message = await until(async () => {
             const found = await mine();
