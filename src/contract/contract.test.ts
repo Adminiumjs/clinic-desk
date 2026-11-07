@@ -779,7 +779,17 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect([...new Set(widened.map((entry) => entry.addOn))]).toEqual(["inventory"]);
           expect([...new Set(widened.map((entry) => entry.role))].sort()).toEqual(["clinician", "manager", "reception"]);
           expect((await rows(at, "payments")).length).toBe(before.length);
-          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true });
+          // Reception's and the manager's say over Holiday calendars' settings are new since 0.2.0 too: asked next, still with nothing moved.
+          const granting = await at.staff.post("/api/v1/apps/clinic/update", { ...choice, roleTables: true });
+          expect([granting.status, granting.code, granting.details["reason"]]).toEqual([422, "VALIDATION_FAILED", "ROLE_GRANTS_ADDED"]);
+          const granted = granting.details["addOnGrants"] as { role: string; addOn: string; grant: string }[];
+          expect(granted.map((entry) => [entry.role, entry.addOn, entry.grant]).sort()).toEqual([
+            ["clinic-manager", "holiday-calendars", "settings"],
+            ["clinic-reception", "holiday-calendars", "settings"],
+          ]);
+          expect(granting.details["privacyGrants"]).toEqual([]);
+          expect((await rows(at, "payments")).length).toBe(before.length);
+          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true });
           // On every engine, SQLite included: the tables with a unique column are rebuilt in place.
           expect(updated.status, JSON.stringify(updated.body).slice(0, 1500)).toBe(200);
           expect([updated.body.from, updated.body.to]).toEqual(["0.2.0", next.version]);
