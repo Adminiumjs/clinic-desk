@@ -72,6 +72,12 @@
       "version": "0.3.2",
       "integrity": "sha512-1eYHQa2PZ2ldT5lmaH/1lhStW+3LPOgU1cVw5xnYUnIi+FMuC3DwW3df65LTsMiyIYIYrw9wyf2dmtCF19xJBw==",
       "publishedAt": "2026-10-28T00:23:31.000Z"
+    },
+    {
+      "name": "@adminiumjs/app-clinic",
+      "version": "0.3.3",
+      "integrity": "sha512-NaQYMF4bFwrbJpnyujuagxR6FJ0RJGqkHjB33cPtnZIrkigICqsAt5uSEY/CKF5V4nBFiLK5chbC4Qg1HMu4Og==",
+      "publishedAt": "2026-11-07T09:07:54.000Z"
     }
   ]
 }
