@@ -92,6 +92,7 @@ describe("loadStaffConfig", () => {
   it("reads everything a till boots from, and keeps nothing it does not understand", async () => {
     const fetchImpl = ok({
       connectionId: "con_42",
+      installId: "ins_7",
       appName: null,
       tables: { tickets: "pos_tickets", odd: 7 },
       settings: { business_type: "retail" },
@@ -106,6 +107,7 @@ describe("loadStaffConfig", () => {
     });
     expect(await loadStaffConfig({ hostedStaff: true, base: "/apps/pos/staff/", fetchImpl })).toEqual({
       connectionId: "con_42",
+      installId: "ins_7",
       appName: null,
       tables: { tickets: "pos_tickets" },
       settings: { business_type: "retail" },
@@ -125,6 +127,8 @@ describe("loadStaffConfig", () => {
     const config = await loadStaffConfig({ hostedStaff: true, base: "/apps/pos/staff/", fetchImpl });
     expect(config?.access).toBeNull();
     expect(config?.publicKeys).toEqual({});
+    // An Adminium older than installs per database names none: the screens then send no install header.
+    expect(config?.installId).toBeNull();
   });
 
   it("is null outside a hosted staff build", async () => {

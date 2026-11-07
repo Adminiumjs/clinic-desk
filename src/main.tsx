@@ -140,6 +140,7 @@ async function bootDesk(): Promise<void> {
   const transport = createSessionTransport({
     tableOfRef: tables,
     ...(staff.connectionId === null ? {} : { connectionId: staff.connectionId }),
+    installId: staff.installId,
     ...(staff.csrfToken === null
       ? {}
       : {
