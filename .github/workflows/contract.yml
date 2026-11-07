@@ -46,7 +46,7 @@ on:
   workflow_dispatch:
 
 env:
-  ADMINIUM_REF: v0.3.38
+  ADMINIUM_REF: v0.3.49
   ADD_ONS_REF: v1.0.10
   # What the update starts from: the released app, and the Adminium it was released for.
   FROM_VERSION: 0.3.1

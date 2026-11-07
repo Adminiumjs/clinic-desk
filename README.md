@@ -52,7 +52,7 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.38 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.49 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
@@ -220,6 +220,12 @@ Adminium's add-ons.
   later for this.
 
 ## Moving from 0.2.x
+
+0.3.3 changes no table: it updates in place whatever 0.3.2 did. Update
+Adminium to 0.3.49 first, then the app. A practice may then install the desk
+once per database: each install's screens open at their own address and say
+which install they are on every call, so a second database's desk reads and
+writes its own practice.
 
 0.3.2 changes no table: it updates in place whatever 0.3.1 did. Update
 Adminium to 0.3.38 first, then the app. It tells Adminium who the patients

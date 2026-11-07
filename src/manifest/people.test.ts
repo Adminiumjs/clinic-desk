@@ -46,7 +46,8 @@ describe("the practice's patients", () => {
         ],
       },
     ]);
-    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.38", "0.3.38"]);
+    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.49, installs per database).
+    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.49", "0.3.49"]);
   });
 
   it("have one address: the one the outbox writes to and the one their emailed code goes to", () => {

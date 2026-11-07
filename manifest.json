@@ -3,7 +3,7 @@
   "manifestVersion": 1,
   "key": "clinic",
   "name": "Clinic Desk",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "publisher": {
     "id": "adminium",
     "name": "Adminium",
@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.38",
+    "minAdminiumVersion": "0.3.49",
     "engines": [
       "sqlite",
       "postgres",
@@ -49,6 +49,7 @@
         }
       },
       "placement": "internal",
+      "instances": true,
       "routes": {
         "daysheet": "/daysheet",
         "waiting": "/waiting",
@@ -77,6 +78,7 @@
           "example": "adm_pub_..."
         }
       },
+      "instances": true,
       "routes": {
         "find": "/",
         "visits": "/my-visits",
