@@ -2816,21 +2816,29 @@
               "seen"
             ],
             "roomed": [
+              "checked_in",
               "with_clinician",
               "ready",
               "seen"
             ],
             "with_clinician": [
+              "checked_in",
+              "roomed",
               "ready",
               "seen"
             ],
             "ready": [
+              "checked_in",
+              "roomed",
+              "with_clinician",
               "seen"
             ],
             "seen": [
               "ready"
             ],
-            "no_show": [],
+            "no_show": [
+              "booked"
+            ],
             "cancelled": [],
             "lapsed": []
           },

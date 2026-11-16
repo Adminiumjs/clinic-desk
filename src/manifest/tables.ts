@@ -177,8 +177,11 @@ const setting = (column: string) => ({ table: "settings", column });
  * its time held. The payment confirms it (booked); a patient who chooses to
  * pay at the desk after all confirms it too. Left unpaid past the practice's
  * hold, Adminium lets the time go (`lapsed`) — never while a payment for it
- * is still on its way. A seen visit goes back to ready only to put its
- * supplies right.
+ * is still on its way. Inside the practice a visit may be put back a step
+ * when it was moved on by mistake, and a no-show marked by mistake is booked
+ * again; a seen visit goes back to ready only to put its supplies right. A
+ * time held for a payment is never entered again, and a cancelled or lapsed
+ * visit stays so: a new booking is made instead.
  */
 const APPOINTMENT_STATES = {
   column: "status",
@@ -188,11 +191,11 @@ const APPOINTMENT_STATES = {
     paying: ["booked", "lapsed"],
     booked: ["checked_in", "roomed", "with_clinician", "ready", "seen", "no_show", "cancelled"],
     checked_in: ["roomed", "with_clinician", "ready", "seen"],
-    roomed: ["with_clinician", "ready", "seen"],
-    with_clinician: ["ready", "seen"],
-    ready: ["seen"],
+    roomed: ["checked_in", "with_clinician", "ready", "seen"],
+    with_clinician: ["checked_in", "roomed", "ready", "seen"],
+    ready: ["checked_in", "roomed", "with_clinician", "seen"],
     seen: ["ready"],
-    no_show: [],
+    no_show: ["booked"],
     cancelled: [],
     lapsed: [],
   },
