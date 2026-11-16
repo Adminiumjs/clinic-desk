@@ -214,6 +214,13 @@ export type HeldState = "paying" | "lapsed" | "booked";
 /** Which visit a payment is started for: the one being paid for as it is booked, or one of the patient's own visits. */
 export type PayFor = "held" | "visit";
 
+/**
+ * Where a visit's newest online payment stands, as Adminium tells the patient
+ * who comes back from the pay page: none started, a checkout still open, the
+ * bank confirming it, paid, not finished, or its time to pay ran out.
+ */
+export type PayAttemptState = "none" | "open" | "confirming" | "paid" | "failed" | "expired";
+
 export interface OwnDetails {
   name: string;
   email: string | null;
@@ -322,6 +329,8 @@ export interface PatientsPort {
   settleHeld(id: Id, to: "booked" | "lapsed"): Promise<void>;
   /** The link to pay a visit the patient can read: the one being paid for as it is booked, or one of their own. */
   payLink(id: Id, of: PayFor): Promise<string>;
+  /** Where the visit's newest online payment stands, read through the same door it was started through. */
+  payState(id: Id, of: PayFor): Promise<PayAttemptState>;
   /**
    * The session this page holds, to carry across the pay page and back (null
    * when it holds none); and the one carried back, held again.

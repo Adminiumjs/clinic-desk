@@ -198,6 +198,7 @@ export async function signOutPatient(): Promise<void> {
     .catch(() => undefined);
   usePatients.setState({ found: null, level: null, visits: null, details: null, moving: null });
   // Nothing carried across a pay page outlives a sign-out.
-  const { forgetCarried } = await import("../screens/patient/paying.ts");
+  const { forgetCarried, usePaying } = await import("../screens/patient/paying.ts");
   forgetCarried();
+  usePaying.setState({ awayVisit: null, rowState: null, paidNow: null });
 }

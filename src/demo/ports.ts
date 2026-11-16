@@ -463,6 +463,13 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
 
     payLink: async (id) => `${DEMO_PAY}${String(id)}`,
 
+    // The demo's payments are played out at once: a visit paid online reads as paid, any other as never started.
+    payState: async (id) => {
+      const visit = r.appointments.find((a) => a.id === id && a.patient_id === session?.patientId);
+      const paid = r.payments.some((p) => p.appointment_id === id && p.method === "online" && !p.voided);
+      return visit !== undefined && paid && visit.balance <= 0 ? "paid" : "none";
+    },
+
     carrySession: () => null,
     resumeSession: () => undefined,
 

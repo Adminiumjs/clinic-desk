@@ -9,7 +9,7 @@
  * it is flagged late, never refused.
  */
 import { useEffect, useState } from "react";
-import { CalendarSync, Check, CircleCheck, Clock, Lock, RotateCw, Undo2, Wallet } from "lucide-react";
+import { CalendarSync, Check, CircleCheck, Clock, Landmark, Lock, RotateCw, TimerOff, Undo2, Wallet } from "lucide-react";
 
 import type { OwnVisit } from "../../data/ports.ts";
 import { PortError } from "../../data/ports.ts";
@@ -24,7 +24,7 @@ import { howFar, insideWindow, sessionEnded } from "./logic.ts";
 import { ClinicianTile, Fill, PageHead, Phone, clinicianNamed, quietBtn, sectionLabel, useCatalogue } from "./parts.tsx";
 import { useTodayDay } from "./useToday.ts";
 import { VerifyFlow, endSession, useVerified } from "./VerifyFlow.tsx";
-import { payAgain, usePaying } from "./paying.ts";
+import { afterLookup, payAgain, usePaying } from "./paying.ts";
 import { CheckingBox, FailedBox, TakingBox } from "./payParts.tsx";
 
 export default function MyVisits() {
@@ -90,6 +90,11 @@ function Found() {
   const [failed, setFailed] = useState(false);
   const [again, setAgain] = useState(0);
   const online = usePaying((s) => s.online === true);
+
+  // Back from paying and signed out on the way: now they are found again, the visit they paid for is read.
+  useEffect(() => {
+    void afterLookup();
+  }, []);
 
   useEffect(() => {
     setFailed(false);
@@ -267,6 +272,8 @@ function PastRow({ v }: { v: OwnVisit }) {
   const online = usePaying((s) => s.online === true);
   const step = usePaying((s) => (s.step !== null && s.step.for === "visit" && s.step.id === v.id ? s.step : null));
   const paidNow = usePaying((s) => s.paidNow === v.id);
+  // Back from paying it, and not paid: what Adminium says of that payment.
+  const told = usePaying((s) => (s.rowState !== null && s.rowState.id === v.id ? s.rowState.state : null));
   const [failed, setFailed] = useState(false);
   // Paying what a seen visit still owes, from the page itself: the visit's own amount, on the secure payment page.
   const pay = async () => {
@@ -314,7 +321,7 @@ function PastRow({ v }: { v: OwnVisit }) {
               <span style={mono(13, 600, "var(--warn)")}>{money(v.balance, settings.currency)}</span>
             </Fill>
           </span>
-          {step === null && (
+          {step === null && told !== "confirming" && (
             <Btn kind="ghostSm" icon={Lock} onClick={() => void pay()} style={{ marginInlineStart: "auto", height: 34 }} label={`${t("pay.now")} ${v.ref}`}>
               {t("pay.now")}
             </Btn>
@@ -323,7 +330,22 @@ function PastRow({ v }: { v: OwnVisit }) {
       )}
       {step?.kind === "taking" && <TakingBox compact />}
       {step?.kind === "checking" && <CheckingBox compact />}
-      {failed && <FailedBox compact />}
+      {(failed || (step === null && told === "failed")) && <FailedBox compact />}
+      {step === null && owes && told === "confirming" && (
+        <div role="status" style={{ display: "flex", flexDirection: "column", gap: 5, padding: "11px 12px", borderRadius: 11, background: "var(--info-soft)" }}>
+          <span style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, fontWeight: 800, lineHeight: 1.45, color: "var(--fg)" }}>
+            <Landmark size={15} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 1, color: "var(--info)" }} />
+            {t("pay.bankTitle")}
+          </span>
+          <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", paddingInlineStart: 23, textWrap: "pretty" }}>{t("pay.bankBody")}</span>
+        </div>
+      )}
+      {step === null && owes && told === "expired" && (
+        <div role="status" style={{ display: "flex", alignItems: "flex-start", gap: 8, padding: "10px 12px", borderRadius: 11, background: "var(--warn-soft)", fontSize: 12.5, fontWeight: 800, lineHeight: 1.5, color: "var(--fg)", textWrap: "pretty" }}>
+          <TimerOff size={15} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 1, color: "var(--warn)" }} />
+          {t("pay.expiredTitle")}
+        </div>
+      )}
     </div>
   );
 }

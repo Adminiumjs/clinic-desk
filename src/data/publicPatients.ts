@@ -336,6 +336,13 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
         return (await client.payments.start(ref, String(id))).payUrl;
       }),
 
+    payState: (id, of) =>
+      guard(async () => {
+        const ref = of === "held" ? refs.held : refs.visits;
+        if (ref === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        return (await client.payments.state(ref, String(id))).state;
+      }),
+
     carrySession: () => client.session(),
 
     resumeSession: (carried) => {

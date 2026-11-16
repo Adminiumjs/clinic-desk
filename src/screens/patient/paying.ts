@@ -19,7 +19,7 @@
  */
 import { create } from "zustand";
 
-import { PortError, type BookedToPay, type HeldState, type PayFor } from "../../data/ports.ts";
+import { PortError, type BookedToPay, type HeldState, type PayAttemptState, type PayFor } from "../../data/ports.ts";
 import type { Day, Hhmm, Id, Instant } from "../../data/types.ts";
 import { loadMyVisits, patientsPort, usePatients } from "../../state/patients.ts";
 import { go } from "../../state/ui.ts";
@@ -50,9 +50,13 @@ export interface PayingState {
   shown: BookingShown | null;
   /** A visit paid from My visits just now: its row says "Paid". */
   paidNow: Id | null;
+  /** Back from paying one of their visits, and not paid: the bank is confirming it, it did not finish, or its time ran out. */
+  rowState: { id: Id; state: "confirming" | "failed" | "expired" } | null;
+  /** The visit they left to pay for when they came back signed out: read again once they look themselves up. */
+  awayVisit: Id | null;
 }
 
-export const usePaying = create<PayingState>(() => ({ online: null, test: false, step: null, away: false, shown: null, paidNow: null }));
+export const usePaying = create<PayingState>(() => ({ online: null, test: false, step: null, away: false, shown: null, paidNow: null, rowState: null, awayVisit: null }));
 
 /** Whether "Pay now" may be offered. */
 export const payingOnline = (): boolean => usePaying.getState().online === true;
@@ -138,7 +142,7 @@ const TAKING_MS = 900;
  * payment out in the browser and comes straight back as from a paid one.
  */
 export async function handOff(payUrl: string, of: PayFor, id: Id, booking: BookingShown | null): Promise<void> {
-  usePaying.setState({ step: { kind: "taking", for: of, id }, away: false, ...(booking === null ? {} : { shown: booking }) });
+  usePaying.setState({ step: { kind: "taking", for: of, id }, away: false, rowState: null, awayVisit: null, ...(booking === null ? {} : { shown: booking }) });
   const port = patientsPort();
   await pause(TAKING_MS);
   if (port.simulatePay !== undefined) {
@@ -189,9 +193,13 @@ export async function comeBackFromPaying(): Promise<void> {
   await comeBack(carried);
 }
 
-/** Signed out while away: say so, and claim nothing about a payment the page cannot read. */
-function signedOutAway(): void {
-  usePaying.setState({ step: null, away: true });
+/**
+ * Signed out while away: say so, and claim nothing about a payment the page
+ * cannot read. When they had left to pay one of their own visits, that visit
+ * is read again once they look themselves up (`afterLookup`).
+ */
+function signedOutAway(visit: Id | null): void {
+  usePaying.setState({ step: null, away: true, awayVisit: visit });
   setLookup("visits", { step: "find", sent: null, problem: null });
   go("visits");
 }
@@ -200,7 +208,7 @@ async function comeBack(carried: Carried): Promise<void> {
   const port = patientsPort();
   const level = port.level();
   if (level === null) {
-    signedOutAway();
+    signedOutAway(carried.for === "visit" ? carried.id : null);
     return;
   }
   // Who they are, as the server named them: their date of birth and mobile were never kept.
@@ -209,25 +217,12 @@ async function comeBack(carried: Carried): Promise<void> {
   if (carried.for === "visit") {
     // Their own visits: the row shows Paid once the payment is written down.
     go("visits");
-    usePaying.setState({ step: { kind: "checking", for: "visit", id: carried.id }, away: false });
-    for (let n = 0; n < CHECKS; n += 1) {
-      try {
-        const visit = (await loadMyVisits()).find((one) => one.id === carried.id);
-        if (visit !== undefined && visit.balance <= 0) usePaying.setState({ paidNow: visit.id });
-        if (visit === undefined || visit.balance <= 0) break;
-      } catch (error) {
-        if (sessionGone(error)) {
-          signedOutAway();
-          return;
-        }
-        break;
-      }
-      await pause(CHECK_EVERY_MS);
+    usePaying.setState({ step: { kind: "checking", for: "visit", id: carried.id }, away: false, rowState: null });
+    const told = await settleVisit(carried.id);
+    if (told === "signed-out") {
+      signedOutAway(carried.id);
+      return;
     }
-    // Still owing after the checks: the row keeps its "Pay now". Whether the bank is still confirming the
-    // payment, or it did not finish, is the payment's own state, which this Adminium does not let a patient
-    // read (only whether payments are open, and a start). Once it does, read it here by the visit's id and
-    // show "Your bank is confirming the payment" or "The payment didn't finish. Nothing was taken." on the row.
     usePaying.setState({ step: null });
     return;
   }
@@ -246,7 +241,7 @@ async function comeBack(carried: Carried): Promise<void> {
       state = await port.held(carried.id);
     } catch (error) {
       if (sessionGone(error)) {
-        signedOutAway();
+        signedOutAway(null);
         return;
       }
       break;
@@ -275,4 +270,46 @@ async function comeBack(carried: Carried): Promise<void> {
     return;
   }
   usePaying.setState({ step: state === "paying" ? { kind: "failed", for: "held", id: carried.id } : null });
+}
+
+/**
+ * One of their own visits, back from paying it: asked again while the payment
+ * is still being written down, until it is paid, or Adminium says the bank is
+ * confirming it, it did not finish, or its time to pay ran out — each said on
+ * the visit's row ("Nothing was taken" only when Adminium says so). A
+ * checkout still open after the checks leaves the row with its "Pay now".
+ */
+async function settleVisit(id: Id): Promise<"done" | "signed-out"> {
+  const port = patientsPort();
+  for (let n = 0; n < CHECKS; n += 1) {
+    let state: PayAttemptState;
+    try {
+      const visit = (await loadMyVisits()).find((one) => one.id === id);
+      if (visit === undefined) return "done";
+      if (visit.balance <= 0) {
+        usePaying.setState({ paidNow: visit.id, rowState: null });
+        return "done";
+      }
+      state = await port.payState(id, "visit");
+    } catch (error) {
+      if (sessionGone(error)) return "signed-out";
+      return "done";
+    }
+    if (state === "confirming" || state === "failed" || state === "expired") {
+      usePaying.setState({ rowState: { id, state } });
+      return "done";
+    }
+    // Paid, and the visit not yet read as paid: asked again, as an open checkout is.
+    if (state === "none") return "done";
+    await pause(CHECK_EVERY_MS);
+  }
+  return "done";
+}
+
+/** Looked themselves up again after coming back signed out: the visit they paid for is read now, and its row says how it stands. */
+export async function afterLookup(): Promise<void> {
+  const id = usePaying.getState().awayVisit;
+  if (id === null) return;
+  usePaying.setState({ awayVisit: null, away: false });
+  await settleVisit(id);
 }
