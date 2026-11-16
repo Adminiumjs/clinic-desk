@@ -833,7 +833,11 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const widening = await at.staff.post("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true });
           expect([widening.status, widening.code, widening.details["reason"]]).toEqual([422, "VALIDATION_FAILED", "PUBLIC_WIDER"]);
           const wider = widening.details["publicWider"] as { ref: string; columns: string[]; methods: string[]; rows: boolean }[];
-          expect(wider.map((entry) => [entry.ref, [...entry.methods].sort(), [...entry.columns].sort(), entry.rows])).toEqual([["clinic_appointments_verified", [], ["paid", "refunded"], false]]);
+          // And the practice's settings: whether a patient may pay as they book, and whether a cancel in time goes back by itself.
+          expect(wider.map((entry) => [entry.ref, [...entry.methods].sort(), [...entry.columns].sort(), entry.rows]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([
+            ["clinic_appointments_verified", [], ["paid", "refunded"], false],
+            [expect.stringMatching(/^clinic_settings/), [], ["auto_refund", "pay_ahead"], false],
+          ]);
           expect((await rows(at, "payments")).length).toBe(before.length);
           const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true, publicWider: true });
           // On every engine, SQLite included: the tables with a unique column are rebuilt in place.
