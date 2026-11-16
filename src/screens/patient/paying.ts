@@ -224,6 +224,10 @@ async function comeBack(carried: Carried): Promise<void> {
       }
       await pause(CHECK_EVERY_MS);
     }
+    // Still owing after the checks: the row keeps its "Pay now". Whether the bank is still confirming the
+    // payment, or it did not finish, is the payment's own state, which this Adminium does not let a patient
+    // read (only whether payments are open, and a start). Once it does, read it here by the visit's id and
+    // show "Your bank is confirming the payment" or "The payment didn't finish. Nothing was taken." on the row.
     usePaying.setState({ step: null });
     return;
   }

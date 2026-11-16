@@ -9668,7 +9668,6 @@
       "sensitive": false,
       "reason": "the reply names only the booking just made: its reference, time, length, clinician and fee",
       "humanCheck": true,
-      "pay": true,
       "maxOpen": {
         "column": "status",
         "values": [

@@ -291,18 +291,27 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
     bookToPay: (visit) =>
       guard(async (): Promise<BookedToPay> => {
         if (refs.payBook === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
-        const made = await client.createTree<Record<string, unknown>>(refs.payBook, {
-          values: {
+        const row = normalise(
+          "appointments",
+          await client.create<Record<string, unknown>>(refs.payBook, {
             visit_type_id: visit.visit_type_id,
             clinician_id: visit.clinician_id,
             starts_at: visit.starts_at,
             reason: visit.reason,
             desk_note: visit.desk_note,
             language: visit.language,
-          },
-        });
-        const row = normalise("appointments", made.data);
-        return { id: row.id, ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status, fee: row.fee ?? 0, payUrl: made.payUrl };
+          }),
+        );
+        // The link to pay it, for the visit this page has just made and can read; none while the practice cannot take it.
+        let payUrl: string | null = null;
+        if (refs.held !== null) {
+          try {
+            payUrl = (await client.payments.start(refs.held, String(row.id))).payUrl;
+          } catch (error) {
+            if (!(error instanceof PublicApiError) || error.code !== "PUBLIC_PAY_REFUSED") throw error;
+          }
+        }
+        return { id: row.id, ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status, fee: row.fee ?? 0, payUrl };
       }),
 
     held: (id) =>

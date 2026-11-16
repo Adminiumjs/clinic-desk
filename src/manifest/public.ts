@@ -244,8 +244,9 @@ export const PUBLIC_ACCESS = [
   { table: "clinicians", key: "kiosk", methods: ["GET"], select: ["id", "short_name", "role_label", "color"] },
   // ── paying online (after every older entry, so each one keeps its name) ──
   // Paying as they book (once the practice takes payments, and only a patient
-  // already on file): the visit is made waiting for its payment, its time held,
-  // and the reply carries the link to pay it. The payment confirms it.
+  // already on file): the visit is made waiting for its payment, its time held;
+  // the page then asks for the link to pay it, reading the visit through the
+  // door below. The payment confirms it.
   {
     table: "appointments",
     methods: ["POST"],
@@ -256,7 +257,6 @@ export const PUBLIC_ACCESS = [
     sensitive: false,
     reason: "the reply names only the booking just made: its reference, time, length, clinician and fee",
     humanCheck: true,
-    pay: true,
     maxOpen: { column: "status", values: ["booked", "paying"], n: 2, upcoming: "starts_at" },
     requireSetting: [setting("online_booking_on"), setting("pay_ahead")],
   },
