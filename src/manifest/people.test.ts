@@ -48,8 +48,8 @@ describe("the practice's patients", () => {
         ],
       },
     ]);
-    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.60, visits paid for online).
-    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.60", "0.3.60"]);
+    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.61, a payment's state read back).
+    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.61", "0.3.61"]);
   });
 
   it("have one address: the one the outbox writes to and the one their emailed code goes to", () => {

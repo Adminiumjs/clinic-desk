@@ -42,9 +42,10 @@ export const VERSION = "0.3.3";
  * desk that is one install of several, one per database, and says which on
  * every call (0.3.49); and visits paid for online — a visit's states, a time
  * held while a patient pays, refunds that start by themselves, and the refund
- * right a role holds (0.3.60).
+ * right a role holds (0.3.60); and, back from paying, where that payment
+ * stands, read by the patient (0.3.61).
  */
-export const MIN_ADMINIUM = "0.3.60";
+export const MIN_ADMINIUM = "0.3.61";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
