@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.49",
+    "minAdminiumVersion": "0.3.60",
     "engines": [
       "sqlite",
       "postgres",
@@ -713,6 +713,69 @@
               "ar-EG": "جهاز تسجيل الوصول",
               "zh-CN": "自助签到机",
               "zh-TW": "自助報到機"
+            }
+          },
+          {
+            "ref": "pay_ahead",
+            "type": "bool",
+            "default": true,
+            "label": {
+              "en-US": "Patients may pay when they book",
+              "de-DE": "Patienten dürfen bei der Buchung bezahlen",
+              "fr-FR": "Les patients peuvent payer en réservant",
+              "da-DK": "Patienter må betale, når de booker",
+              "cs-CZ": "Pacienti mohou zaplatit při rezervaci",
+              "ar-EG": "يمكن للمرضى الدفع عند الحجز",
+              "zh-CN": "患者可在预约时付款",
+              "zh-TW": "病患可在預約時付款"
+            }
+          },
+          {
+            "ref": "pay_hold_minutes",
+            "type": "int",
+            "default": 15,
+            "label": {
+              "en-US": "Time held while a patient pays (minutes)",
+              "de-DE": "Reservierung während der Zahlung (Minuten)",
+              "fr-FR": "Créneau réservé pendant le paiement (minutes)",
+              "da-DK": "Tiden holdes, mens patienten betaler (minutter)",
+              "cs-CZ": "Termín podržen během platby (minuty)",
+              "ar-EG": "مدة حجز الموعد أثناء الدفع (بالدقائق)",
+              "zh-CN": "付款期间保留时段（分钟）",
+              "zh-TW": "付款期間保留時段（分鐘）"
+            },
+            "rules": {
+              "options": {
+                "values": [
+                  {
+                    "value": "10"
+                  },
+                  {
+                    "value": "15"
+                  },
+                  {
+                    "value": "20"
+                  },
+                  {
+                    "value": "30"
+                  }
+                ]
+              }
+            }
+          },
+          {
+            "ref": "auto_refund",
+            "type": "bool",
+            "default": true,
+            "label": {
+              "en-US": "Refund cancellations automatically",
+              "de-DE": "Absagen automatisch erstatten",
+              "fr-FR": "Rembourser automatiquement les annulations",
+              "da-DK": "Refundér aflysninger automatisk",
+              "cs-CZ": "Automaticky vracet peníze za zrušení",
+              "ar-EG": "استرداد الإلغاءات تلقائيًا",
+              "zh-CN": "自动为取消退款",
+              "zh-TW": "自動為取消退款"
             }
           },
           {
@@ -2653,6 +2716,7 @@
           "countWhere": {
             "column": "status",
             "values": [
+              "paying",
               "booked",
               "checked_in",
               "roomed",
@@ -2723,6 +2787,69 @@
               "to": "cancelled"
             }
           }
+        },
+        "states": {
+          "column": "status",
+          "initial": "booked",
+          "starts": [
+            "checked_in",
+            "paying"
+          ],
+          "moves": {
+            "paying": [
+              "booked",
+              "lapsed"
+            ],
+            "booked": [
+              "checked_in",
+              "roomed",
+              "with_clinician",
+              "ready",
+              "seen",
+              "no_show",
+              "cancelled"
+            ],
+            "checked_in": [
+              "roomed",
+              "with_clinician",
+              "ready",
+              "seen"
+            ],
+            "roomed": [
+              "with_clinician",
+              "ready",
+              "seen"
+            ],
+            "with_clinician": [
+              "ready",
+              "seen"
+            ],
+            "ready": [
+              "seen"
+            ],
+            "seen": [
+              "ready"
+            ],
+            "no_show": [],
+            "cancelled": [],
+            "lapsed": []
+          },
+          "timed": [
+            {
+              "from": "paying",
+              "to": "lapsed",
+              "at": {
+                "column": "created_at",
+                "plus": {
+                  "minutes": {
+                    "table": "settings",
+                    "column": "pay_hold_minutes"
+                  }
+                }
+              },
+              "waitsForPayment": true
+            }
+          ]
         },
         "columns": [
           {
@@ -2972,7 +3099,7 @@
               "rollup": {
                 "from": "payments",
                 "via": "appointment_id",
-                "sum": "amount",
+                "sum": "kept",
                 "where": {
                   "column": "voided",
                   "eq": false
@@ -3002,6 +3129,58 @@
               "zh-TW": "尚欠金額"
             },
             "nullable": true
+          },
+          {
+            "ref": "refunded",
+            "type": "money",
+            "label": {
+              "en-US": "Refunded",
+              "de-DE": "Erstattet",
+              "fr-FR": "Remboursé",
+              "da-DK": "Refunderet",
+              "cs-CZ": "Vráceno",
+              "ar-EG": "المبلغ المسترد",
+              "zh-CN": "已退款",
+              "zh-TW": "已退款"
+            },
+            "nullable": true,
+            "rules": {
+              "rollup": {
+                "from": "payments",
+                "via": "appointment_id",
+                "sum": "refunded",
+                "where": {
+                  "column": "voided",
+                  "eq": false
+                }
+              }
+            }
+          },
+          {
+            "ref": "paid_online",
+            "type": "money",
+            "label": {
+              "en-US": "Paid online",
+              "de-DE": "Online bezahlt",
+              "fr-FR": "Payé en ligne",
+              "da-DK": "Betalt online",
+              "cs-CZ": "Zaplaceno online",
+              "ar-EG": "مدفوع عبر الإنترنت",
+              "zh-CN": "在线已付",
+              "zh-TW": "線上已付"
+            },
+            "nullable": true,
+            "rules": {
+              "rollup": {
+                "from": "payments",
+                "via": "appointment_id",
+                "sum": "kept",
+                "where": {
+                  "column": "method",
+                  "eq": "online"
+                }
+              }
+            }
           },
           {
             "ref": "reason",
@@ -3039,6 +3218,7 @@
             "ref": "status",
             "type": "enum",
             "enum": [
+              "paying",
               "booked",
               "checked_in",
               "roomed",
@@ -3046,7 +3226,8 @@
               "ready",
               "seen",
               "no_show",
-              "cancelled"
+              "cancelled",
+              "lapsed"
             ],
             "label": {
               "en-US": "Status",
@@ -3062,6 +3243,16 @@
             "rules": {
               "enumLabels": {
                 "labels": {
+                  "paying": {
+                    "en-US": "Paying online",
+                    "de-DE": "Wird online bezahlt",
+                    "fr-FR": "Paiement en ligne en cours",
+                    "da-DK": "Betaler online",
+                    "cs-CZ": "Platí se online",
+                    "ar-EG": "قيد الدفع عبر الإنترنت",
+                    "zh-CN": "正在在线付款",
+                    "zh-TW": "正在線上付款"
+                  },
                   "booked": {
                     "en-US": "Booked",
                     "de-DE": "Gebucht",
@@ -3141,6 +3332,16 @@
                     "ar-EG": "ملغى",
                     "zh-CN": "已取消",
                     "zh-TW": "已取消"
+                  },
+                  "lapsed": {
+                    "en-US": "Not paid in time",
+                    "de-DE": "Nicht rechtzeitig bezahlt",
+                    "fr-FR": "Non payé à temps",
+                    "da-DK": "Ikke betalt i tide",
+                    "cs-CZ": "Nezaplaceno včas",
+                    "ar-EG": "لم يُدفع في الوقت",
+                    "zh-CN": "未按时付款",
+                    "zh-TW": "未按時付款"
                   }
                 },
                 "tones": {
@@ -3455,6 +3656,33 @@
             "nullable": true
           },
           {
+            "ref": "receipt_email",
+            "type": "text",
+            "maxLength": 254,
+            "label": {
+              "en-US": "Email for receipts",
+              "de-DE": "E-Mail für Quittungen",
+              "fr-FR": "E-mail pour les reçus",
+              "da-DK": "E-mail til kvitteringer",
+              "cs-CZ": "E-mail pro doklady",
+              "ar-EG": "البريد الإلكتروني للإيصالات",
+              "zh-CN": "收据邮箱",
+              "zh-TW": "收據電子郵件"
+            },
+            "nullable": true,
+            "semantic": "email",
+            "rules": {
+              "validation": {
+                "format": "email"
+              },
+              "copy": {
+                "via": "patient_id",
+                "from": "email",
+                "mode": "always"
+              }
+            }
+          },
+          {
             "ref": "booked_by",
             "type": "text",
             "maxLength": 120,
@@ -3650,13 +3878,15 @@
                   "seen"
                 ],
                 "in": [
+                  "paying",
                   "booked",
                   "checked_in",
                   "roomed",
                   "with_clinician",
                   "ready",
                   "no_show",
-                  "cancelled"
+                  "cancelled",
+                  "lapsed"
                 ]
               }
             },
@@ -4074,7 +4304,8 @@
             "enum": [
               "card",
               "cash",
-              "transfer"
+              "transfer",
+              "online"
             ],
             "label": {
               "en-US": "Method",
@@ -4119,6 +4350,16 @@
                     "ar-EG": "تحويل بنكي",
                     "zh-CN": "转账",
                     "zh-TW": "轉帳"
+                  },
+                  "online": {
+                    "en-US": "Online",
+                    "de-DE": "Online",
+                    "fr-FR": "En ligne",
+                    "da-DK": "Online",
+                    "cs-CZ": "Online",
+                    "ar-EG": "عبر الإنترنت",
+                    "zh-CN": "线上",
+                    "zh-TW": "線上"
                   }
                 }
               }
@@ -4216,6 +4457,98 @@
                     true
                   ]
                 }
+              }
+            }
+          },
+          {
+            "ref": "payment_ref",
+            "type": "text",
+            "maxLength": 64,
+            "label": {
+              "en-US": "Online payment reference",
+              "de-DE": "Referenz der Online-Zahlung",
+              "fr-FR": "Référence du paiement en ligne",
+              "da-DK": "Reference for onlinebetaling",
+              "cs-CZ": "Reference online platby",
+              "ar-EG": "مرجع الدفع عبر الإنترنت",
+              "zh-CN": "在线付款参考号",
+              "zh-TW": "線上付款參考號"
+            },
+            "nullable": true,
+            "unique": true
+          },
+          {
+            "ref": "provider",
+            "type": "text",
+            "maxLength": 40,
+            "label": {
+              "en-US": "Paid through",
+              "de-DE": "Bezahlt über",
+              "fr-FR": "Payé via",
+              "da-DK": "Betalt via",
+              "cs-CZ": "Zaplaceno přes",
+              "ar-EG": "تم الدفع عبر",
+              "zh-CN": "付款渠道",
+              "zh-TW": "付款管道"
+            },
+            "nullable": true
+          },
+          {
+            "ref": "currency",
+            "type": "text",
+            "maxLength": 3,
+            "label": {
+              "en-US": "Currency",
+              "de-DE": "Währung",
+              "fr-FR": "Devise",
+              "da-DK": "Valuta",
+              "cs-CZ": "Měna",
+              "ar-EG": "العملة",
+              "zh-CN": "货币",
+              "zh-TW": "貨幣"
+            },
+            "nullable": true
+          },
+          {
+            "ref": "refunded",
+            "type": "money",
+            "label": {
+              "en-US": "Refunded",
+              "de-DE": "Erstattet",
+              "fr-FR": "Remboursé",
+              "da-DK": "Refunderet",
+              "cs-CZ": "Vráceno",
+              "ar-EG": "المبلغ المسترد",
+              "zh-CN": "已退款",
+              "zh-TW": "已退款"
+            },
+            "default": 0
+          },
+          {
+            "ref": "kept",
+            "type": "money",
+            "label": {
+              "en-US": "Kept",
+              "de-DE": "Einbehalten",
+              "fr-FR": "Conservé",
+              "da-DK": "Beholdt",
+              "cs-CZ": "Ponecháno",
+              "ar-EG": "المبلغ المحتفظ به",
+              "zh-CN": "实收",
+              "zh-TW": "實收"
+            },
+            "nullable": true,
+            "rules": {
+              "formula": {
+                "sub": [
+                  "amount",
+                  {
+                    "coalesce": [
+                      "refunded",
+                      0
+                    ]
+                  }
+                ]
               }
             }
           },
@@ -5109,7 +5442,9 @@
               "missed",
               "recall",
               "cancelled",
-              "receipt"
+              "receipt",
+              "paid_ahead",
+              "balance"
             ],
             "label": {
               "en-US": "Kind",
@@ -5183,6 +5518,26 @@
                     "ar-EG": "إيصال",
                     "zh-CN": "收据",
                     "zh-TW": "收據"
+                  },
+                  "paid_ahead": {
+                    "en-US": "Paid ahead",
+                    "de-DE": "Im Voraus bezahlt",
+                    "fr-FR": "Payé à l’avance",
+                    "da-DK": "Betalt på forhånd",
+                    "cs-CZ": "Zaplaceno předem",
+                    "ar-EG": "مدفوعة مسبقًا",
+                    "zh-CN": "已预付",
+                    "zh-TW": "已預付"
+                  },
+                  "balance": {
+                    "en-US": "Still to pay",
+                    "de-DE": "Noch zu zahlen",
+                    "fr-FR": "Reste à payer",
+                    "da-DK": "Mangler at betale",
+                    "cs-CZ": "Zbývá zaplatit",
+                    "ar-EG": "متبقٍّ للدفع",
+                    "zh-CN": "尚需支付",
+                    "zh-TW": "尚需支付"
                   }
                 }
               }
@@ -8514,7 +8869,8 @@
         "table:@registrations:read_pii",
         "table:@appointments:read_pii",
         "table:@messages:read_pii",
-        "addOn:holiday-calendars:settings"
+        "addOn:holiday-calendars:settings",
+        "payments:@:refund"
       ],
       "tables": [
         {
@@ -8708,7 +9064,9 @@
         "new_patients_online",
         "online_booking_on",
         "no_show_minutes",
-        "cancel_hours"
+        "cancel_hours",
+        "pay_ahead",
+        "auto_refund"
       ]
     },
     {
@@ -8956,7 +9314,8 @@
       "maxOpen": {
         "column": "status",
         "values": [
-          "booked"
+          "booked",
+          "paying"
         ],
         "n": 2,
         "upcoming": "starts_at"
@@ -9002,7 +9361,9 @@
         "status",
         "late_cancel",
         "reason",
-        "balance"
+        "balance",
+        "paid",
+        "refunded"
       ],
       "writable": [
         "starts_at",
@@ -9241,6 +9602,123 @@
         "role_label",
         "color"
       ]
+    },
+    {
+      "table": "appointments",
+      "methods": [
+        "POST"
+      ],
+      "select": [
+        "id",
+        "ref",
+        "starts_at",
+        "minutes",
+        "clinician_id",
+        "status",
+        "fee"
+      ],
+      "writable": [
+        "visit_type_id",
+        "clinician_id",
+        "starts_at",
+        "reason",
+        "desk_note",
+        "language"
+      ],
+      "defaults": {
+        "status": "paying",
+        "channel": "online"
+      },
+      "claimedBy": {
+        "table": "patients",
+        "column": "patient_id"
+      },
+      "sensitive": false,
+      "reason": "the reply names only the booking just made: its reference, time, length, clinician and fee",
+      "humanCheck": true,
+      "pay": true,
+      "maxOpen": {
+        "column": "status",
+        "values": [
+          "booked",
+          "paying"
+        ],
+        "n": 2,
+        "upcoming": "starts_at"
+      },
+      "requireSetting": [
+        {
+          "table": "settings",
+          "column": "online_booking_on"
+        },
+        {
+          "table": "settings",
+          "column": "pay_ahead"
+        }
+      ]
+    },
+    {
+      "table": "appointments",
+      "methods": [
+        "GET",
+        "PATCH"
+      ],
+      "select": [
+        "id",
+        "ref",
+        "clinician_id",
+        "visit_type_id",
+        "starts_at",
+        "minutes",
+        "status",
+        "fee",
+        "balance"
+      ],
+      "filters": [
+        {
+          "column": "channel",
+          "op": "eq",
+          "value": "online"
+        },
+        {
+          "column": "status",
+          "op": "in",
+          "value": [
+            "paying",
+            "lapsed"
+          ]
+        }
+      ],
+      "writable": [
+        "status"
+      ],
+      "writableValues": {
+        "status": [
+          "booked",
+          "lapsed"
+        ]
+      },
+      "writableWhen": {
+        "status": [
+          "paying"
+        ]
+      },
+      "claimedBy": {
+        "table": "patients",
+        "column": "patient_id"
+      },
+      "sensitive": false,
+      "reason": "the patient who has just booked reads only whether that booking still waits for its payment",
+      "requireSetting": [
+        {
+          "table": "settings",
+          "column": "online_booking_on"
+        },
+        {
+          "table": "settings",
+          "column": "pay_ahead"
+        }
+      ]
     }
   ],
   "people": [
@@ -9286,6 +9764,12 @@
           "table": "appointments",
           "column": "new_mobile",
           "holds": "phone",
+          "via": "patient_id"
+        },
+        {
+          "table": "appointments",
+          "column": "receipt_email",
+          "holds": "email",
           "via": "patient_id"
         }
       ]
@@ -9339,7 +9823,9 @@
       "missed": "clinic-missed",
       "recall": "clinic-recall",
       "cancelled": "clinic-cancelled",
-      "receipt": "clinic-receipt"
+      "receipt": "clinic-receipt",
+      "paid_ahead": "clinic-paid-ahead",
+      "balance": "clinic-balance"
     },
     "classes": {
       "confirmation": "service",
@@ -9347,7 +9833,9 @@
       "missed": "service",
       "recall": "service",
       "cancelled": "service",
-      "receipt": "service"
+      "receipt": "service",
+      "paid_ahead": "service",
+      "balance": "service"
     },
     "producers": [
       {
@@ -9359,7 +9847,76 @@
             "column": "check_status",
             "isNull": true
           }
-        }
+        },
+        "dropWhen": [
+          {
+            "column": "status",
+            "in": [
+              "paying",
+              "lapsed"
+            ],
+            "reason": "no-longer-needed"
+          }
+        ],
+        "holdSeconds": 5
+      },
+      {
+        "kind": "paid_ahead",
+        "link": "appointment_id",
+        "onChange": {
+          "table": "appointments",
+          "column": "status",
+          "to": "booked",
+          "where": {
+            "column": "check_status",
+            "isNull": true
+          }
+        },
+        "dropWhen": [
+          {
+            "column": "status",
+            "in": [
+              "cancelled",
+              "lapsed"
+            ],
+            "reason": "no-longer-needed"
+          },
+          {
+            "column": "balance",
+            "gte": 0.01,
+            "reason": "no-longer-needed"
+          }
+        ],
+        "holdSeconds": 5
+      },
+      {
+        "kind": "confirmation",
+        "link": "appointment_id",
+        "onChange": {
+          "table": "appointments",
+          "column": "status",
+          "to": "booked",
+          "where": {
+            "column": "check_status",
+            "isNull": true
+          }
+        },
+        "dropWhen": [
+          {
+            "column": "status",
+            "in": [
+              "cancelled",
+              "lapsed"
+            ],
+            "reason": "no-longer-needed"
+          },
+          {
+            "column": "balance",
+            "lte": 0,
+            "reason": "paid"
+          }
+        ],
+        "holdSeconds": 5
       },
       {
         "kind": "confirmation",
@@ -11905,8 +12462,1076 @@
           "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
         }
       }
+    },
+    {
+      "key": "clinic-paid-ahead",
+      "name": {
+        "en-US": "Visit confirmation, paid ahead",
+        "de-DE": "Terminbestätigung, im Voraus bezahlt",
+        "fr-FR": "Confirmation de rendez-vous, payé à l’avance",
+        "da-DK": "Bekræftelse af besøg, betalt på forhånd",
+        "cs-CZ": "Potvrzení návštěvy, zaplaceno předem",
+        "ar-EG": "تأكيد الزيارة، مدفوعة مسبقًا",
+        "zh-CN": "就诊确认（已预付）",
+        "zh-TW": "看診確認（已預付）"
+      },
+      "vars": [
+        "recipient.first_name",
+        "appointment.ref",
+        "appointment.starts_at",
+        "appointment.time_range",
+        "appointment.minutes",
+        "appointment.reason",
+        "appointment.paid",
+        "clinician.name",
+        "clinician.short_name",
+        "clinician.role_label",
+        "visit_type.name",
+        "practice.address",
+        "practice.cancel_hours",
+        "manage_url"
+      ],
+      "locales": {
+        "en-US": {
+          "subject": "You’re booked in at {{appName}}",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} with {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "You’re booked in, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "We’ve held {{appointment.minutes}} minutes with {{clinician.short_name}}. Come to the desk a few minutes early and we’ll take it from there."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "Reference",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Clinician: {{clinician.name}} · {{clinician.role_label}}",
+                  "Date: {{appointment.starts_at.date}}",
+                  "Time: {{appointment.time_range}} ({{appointment.minutes}} min)",
+                  "What for: {{visit_type.name}}",
+                  "Where: {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "See my visits",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "No charge to change or cancel until {{practice.cancel_hours}} hours before.",
+                  "Paid ahead · {{appointment.paid}}. Your receipt comes in its own email."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "de-DE": {
+          "subject": "Ihr Termin bei {{appName}} ist gebucht",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} bei {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Ihr Termin steht, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Wir haben {{appointment.minutes}} Minuten bei {{clinician.short_name}} für Sie reserviert. Kommen Sie bitte ein paar Minuten früher zur Anmeldung, dann kümmern wir uns um alles Weitere."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "Buchungsnummer",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Behandler: {{clinician.name}} · {{clinician.role_label}}",
+                  "Datum: {{appointment.starts_at.date}}",
+                  "Uhrzeit: {{appointment.time_range}} ({{appointment.minutes}} Min.)",
+                  "Anlass: {{visit_type.name}}",
+                  "Ort: {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "Meine Termine ansehen",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "Bis {{practice.cancel_hours}} Stunden vorher können Sie ohne Gebühr umbuchen oder absagen.",
+                  "Im Voraus bezahlt · {{appointment.paid}}. Ihre Quittung kommt in einer eigenen E-Mail."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "fr-FR": {
+          "subject": "Votre rendez-vous chez {{appName}} est confirmé",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} avec {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Votre rendez-vous est confirmé, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Nous avons réservé {{appointment.minutes}} minutes avec {{clinician.short_name}}. Présentez-vous à l’accueil quelques minutes en avance, nous nous occuperons du reste."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "Référence",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Praticien : {{clinician.name}} · {{clinician.role_label}}",
+                  "Date : {{appointment.starts_at.date}}",
+                  "Heure : {{appointment.time_range}} ({{appointment.minutes}} min)",
+                  "Motif : {{visit_type.name}}",
+                  "Adresse : {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "Voir mes rendez-vous",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "Modification ou annulation sans frais jusqu’à {{practice.cancel_hours}} heures avant.",
+                  "Payé à l’avance · {{appointment.paid}}. Votre reçu arrive dans un e-mail à part."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "da-DK": {
+          "subject": "Du er booket ind hos {{appName}}",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} hos {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Du er booket ind, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Vi har sat {{appointment.minutes}} minutter af hos {{clinician.short_name}}. Kom til receptionen et par minutter før, så klarer vi resten."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "Bookingnummer",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Behandler: {{clinician.name}} · {{clinician.role_label}}",
+                  "Dato: {{appointment.starts_at.date}}",
+                  "Tid: {{appointment.time_range}} ({{appointment.minutes}} min.)",
+                  "Formål: {{visit_type.name}}",
+                  "Sted: {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "Se mine aftaler",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "Du kan ændre eller aflyse uden gebyr indtil {{practice.cancel_hours}} timer før.",
+                  "Betalt på forhånd · {{appointment.paid}}. Din kvittering kommer i en e-mail for sig."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "cs-CZ": {
+          "subject": "{{appName}}: váš termín je potvrzen",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} · {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Váš termín je potvrzen, {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "Rezervovali jsme pro vás {{appointment.minutes}} minut ({{clinician.short_name}}). Přijďte na recepci o pár minut dříve a o vše ostatní se postaráme."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "Číslo rezervace",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "Zdravotník: {{clinician.name}} · {{clinician.role_label}}",
+                  "Datum: {{appointment.starts_at.date}}",
+                  "Čas: {{appointment.time_range}} ({{appointment.minutes}} min)",
+                  "Typ návštěvy: {{visit_type.name}}",
+                  "Místo: {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "Zobrazit moje termíny",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "Termín můžete bez poplatku změnit nebo zrušit nejpozději {{practice.cancel_hours}} hodin předem.",
+                  "Zaplaceno předem · {{appointment.paid}}. Doklad o platbě vám přijde v samostatném e-mailu."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "ar-EG": {
+          "subject": "تم تأكيد حجزكم لدى {{appName}}",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} مع {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "تم تأكيد حجزكم، {{recipient.first_name}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "حجزنا لكم {{appointment.minutes}} دقيقة مع {{clinician.short_name}}. يُرجى الحضور إلى الاستقبال قبل الموعد ببضع دقائق، وسنتولّى الباقي."
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "رقم الحجز",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "مقدّم الرعاية: {{clinician.name}} · {{clinician.role_label}}",
+                  "التاريخ: {{appointment.starts_at.date}}",
+                  "الوقت: {{appointment.time_range}} ({{appointment.minutes}} دقيقة)",
+                  "نوع الزيارة: {{visit_type.name}}",
+                  "المكان: {{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "عرض مواعيدي",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "يمكنكم التعديل أو الإلغاء دون أي رسوم حتى {{practice.cancel_hours}} ساعة قبل الموعد.",
+                  "مدفوعة مسبقًا · {{appointment.paid}}. يصلك الإيصال في رسالة منفصلة."
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-CN": {
+          "subject": "您已成功预约{{appName}}",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} · {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "{{recipient.first_name}}，您的预约已确认"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "我们已为您预留与{{clinician.short_name}}的{{appointment.minutes}}分钟就诊时间。请提前几分钟到前台，其余事项我们会为您安排好。"
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "预约编号",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "医护人员：{{clinician.name}} · {{clinician.role_label}}",
+                  "日期：{{appointment.starts_at.date}}",
+                  "时间：{{appointment.time_range}}（{{appointment.minutes}}分钟）",
+                  "就诊类型：{{visit_type.name}}",
+                  "地点：{{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "查看我的预约",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "就诊前{{practice.cancel_hours}}小时以前更改或取消，不收取任何费用。",
+                  "已预付 · {{appointment.paid}}。收据会另行通过电子邮件发送给您。"
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-TW": {
+          "subject": "您已成功預約{{appName}}",
+          "preheader": "{{appointment.starts_at.date}} · {{appointment.starts_at.time}} · {{clinician.short_name}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "{{recipient.first_name}}，您的預約已確認"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "lead",
+              "data": {
+                "paras": [
+                  "我們已為您保留與{{clinician.short_name}}的{{appointment.minutes}}分鐘看診時間。請提早幾分鐘到櫃台報到，其餘事項我們會為您安排。"
+                ]
+              }
+            },
+            {
+              "block": "email.box",
+              "id": "reference",
+              "data": {
+                "label": "預約編號",
+                "value": "{{appointment.ref}}"
+              }
+            },
+            {
+              "block": "email.list",
+              "id": "details",
+              "data": {
+                "items": [
+                  "醫護人員：{{clinician.name}} · {{clinician.role_label}}",
+                  "日期：{{appointment.starts_at.date}}",
+                  "時間：{{appointment.time_range}}（{{appointment.minutes}}分鐘）",
+                  "看診類型：{{visit_type.name}}",
+                  "地點：{{practice.address}}"
+                ]
+              }
+            },
+            {
+              "block": "email.quote",
+              "id": "reason",
+              "data": {
+                "text": "{{appointment.reason}}"
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "manage",
+              "data": {
+                "label": "查看我的預約",
+                "url": "{{manage_url}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "notes",
+              "data": {
+                "paras": [
+                  "看診前{{practice.cancel_hours}}小時以前更改或取消，不收取任何費用。",
+                  "已預付 · {{appointment.paid}}。收據會另以電子郵件寄給您。"
+                ]
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        }
+      }
+    },
+    {
+      "key": "clinic-balance",
+      "name": {
+        "en-US": "Still to pay",
+        "de-DE": "Noch zu zahlen",
+        "fr-FR": "Reste à payer",
+        "da-DK": "Mangler at betale",
+        "cs-CZ": "Zbývá zaplatit",
+        "ar-EG": "متبقٍّ للدفع",
+        "zh-CN": "尚需支付",
+        "zh-TW": "尚需支付"
+      },
+      "vars": [
+        "appointment.ref",
+        "appointment.balance",
+        "appointment.starts_at",
+        "clinician.name",
+        "visit_type.name",
+        "pay_url"
+      ],
+      "locales": {
+        "en-US": {
+          "subject": "Your visit on {{appointment.starts_at.day_month}}",
+          "preheader": "{{appointment.balance}} still to pay · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "{{appointment.balance}} still to pay"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "From your visit with {{clinician.name}} on {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "Pay {{appointment.balance}} online",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "You’ll pay on a secure payment page."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "de-DE": {
+          "subject": "Ihr Termin am {{appointment.starts_at.day_month}}",
+          "preheader": "Noch zu zahlen: {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Noch zu zahlen: {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "Von Ihrem Termin bei {{clinician.name}} am {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "{{appointment.balance}} online bezahlen",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "Sie bezahlen auf einer sicheren Zahlungsseite."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "fr-FR": {
+          "subject": "Votre rendez-vous du {{appointment.starts_at.day_month}}",
+          "preheader": "Reste à payer : {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Reste à payer : {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "Pour votre rendez-vous avec {{clinician.name}} le {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "Payer {{appointment.balance}} en ligne",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "Vous paierez sur une page de paiement sécurisée."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "da-DK": {
+          "subject": "Dit besøg den {{appointment.starts_at.day_month}}",
+          "preheader": "Mangler at betale: {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Mangler at betale: {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "Fra dit besøg hos {{clinician.name}} {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "Betal {{appointment.balance}} online",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "Du betaler på en sikker betalingsside."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "cs-CZ": {
+          "subject": "Vaše návštěva {{appointment.starts_at.day_month}}",
+          "preheader": "Zbývá zaplatit: {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "Zbývá zaplatit: {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "Za návštěvu u {{clinician.name}}, {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "Zaplatit {{appointment.balance}} online",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "Zaplatíte na zabezpečené platební stránce."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "ar-EG": {
+          "subject": "زيارتك في {{appointment.starts_at.day_month}}",
+          "preheader": "متبقٍّ للدفع: {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "متبقٍّ للدفع: {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "من زيارتك مع {{clinician.name}} يوم {{appointment.starts_at.date}} ({{visit_type.name}})."
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "ادفع {{appointment.balance}} عبر الإنترنت",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "ستدفع على صفحة دفع آمنة."
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-CN": {
+          "subject": "您 {{appointment.starts_at.day_month}} 的就诊",
+          "preheader": "尚需支付 {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "尚需支付 {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "来自您 {{appointment.starts_at.date}} 与 {{clinician.name}} 的就诊（{{visit_type.name}}）。"
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "在线支付 {{appointment.balance}}",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "您将在安全的支付页面上付款。"
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        },
+        "zh-TW": {
+          "subject": "您 {{appointment.starts_at.day_month}} 的看診",
+          "preheader": "尚需支付 {{appointment.balance}} · {{appointment.ref}}",
+          "blocks": [
+            {
+              "block": "email.heading",
+              "id": "heading",
+              "data": {
+                "text": "尚需支付 {{appointment.balance}}"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "line",
+              "data": {
+                "paras": [
+                  "來自您 {{appointment.starts_at.date}} 與 {{clinician.name}} 的看診（{{visit_type.name}}）。"
+                ]
+              }
+            },
+            {
+              "block": "email.button",
+              "id": "pay",
+              "data": {
+                "label": "線上支付 {{appointment.balance}}",
+                "url": "{{pay_url}}"
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            },
+            {
+              "block": "email.text",
+              "id": "where",
+              "data": {
+                "paras": [
+                  "您將在安全的付款頁面上付款。"
+                ]
+              },
+              "showWhen": {
+                "var": "pay_url"
+              }
+            }
+          ],
+          "footer": "{{practice.practice_name}} · {{practice.address}} · {{practice.phone}}"
+        }
+      }
     }
   ],
+  "payments": {
+    "payables": [
+      {
+        "table": "appointments",
+        "label": "ref",
+        "amount": {
+          "column": "fee"
+        },
+        "currency": {
+          "setting": {
+            "table": "settings",
+            "column": "currency"
+          }
+        },
+        "due": {
+          "column": "balance"
+        },
+        "payments": {
+          "kind": "table",
+          "table": "payments",
+          "link": "appointment_id",
+          "amount": "amount",
+          "paidAt": "paid_at",
+          "method": {
+            "column": "method",
+            "values": {
+              "*": "online"
+            }
+          },
+          "voided": "voided",
+          "reference": "payment_ref",
+          "refunded": "refunded",
+          "provider": "provider",
+          "currency": "currency"
+        },
+        "status": {
+          "column": "status",
+          "paid": "booked",
+          "from": [
+            "paying"
+          ]
+        },
+        "customerEmail": "receipt_email",
+        "payableWhen": [
+          {
+            "column": "status",
+            "in": [
+              "paying",
+              "booked",
+              "seen"
+            ]
+          }
+        ],
+        "returnTo": "/my-visits",
+        "receipt": "engine",
+        "instantOnly": {
+          "where": [
+            {
+              "column": "status",
+              "eq": "paying"
+            }
+          ]
+        },
+        "refunds": {
+          "model": "column"
+        },
+        "refundOn": {
+          "moves": [
+            {
+              "from": [
+                "booked"
+              ],
+              "to": "cancelled",
+              "by": [
+                "customer",
+                "refund-right"
+              ]
+            }
+          ],
+          "switch": {
+            "table": "settings",
+            "column": "auto_refund"
+          },
+          "before": {
+            "column": "starts_at",
+            "hours": {
+              "table": "settings",
+              "column": "cancel_hours"
+            }
+          }
+        }
+      }
+    ]
+  },
   "documents": [
     {
       "kind": "receipt",

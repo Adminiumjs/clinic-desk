@@ -50,6 +50,8 @@ export interface Table {
   unique?: string[][];
   /** What the table's rows hand to an add-on's ledger, and when. */
   postings?: Record<string, unknown>[];
+  /** The life of a row: the moves its status may make, and the ones Adminium makes by itself. */
+  states?: Record<string, unknown>;
   /** The law makes the practice keep these rows (a patient's record, their visits, its money): an erasure leaves them as they are. */
   keep?: { law: "tax" | "health" | "contract" | "safety" };
   columns: Column[];
@@ -144,6 +146,8 @@ const stampNow = (column: string, values: (string | boolean)[]) => ({ stamp: { s
 const stampWho = { stamp: { set: "user-name", on: "create" } };
 
 const APPOINTMENT_STATUSES = {
+  // Booked online and being paid for: the time is held for the patient, and the desk does not see it yet.
+  paying: "Paying online",
   booked: "Booked",
   checked_in: "Checked in",
   roomed: "Roomed",
@@ -152,14 +156,48 @@ const APPOINTMENT_STATUSES = {
   seen: "Seen",
   no_show: "No-show",
   cancelled: "Cancelled",
+  // The patient did not finish paying in time: the time went back, and nothing was taken.
+  lapsed: "Not paid in time",
 };
 const APPOINTMENT_STATUS_VALUES = Object.keys(APPOINTMENT_STATUSES);
 /** What a clinician changes on a supply line; each change is stamped with who and when. */
 const SUPPLY_EDITS = ["qty", "not_used_at", "batch_id"];
-/** The statuses that hold a clinician's time. A no-show or a cancellation frees it. */
+/** The statuses that hold a clinician's time on the desk's screens. A no-show or a cancellation frees it. */
 export const COUNTED = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
+/** What the booking rule counts: those, and a time held while a patient pays for it. */
+export const HELD = ["paying", ...COUNTED];
 
 const setting = (column: string) => ({ table: "settings", column });
+
+/**
+ * A visit's day, step by step, as every desk and the server take it: booked,
+ * in, into a room, with the clinician, ready, seen — or a no-show, or
+ * cancelled. A visit is made booked, or checked in (a walk-in), or — booked
+ * online by a patient who pays as they book — waiting for that payment, with
+ * its time held. The payment confirms it (booked); a patient who chooses to
+ * pay at the desk after all confirms it too. Left unpaid past the practice's
+ * hold, Adminium lets the time go (`lapsed`) — never while a payment for it
+ * is still on its way. A seen visit goes back to ready only to put its
+ * supplies right.
+ */
+const APPOINTMENT_STATES = {
+  column: "status",
+  initial: "booked",
+  starts: ["checked_in", "paying"],
+  moves: {
+    paying: ["booked", "lapsed"],
+    booked: ["checked_in", "roomed", "with_clinician", "ready", "seen", "no_show", "cancelled"],
+    checked_in: ["roomed", "with_clinician", "ready", "seen"],
+    roomed: ["with_clinician", "ready", "seen"],
+    with_clinician: ["ready", "seen"],
+    ready: ["seen"],
+    seen: ["ready"],
+    no_show: [],
+    cancelled: [],
+    lapsed: [],
+  },
+  timed: [{ from: "paying", to: "lapsed", at: { column: "created_at", plus: { minutes: setting("pay_hold_minutes") } }, waitsForPayment: true }],
+};
 
 /**
  * A link to a row of Inventory: a plain number with no foreign key, because a
@@ -204,6 +242,12 @@ export const TABLES: Table[] = [
       bool("reminders_on", "Send reminders", true),
       picked("default_lead_hours", "Remind (hours before)", [12, 24, 48], 24),
       bool("kiosk_on", "Arrivals kiosk", false),
+      // Paying online, once the practice takes payments: a patient may pay when they book, the time is
+      // held for them while they pay, and a visit paid ahead and then cancelled before the cancellation
+      // window is refunded by itself.
+      bool("pay_ahead", "Patients may pay when they book", true),
+      picked("pay_hold_minutes", "Time held while a patient pays (minutes)", [10, 15, 20, 30], 15),
+      bool("auto_refund", "Refund cancellations automatically", true),
       // The shelf a visit's supplies come off. Empty: Inventory's own default place.
       stockLink("supplies_place_id", "places", "Where supplies are taken from"),
     ],
@@ -377,7 +421,7 @@ export const TABLES: Table[] = [
       minutes: "minutes",
       resource: "clinician_id",
       kind: "visit_type_id",
-      countWhere: { column: "status", values: COUNTED },
+      countWhere: { column: "status", values: HELD },
       eligible: {
         table: "clinician_visit_types",
         resource: "clinician_id",
@@ -394,6 +438,7 @@ export const TABLES: Table[] = [
       noticeMinutes: setting("min_notice_minutes"),
       cancel: { hours: setting("cancel_hours"), mode: "flag", flag: "late_cancel", when: { column: "status", to: "cancelled" } },
     },
+    states: APPOINTMENT_STATES,
     columns: [
       id,
       text("ref", 12, "Reference", { rules: { code: { prefix: "RH-", length: 4 } } }),
@@ -411,13 +456,14 @@ export const TABLES: Table[] = [
         ...opt,
         rules: { rollup: { from: "write_offs", via: "appointment_id", sum: "amount", cap: true } },
       }),
+      // What the visit's payments still hold: what was taken, less what went back.
       money("paid", "Paid", {
         ...opt,
         rules: {
           rollup: {
             from: "payments",
             via: "appointment_id",
-            sum: "amount",
+            sum: "kept",
             where: { column: "voided", eq: false },
             balance: { column: "balance", of: "fee", minus: ["waived"] },
             cap: true,
@@ -425,6 +471,10 @@ export const TABLES: Table[] = [
         },
       }),
       money("balance", "Still owing", opt),
+      // What went back to the patient, and what the visit holds that was paid online: a visit cancelled
+      // after it was paid ahead says what goes back, and the desk sees what is owed.
+      money("refunded", "Refunded", { ...opt, rules: { rollup: { from: "payments", via: "appointment_id", sum: "refunded", where: { column: "voided", eq: false } } } }),
+      money("paid_online", "Paid online", { ...opt, rules: { rollup: { from: "payments", via: "appointment_id", sum: "kept", where: { column: "method", eq: "online" } } } }),
       text("reason", 240, "What it is for", opt),
       text("desk_note", 280, "Note for the desk", opt),
       choice("status", "Status", APPOINTMENT_STATUSES, {
@@ -448,6 +498,8 @@ export const TABLES: Table[] = [
       }),
       int("recall_weeks", "See again in (weeks)", opt),
       text("language", 16, "Language", opt),
+      // Where the receipt of a payment made online goes: the patient's address on file, kept in step.
+      text("receipt_email", 254, "Email for receipts", { ...opt, semantic: "email", rules: { validation: { format: "email" }, copy: { via: "patient_id", from: "email", mode: "always" } } }),
       text("booked_by", 120, "Booked by", { ...opt, rules: stampWho }),
       choice(
         "check_status",
@@ -518,12 +570,19 @@ export const TABLES: Table[] = [
       copied("visit_type_id", "visit_types", "Visit type", "appointment_id"),
       copied("clinician_id", "clinicians", "Clinician", "appointment_id"),
       money("amount", "Amount", { rules: { validation: { min: 0.01 } } }),
-      choice("method", "Method", { card: "Card", cash: "Cash", transfer: "Transfer" }, { default: "card" }),
+      // `online`: paid on the pay page, written by Adminium alone, with its reference and the service it went through.
+      choice("method", "Method", { card: "Card", cash: "Cash", transfer: "Transfer", online: "Online" }, { default: "card" }),
       text("taken_by", 120, "Taken by", { ...opt, rules: stampWho }),
       at("paid_at", "Paid at", { default: "now" }),
       bool("voided", "Voided", false),
       text("void_reason", 200, "Why it was voided", opt),
       text("voided_by", 120, "Voided by", { ...opt, rules: { stamp: { set: "user-name", on: { column: "voided", values: [true] } } } }),
+      text("payment_ref", 64, "Online payment reference", { ...opt, unique: true }),
+      text("provider", 40, "Paid through", opt),
+      text("currency", 3, "Currency", opt),
+      // What went back of it: Adminium writes the whole refunded total of an online payment.
+      money("refunded", "Refunded", { default: 0 }),
+      money("kept", "Kept", { ...opt, rules: { formula: { sub: ["amount", { coalesce: ["refunded", 0] }] } } }),
       clientKey,
     ],
   },
@@ -607,7 +666,16 @@ export const TABLES: Table[] = [
     labelPlural: l("Messages"),
     columns: [
       id,
-      choice("kind", "Kind", { confirmation: "Confirmation", reminder: "Reminder", missed: "Missed visit", recall: "Recall", cancelled: "Closure", receipt: "Receipt" }),
+      choice("kind", "Kind", {
+        confirmation: "Confirmation",
+        reminder: "Reminder",
+        missed: "Missed visit",
+        recall: "Recall",
+        cancelled: "Closure",
+        receipt: "Receipt",
+        paid_ahead: "Paid ahead",
+        balance: "Still to pay",
+      }),
       fk("patient_id", "patients", "Patient", true),
       fk("appointment_id", "appointments", "Appointment", true),
       fk("recall_id", "recalls", "Recall", true),

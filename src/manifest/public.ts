@@ -61,6 +61,9 @@ export const PUBLIC_ACCESS = [
       "online_booking_on",
       "no_show_minutes",
       "cancel_hours",
+      // Whether a patient may pay as they book, and whether a visit paid ahead and cancelled in time goes back by itself.
+      "pay_ahead",
+      "auto_refund",
     ],
   },
   { table: "opening_hours", methods: ["GET"], select: ["weekday", "open", "opens", "closes", "break_start", "break_end"] },
@@ -145,15 +148,17 @@ export const PUBLIC_ACCESS = [
     sensitive: false,
     reason: "the reply names only the booking just made: its reference, time, length and clinician",
     humanCheck: true,
-    maxOpen: { column: "status", values: ["booked"], n: 2, upcoming: "starts_at" },
+    // A time held while its patient pays counts as one of their open visits.
+    maxOpen: { column: "status", values: ["booked", "paying"], n: 2, upcoming: "starts_at" },
     anonymous: { perValue: { columns: ["new_mobile", "new_email"], n: 2 }, perKeyHour: 20, plainText: ["new_name"] },
     requireSetting: [setting("online_booking_on"), { ...setting("new_patients_online"), when: "anonymous" }],
   },
-  // Their own visits, once verified: cancel a booked one, or move it while it is still ahead.
+  // Their own visits, once verified: cancel a booked one, or move it while it is
+  // still ahead; and what each was paid and given back, never the payments.
   {
     table: "appointments",
     methods: ["GET", "PATCH"],
-    select: ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance"],
+    select: ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance", "paid", "refunded"],
     writable: ["starts_at", "status"],
     writableValues: { status: ["cancelled"] },
     writableWhen: { status: ["booked"], starts_at: "from-now" },
@@ -237,4 +242,42 @@ export const PUBLIC_ACCESS = [
   { table: "settings", key: "kiosk", methods: ["GET"], select: ["practice_name", "mark"] },
   // Who they will see, for the thank-you: short names only.
   { table: "clinicians", key: "kiosk", methods: ["GET"], select: ["id", "short_name", "role_label", "color"] },
+  // ── paying online (after every older entry, so each one keeps its name) ──
+  // Paying as they book (once the practice takes payments, and only a patient
+  // already on file): the visit is made waiting for its payment, its time held,
+  // and the reply carries the link to pay it. The payment confirms it.
+  {
+    table: "appointments",
+    methods: ["POST"],
+    select: ["id", "ref", "starts_at", "minutes", "clinician_id", "status", "fee"],
+    writable: ["visit_type_id", "clinician_id", "starts_at", "reason", "desk_note", "language"],
+    defaults: { status: "paying", channel: "online" },
+    claimedBy: { table: "patients", column: "patient_id" },
+    sensitive: false,
+    reason: "the reply names only the booking just made: its reference, time, length, clinician and fee",
+    humanCheck: true,
+    pay: true,
+    maxOpen: { column: "status", values: ["booked", "paying"], n: 2, upcoming: "starts_at" },
+    requireSetting: [setting("online_booking_on"), setting("pay_ahead")],
+  },
+  // The booking they are paying for: whether it still waits, or its time went.
+  // A visit the payment confirmed leaves this read, which is how the page knows
+  // it is booked; nothing booked is ever read here. While it waits, the patient
+  // may book it to pay at the desk after all, or let it go.
+  {
+    table: "appointments",
+    methods: ["GET", "PATCH"],
+    select: ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "fee", "balance"],
+    filters: [
+      { column: "channel", op: "eq", value: "online" },
+      { column: "status", op: "in", value: ["paying", "lapsed"] },
+    ],
+    writable: ["status"],
+    writableValues: { status: ["booked", "lapsed"] },
+    writableWhen: { status: ["paying"] },
+    claimedBy: { table: "patients", column: "patient_id" },
+    sensitive: false,
+    reason: "the patient who has just booked reads only whether that booking still waits for its payment",
+    requireSetting: [setting("online_booking_on"), setting("pay_ahead")],
+  },
 ];

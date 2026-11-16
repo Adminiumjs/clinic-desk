@@ -1,5 +1,5 @@
 /**
- * The six emails' words in the seven languages beside English (see
+ * The eight emails' words in the seven languages beside English (see
  * `emails.ts`). `{{…}}` variables are kept exactly as they are in English.
  */
 import type { EmailWords } from "./emails.ts";
@@ -68,6 +68,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       clinician: "Behandler: {{clinician.name}} · {{clinician.role_label}}",
       findTime: "Neuen Termin finden",
       ring: "Rufen Sie die Anmeldung unter {{practice.phone}} an.",
+      footer: FOOT,
+    },
+    paidAhead: {
+      name: "Terminbestätigung, im Voraus bezahlt",
+      paid: "Im Voraus bezahlt · {{appointment.paid}}. Ihre Quittung kommt in einer eigenen E-Mail.",
+    },
+    balance: {
+      name: "Noch zu zahlen",
+      subject: "Ihr Termin am {{appointment.starts_at.day_month}}",
+      preheader: "Noch zu zahlen: {{appointment.balance}} · {{appointment.ref}}",
+      heading: "Noch zu zahlen: {{appointment.balance}}",
+      line: "Von Ihrem Termin bei {{clinician.name}} am {{appointment.starts_at.date}} ({{visit_type.name}}).",
+      pay: "{{appointment.balance}} online bezahlen",
+      where: "Sie bezahlen auf einer sicheren Zahlungsseite.",
       footer: FOOT,
     },
     receipt: {
@@ -147,6 +161,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       ring: "Appelez l’accueil au {{practice.phone}}.",
       footer: FOOT,
     },
+    paidAhead: {
+      name: "Confirmation de rendez-vous, payé à l’avance",
+      paid: "Payé à l’avance · {{appointment.paid}}. Votre reçu arrive dans un e-mail à part.",
+    },
+    balance: {
+      name: "Reste à payer",
+      subject: "Votre rendez-vous du {{appointment.starts_at.day_month}}",
+      preheader: "Reste à payer : {{appointment.balance}} · {{appointment.ref}}",
+      heading: "Reste à payer : {{appointment.balance}}",
+      line: "Pour votre rendez-vous avec {{clinician.name}} le {{appointment.starts_at.date}} ({{visit_type.name}}).",
+      pay: "Payer {{appointment.balance}} en ligne",
+      where: "Vous paierez sur une page de paiement sécurisée.",
+      footer: FOOT,
+    },
     receipt: {
       name: "Reçu pour l’assurance",
       subject: "Votre reçu de {{appName}}",
@@ -222,6 +250,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       clinician: "Behandler: {{clinician.name}} · {{clinician.role_label}}",
       findTime: "Find en ny tid",
       ring: "Ring til receptionen på {{practice.phone}}.",
+      footer: FOOT,
+    },
+    paidAhead: {
+      name: "Bekræftelse af besøg, betalt på forhånd",
+      paid: "Betalt på forhånd · {{appointment.paid}}. Din kvittering kommer i en e-mail for sig.",
+    },
+    balance: {
+      name: "Mangler at betale",
+      subject: "Dit besøg den {{appointment.starts_at.day_month}}",
+      preheader: "Mangler at betale: {{appointment.balance}} · {{appointment.ref}}",
+      heading: "Mangler at betale: {{appointment.balance}}",
+      line: "Fra dit besøg hos {{clinician.name}} {{appointment.starts_at.date}} ({{visit_type.name}}).",
+      pay: "Betal {{appointment.balance}} online",
+      where: "Du betaler på en sikker betalingsside.",
       footer: FOOT,
     },
     receipt: {
@@ -301,6 +343,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       ring: "Zavolejte na recepci na číslo {{practice.phone}}.",
       footer: FOOT,
     },
+    paidAhead: {
+      name: "Potvrzení návštěvy, zaplaceno předem",
+      paid: "Zaplaceno předem · {{appointment.paid}}. Doklad o platbě vám přijde v samostatném e-mailu.",
+    },
+    balance: {
+      name: "Zbývá zaplatit",
+      subject: "Vaše návštěva {{appointment.starts_at.day_month}}",
+      preheader: "Zbývá zaplatit: {{appointment.balance}} · {{appointment.ref}}",
+      heading: "Zbývá zaplatit: {{appointment.balance}}",
+      line: "Za návštěvu u {{clinician.name}}, {{appointment.starts_at.date}} ({{visit_type.name}}).",
+      pay: "Zaplatit {{appointment.balance}} online",
+      where: "Zaplatíte na zabezpečené platební stránce.",
+      footer: FOOT,
+    },
     receipt: {
       name: "Stvrzenka pro pojišťovnu",
       subject: "Vaše stvrzenka od {{appName}}",
@@ -376,6 +432,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       clinician: "مقدّم الرعاية: {{clinician.name}} · {{clinician.role_label}}",
       findTime: "البحث عن موعد جديد",
       ring: "اتصلوا بالاستقبال على {{practice.phone}}.",
+      footer: FOOT,
+    },
+    paidAhead: {
+      name: "تأكيد الزيارة، مدفوعة مسبقًا",
+      paid: "مدفوعة مسبقًا · {{appointment.paid}}. يصلك الإيصال في رسالة منفصلة.",
+    },
+    balance: {
+      name: "متبقٍّ للدفع",
+      subject: "زيارتك في {{appointment.starts_at.day_month}}",
+      preheader: "متبقٍّ للدفع: {{appointment.balance}} · {{appointment.ref}}",
+      heading: "متبقٍّ للدفع: {{appointment.balance}}",
+      line: "من زيارتك مع {{clinician.name}} يوم {{appointment.starts_at.date}} ({{visit_type.name}}).",
+      pay: "ادفع {{appointment.balance}} عبر الإنترنت",
+      where: "ستدفع على صفحة دفع آمنة.",
       footer: FOOT,
     },
     receipt: {
@@ -455,6 +525,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       ring: "请致电前台{{practice.phone}}。",
       footer: FOOT,
     },
+    paidAhead: {
+      name: "就诊确认（已预付）",
+      paid: "已预付 · {{appointment.paid}}。收据会另行通过电子邮件发送给您。",
+    },
+    balance: {
+      name: "尚需支付",
+      subject: "您 {{appointment.starts_at.day_month}} 的就诊",
+      preheader: "尚需支付 {{appointment.balance}} · {{appointment.ref}}",
+      heading: "尚需支付 {{appointment.balance}}",
+      line: "来自您 {{appointment.starts_at.date}} 与 {{clinician.name}} 的就诊（{{visit_type.name}}）。",
+      pay: "在线支付 {{appointment.balance}}",
+      where: "您将在安全的支付页面上付款。",
+      footer: FOOT,
+    },
     receipt: {
       name: "供保险报销的收据",
       subject: "{{appName}} 给您的收据",
@@ -530,6 +614,20 @@ export const EMAIL_TRANSLATIONS: Record<Exclude<Tag, "en-US">, EmailWords> = {
       clinician: "醫護人員：{{clinician.name}} · {{clinician.role_label}}",
       findTime: "重新選擇時間",
       ring: "請致電櫃台{{practice.phone}}。",
+      footer: FOOT,
+    },
+    paidAhead: {
+      name: "看診確認（已預付）",
+      paid: "已預付 · {{appointment.paid}}。收據會另以電子郵件寄給您。",
+    },
+    balance: {
+      name: "尚需支付",
+      subject: "您 {{appointment.starts_at.day_month}} 的看診",
+      preheader: "尚需支付 {{appointment.balance}} · {{appointment.ref}}",
+      heading: "尚需支付 {{appointment.balance}}",
+      line: "來自您 {{appointment.starts_at.date}} 與 {{clinician.name}} 的看診（{{visit_type.name}}）。",
+      pay: "線上支付 {{appointment.balance}}",
+      where: "您將在安全的付款頁面上付款。",
       footer: FOOT,
     },
     receipt: {

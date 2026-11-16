@@ -51,6 +51,9 @@ CREATE TABLE clinic_settings (
   reminders_on BOOLEAN NOT NULL DEFAULT TRUE,
   default_lead_hours INTEGER NOT NULL DEFAULT 24,
   kiosk_on BOOLEAN NOT NULL DEFAULT FALSE,
+  pay_ahead BOOLEAN NOT NULL DEFAULT TRUE,
+  pay_hold_minutes INTEGER NOT NULL DEFAULT 15,
+  auto_refund BOOLEAN NOT NULL DEFAULT TRUE,
   supplies_place_id INTEGER
 );
 
@@ -182,9 +185,11 @@ CREATE TABLE clinic_appointments (
   waived NUMERIC(12, 2),
   paid NUMERIC(12, 2),
   balance NUMERIC(12, 2),
+  refunded NUMERIC(12, 2),
+  paid_online NUMERIC(12, 2),
   reason VARCHAR(240),
   desk_note VARCHAR(280),
-  status TEXT NOT NULL DEFAULT 'booked' CHECK (status IN ('booked', 'checked_in', 'roomed', 'with_clinician', 'ready', 'seen', 'no_show', 'cancelled')),
+  status TEXT NOT NULL DEFAULT 'booked' CHECK (status IN ('paying', 'booked', 'checked_in', 'roomed', 'with_clinician', 'ready', 'seen', 'no_show', 'cancelled', 'lapsed')),
   channel TEXT NOT NULL DEFAULT 'desk' CHECK (channel IN ('online', 'phone', 'desk', 'walk_in', 'waiting_list', 'recall')),
   checked_in_at TIMESTAMPTZ,
   roomed_at TIMESTAMPTZ,
@@ -194,6 +199,7 @@ CREATE TABLE clinic_appointments (
   cancelled_by TEXT CHECK (cancelled_by IN ('patient', 'desk')),
   recall_weeks INTEGER,
   language VARCHAR(16),
+  receipt_email VARCHAR(254),
   booked_by VARCHAR(120),
   check_status TEXT CHECK (check_status IN ('to_check', 'rang', 'accepted', 'linked', 'declined')),
   client_key VARCHAR(36) UNIQUE,
@@ -223,12 +229,17 @@ CREATE TABLE clinic_payments (
   visit_type_id INTEGER REFERENCES clinic_visit_types (id),
   clinician_id INTEGER REFERENCES clinic_clinicians (id),
   amount NUMERIC(12, 2) NOT NULL,
-  method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'cash', 'transfer')),
+  method TEXT NOT NULL DEFAULT 'card' CHECK (method IN ('card', 'cash', 'transfer', 'online')),
   taken_by VARCHAR(120),
   paid_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   voided BOOLEAN NOT NULL DEFAULT FALSE,
   void_reason VARCHAR(200),
   voided_by VARCHAR(120),
+  payment_ref VARCHAR(64) UNIQUE,
+  provider VARCHAR(40),
+  currency VARCHAR(3),
+  refunded NUMERIC(12, 2) NOT NULL DEFAULT 0,
+  kept NUMERIC(12, 2),
   client_key VARCHAR(36) UNIQUE
 );
 
@@ -283,7 +294,7 @@ CREATE TABLE clinic_waiting_list (
 
 CREATE TABLE clinic_messages (
   id SERIAL PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled', 'receipt')),
+  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled', 'receipt', 'paid_ahead', 'balance')),
   patient_id INTEGER REFERENCES clinic_patients (id),
   appointment_id INTEGER REFERENCES clinic_appointments (id),
   recall_id INTEGER REFERENCES clinic_recalls (id),

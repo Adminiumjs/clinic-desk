@@ -609,7 +609,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           // Their own visits, newest first, and only theirs.
           const mine = await own.myVisits();
           expect(mine.map((v) => v.id).sort((a, b) => a - b)).toEqual(visits.filter((v) => v.patient_id === patient.id).map((v) => v.id).sort((a, b) => a - b));
-          expect(Object.keys(mine[0]!).sort()).toEqual(["balance", "clinician_id", "id", "late_cancel", "minutes", "reason", "ref", "starts_at", "status", "visit_type_id"]);
+          expect(Object.keys(mine[0]!).sort()).toEqual(["balance", "clinician_id", "id", "late_cancel", "minutes", "paid", "reason", "ref", "refunded", "starts_at", "status", "visit_type_id"]);
           expect(await own.myDetails()).toMatchObject({ name: patient["name"], email: CLAIM_INBOX, mobile: patient["mobile"] });
         }, 180_000);
 
@@ -645,6 +645,41 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           await own.signOut();
           expect(own.level()).toBeNull();
           expect((await refusal(() => own.myVisits())).code).toBe("PUBLIC_REF_NOT_FOUND");
+        }, 180_000);
+
+        it("holds a time while a found patient pays as they book: unseen by the desk, booked at the desk after all, or let go", async () => {
+          const payer = await patientPort();
+          expect(await payer.find(String(patient["mobile"]), String(patient["born_on"]))).not.toBeNull();
+          // Nobody switched the app on in Payments: "Pay now" is not offered, and the pages read as ever.
+          expect(await payer.payments()).toEqual({ online: false, test: false });
+          const time = firstFree(await payer.times({ kind: 1, resource: 2, date: later }), "10:00");
+          const made = await payer.bookToPay({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, time, DEMO_ZONE), reason: null, desk_note: null, language: "en-US" });
+          // Made waiting for its payment, its time held; no pay link while the practice takes no payments online.
+          expect([made.status, made.payUrl, Number(made.fee)]).toEqual(["paying", null, 45]);
+          expect(await payer.held(made.id)).toBe("paying");
+          const held = (await rows(at, "appointments")).find((a) => a.id === made.id)!;
+          expect([held["status"], held["patient_id"], held["channel"], held["check_status"], held["receipt_email"]]).toEqual(["paying", patient.id, "online", null, CLAIM_INBOX]);
+          const stranger = await patientPort();
+          expect((await stranger.times({ kind: 1, resource: 2, date: later })).find((s) => s.time === time)?.state).toBe("full");
+          // Paying at the desk after all: booked, and the confirmation that goes is the desk's — once.
+          await payer.settleHeld(made.id, "booked");
+          expect(await payer.held(made.id)).toBe("booked");
+          expect((await rows(at, "appointments")).find((a) => a.id === made.id)!["status"]).toBe("booked");
+          const told = await until(async () => {
+            const mine = (await rows(at, "messages")).filter((m) => m["appointment_id"] === made.id && m["status"] !== "queued");
+            return mine.some((m) => m["kind"] === "confirmation" && m["status"] === "sent") ? mine : undefined;
+          }, "the confirmation of the visit booked at the desk");
+          expect(told.filter((m) => m["status"] === "sent").map((m) => m["kind"])).toEqual(["confirmation"]);
+          // Another time held, and let go: the time is free again, and nothing was sent about it.
+          const other = firstFree(await payer.times({ kind: 1, resource: 2, date: later }), time);
+          const let_ = await payer.bookToPay({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, other, DEMO_ZONE), reason: null, desk_note: null, language: "en-US" });
+          await payer.settleHeld(let_.id, "lapsed");
+          expect(await payer.held(let_.id)).toBe("lapsed");
+          expect((await stranger.times({ kind: 1, resource: 2, date: later })).find((s) => s.time === other)?.state).toBe("free");
+          // A visit no longer waiting cannot be moved back: the door changes only a visit still waiting.
+          expect((await refusal(() => payer.settleHeld(made.id, "lapsed"))).code).toMatch(/^PUBLIC_/);
+          // The rest of their visits stay theirs to read only once verified: the waiting read shows nothing booked.
+          await payer.signOut();
         }, 180_000);
 
         it("stops someone who keeps guessing at a patient, and says so in a code the page knows", async () => {
@@ -765,6 +800,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const before = await rows(at, "payments");
           expect(before.length).toBeGreaterThan(0);
           expect(before[0]).not.toHaveProperty("patient_id");
+          const visitsBefore = await rows(at, "appointments");
 
           await upload(at.staff, "add-ons", addOnBundle("invoices"));
           await upload(at.staff, "add-ons", addOnBundle("holiday-calendars"));
@@ -788,8 +824,18 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
             ["clinic-reception", "holiday-calendars", "settings"],
           ]);
           expect(granting.details["privacyGrants"]).toEqual([]);
+          // The manager may give back what a patient paid online: a right the install review shows, asked here too.
+          expect(granting.details["refundGrants"]).toEqual([expect.objectContaining({ role: "clinic-manager" })]);
           expect((await rows(at, "payments")).length).toBe(before.length);
-          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true });
+          // Paying online shows a patient more of their own visits (what each was paid, and given back), and Adminium
+          // asks someone who may manage the keys to allow it. The doors it adds are new ones, after every older door,
+          // so each older one keeps its name (the arrivals kiosk's among them).
+          const widening = await at.staff.post("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true });
+          expect([widening.status, widening.code, widening.details["reason"]]).toEqual([422, "VALIDATION_FAILED", "PUBLIC_WIDER"]);
+          const wider = widening.details["publicWider"] as { ref: string; columns: string[]; methods: string[]; rows: boolean }[];
+          expect(wider.map((entry) => [entry.ref, [...entry.methods].sort(), [...entry.columns].sort(), entry.rows])).toEqual([["clinic_appointments_verified", [], ["paid", "refunded"], false]]);
+          expect((await rows(at, "payments")).length).toBe(before.length);
+          const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true, publicWider: true });
           // On every engine, SQLite included: the tables with a unique column are rebuilt in place.
           expect(updated.status, JSON.stringify(updated.body).slice(0, 1500)).toBe(200);
           expect([updated.body.from, updated.body.to]).toEqual(["0.2.0", next.version]);
@@ -806,6 +852,13 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
             expect([p.id, link(p["patient_id"]), link(p["visit_type_id"]), link(p["clinician_id"])]).toEqual([p.id, link(visit["patient_id"]), link(visit["visit_type_id"]), link(visit["clinician_id"])]);
           }
           expect(after.filter((p) => p["patient_id"] !== null).length).toBeGreaterThan(0);
+          // Paying online keeps what each payment kept: nothing of it went back, so a visit's paid and balance are
+          // what they were, worked out again over the payments' new "kept" column.
+          const money = (value: unknown) => (value === null || value === undefined ? null : Number(value).toFixed(2));
+          for (const p of after) expect([p.id, money(p["refunded"]), money(p["kept"])]).toEqual([p.id, "0.00", money(p["amount"])]);
+          expect(visits.map((v) => [v.id, v["status"], money(v["paid"]), money(v["balance"]), money(v["refunded"])])).toEqual(
+            visitsBefore.map((v) => [v.id, v["status"], money(v["paid"]), money(v["balance"]), v["paid"] === null ? null : "0.00"]),
+          );
         }, 360_000);
 
         it("switches the receipt on when Invoices & Receipts is connected after the update", async () => {

@@ -40,6 +40,7 @@ export const PEOPLE = [
       { table: "appointments", column: "new_name", holds: "name", via: "patient_id" },
       { table: "appointments", column: "new_email", holds: "email", via: "patient_id" },
       { table: "appointments", column: "new_mobile", holds: "phone", via: "patient_id" },
+      { table: "appointments", column: "receipt_email", holds: "email", via: "patient_id" },
     ],
   },
 ];

@@ -14,10 +14,17 @@
  *   missed        when a visit is marked a no-show (reminders switch);
  *   reminder      at each patient's own lead time before the visit (12, 24
  *                 or 48 hours; the practice's default when they chose none),
- *                 only to patients who asked for reminders.
+ *                 only to patients who asked for reminders;
+ *   paid_ahead    the confirmation of a visit the patient paid for as they
+ *                 booked: it goes when the payment confirms the booking. A
+ *                 visit made waiting for its payment gets no "payable at the
+ *                 desk" confirmation: that one is dropped before it goes.
  *
- * And one the desk queues when a patient asks for it:
+ * And two the desk queues:
  *
+ *   balance       what a seen visit still owes, with the link to pay it
+ *                 online — once, when the visit is sent off with a balance,
+ *                 and only while the practice takes payments online;
  *   receipt       the receipt of one payment, for their insurer — the
  *                 Invoices & Receipts document carried as an attachment
  *                 (`attach` on the template). Only while that add-on is
@@ -72,6 +79,8 @@ export const OUTBOX = {
     recall: "clinic-recall",
     cancelled: "clinic-cancelled",
     receipt: "clinic-receipt",
+    paid_ahead: "clinic-paid-ahead",
+    balance: "clinic-balance",
   },
   // About the patient's own care and money, every one: none is stopped by the do-not-email list.
   classes: {
@@ -81,10 +90,42 @@ export const OUTBOX = {
     recall: "service",
     cancelled: "service",
     receipt: "service",
+    paid_ahead: "service",
+    balance: "service",
   },
   producers: [
-    // A visit booked by the desk, or by a patient already on file.
-    { kind: "confirmation", link: "appointment_id", onCreate: { table: "appointments", where: { column: "check_status", isNull: true } } },
+    // A visit booked by the desk, or by a patient already on file. One made waiting for its
+    // payment is not confirmed yet: its message waits a few seconds and is dropped, and one of
+    // the two below goes when the visit is booked after all.
+    {
+      kind: "confirmation",
+      link: "appointment_id",
+      onCreate: { table: "appointments", where: { column: "check_status", isNull: true } },
+      dropWhen: [{ column: "status", in: ["paying", "lapsed"], reason: "no-longer-needed" }],
+      holdSeconds: 5,
+    },
+    // A visit waiting for its payment, booked after all: by the payment (the paid confirmation),
+    // or by the patient choosing to pay at the desk (the confirmation as the desk's).
+    {
+      kind: "paid_ahead",
+      link: "appointment_id",
+      onChange: { table: "appointments", column: "status", to: "booked", where: { column: "check_status", isNull: true } },
+      dropWhen: [
+        { column: "status", in: ["cancelled", "lapsed"], reason: "no-longer-needed" },
+        { column: "balance", gte: 0.01, reason: "no-longer-needed" },
+      ],
+      holdSeconds: 5,
+    },
+    {
+      kind: "confirmation",
+      link: "appointment_id",
+      onChange: { table: "appointments", column: "status", to: "booked", where: { column: "check_status", isNull: true } },
+      dropWhen: [
+        { column: "status", in: ["cancelled", "lapsed"], reason: "no-longer-needed" },
+        { column: "balance", lte: 0, reason: "paid" },
+      ],
+      holdSeconds: 5,
+    },
     // A first visit, once the desk has accepted it or linked it to a patient.
     { kind: "confirmation", link: "appointment_id", onChange: { table: "appointments", column: "check_status", to: ["accepted", "linked"] } },
     { kind: "missed", link: "appointment_id", gate: "enabled", onChange: { table: "appointments", column: "status", to: "no_show" } },
