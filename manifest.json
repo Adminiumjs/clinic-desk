@@ -6060,8 +6060,16 @@
                   "filters": [
                     {
                       "column": "status",
-                      "op": "neq",
-                      "value": "cancelled"
+                      "op": "in",
+                      "value": [
+                        "booked",
+                        "checked_in",
+                        "roomed",
+                        "with_clinician",
+                        "ready",
+                        "seen",
+                        "no_show"
+                      ]
                     }
                   ],
                   "window": {
@@ -6368,8 +6376,16 @@
                   "filters": [
                     {
                       "column": "status",
-                      "op": "neq",
-                      "value": "cancelled"
+                      "op": "in",
+                      "value": [
+                        "booked",
+                        "checked_in",
+                        "roomed",
+                        "with_clinician",
+                        "ready",
+                        "seen",
+                        "no_show"
+                      ]
                     }
                   ],
                   "window": {
@@ -6623,8 +6639,16 @@
                   "filters": [
                     {
                       "column": "status",
-                      "op": "neq",
-                      "value": "cancelled"
+                      "op": "in",
+                      "value": [
+                        "booked",
+                        "checked_in",
+                        "roomed",
+                        "with_clinician",
+                        "ready",
+                        "seen",
+                        "no_show"
+                      ]
                     }
                   ],
                   "window": {
@@ -7265,8 +7289,16 @@
                   "filters": [
                     {
                       "column": "status",
-                      "op": "neq",
-                      "value": "cancelled"
+                      "op": "in",
+                      "value": [
+                        "booked",
+                        "checked_in",
+                        "roomed",
+                        "with_clinician",
+                        "ready",
+                        "seen",
+                        "no_show"
+                      ]
                     }
                   ],
                   "window": {
