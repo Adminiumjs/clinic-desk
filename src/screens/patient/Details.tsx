@@ -9,7 +9,7 @@
  * out once the session has ended (it would go out with nobody's name).
  */
 import { useState } from "react";
-import { CalendarCheck, Check, ChevronLeft, ChevronRight, PhoneCall, Search } from "lucide-react";
+import { CalendarCheck, Check, ChevronLeft, ChevronRight, Lock, PhoneCall, Search } from "lucide-react";
 
 import { PortError } from "../../data/ports.ts";
 import { useI18n } from "../../i18n/index.tsx";
@@ -23,6 +23,8 @@ import { findMessage } from "./VerifyFlow.tsx";
 import { resetBooking, setBooking, useFlow, type FindProblem } from "./flow.ts";
 import { bookProblem, firstAndInitial, firstName, isEmail, lookupProblem, personReady, type BookProblem } from "./logic.ts";
 import { nearestFor } from "./nearest.ts";
+import { bookAndPay, payAgain, usePaying, type BookingShown } from "./paying.ts";
+import { CheckingBox, FailedBox, PayChoices, TakingBox, type PayChoice } from "./payParts.tsx";
 import { ClinicianTile, GoneBox, Notice, TextInput, clinicianNamed, labelStyle, sectionLabel, useCatalogue, useNarrow } from "./parts.tsx";
 import { useTodayDay } from "./useToday.ts";
 import { atInstant, clockLabel, rangeLabel } from "./when.ts";
@@ -56,6 +58,10 @@ export default function Details() {
   const [finding, setFinding] = useState(false);
   const [booking, setBookingBusy] = useState(false);
   const [problem, setProblem] = useState<BookProblem | null>(null);
+  // Paying as they book, once the practice takes payments online: "Pay now" is offered first, as the design draws it.
+  const [choice, setChoice] = useState<PayChoice>("now");
+  const paying = usePaying();
+  const moving = usePatients((s) => s.moving);
 
   useDemoSignal("details.fill", (p) => {
     if (p["mode"] === "first") setBooking({ returning: false, foundName: null, name: p["name"] ?? "", bornOn: p["bornOn"] ?? "", mobile: p["mobile"] ?? "", email: p["email"] ?? "" });
@@ -73,6 +79,14 @@ export default function Details() {
   const shownFound = returning && b.foundName !== null && found !== null ? b.foundName : null;
   const picked = type !== null && day !== null && time !== null;
 
+  const fee = type?.fee ?? 0;
+  // Only someone already on file pays as they book (a first visit waits for the desk's check), and only a visit with a fee.
+  const payAhead = paying.online === true && settings.pay_ahead === true && returning && fee > 0 && moving === null;
+  // Back from the pay page with the visit still waiting for its payment, or its time gone.
+  const step = paying.step !== null && paying.step.for === "held" ? paying.step : null;
+  const held = step !== null && (step.kind === "failed" || step.kind === "checking" || step.kind === "taking") ? step : null;
+  const showChoices = (payAhead && step === null) || step?.kind === "failed";
+  const payNow = showChoices && choice === "now";
   const person = { name: b.name, bornOn: b.bornOn, mobile: b.mobile };
   const emailOk = b.email.trim() === "" || isEmail(b.email);
   const ready = picked && (returning ? shownFound !== null : personReady(person, today) && emailOk);
@@ -96,7 +110,43 @@ export default function Details() {
     }
   };
 
+  /** What the confirmation shows of a visit booked here. */
+  const confirmBooked = (made: { ref: string; starts_at: string; minutes: number; clinician_id: number | null; status: string }, extra: { paidAhead?: number; payNotOpen?: boolean } = {}) => {
+    usePatients.setState({
+      booked: { ...made, firstVisit: false, firstName: firstName(found?.name ?? b.foundName ?? ""), email: null, typeId: type?.id ?? 0, reason: b.reason.trim() === "" ? null : b.reason.trim(), moved: false, ...extra },
+      time: null,
+    });
+    resetBooking();
+    usePaying.setState({ step: null, shown: null });
+    go("confirm");
+  };
+
+  /** Back from a payment that did not finish: pay again, or book the waiting visit to pay at the desk. */
+  const settleFailed = async () => {
+    if (step === null || step.kind !== "failed") return;
+    const shown = paying.shown;
+    setBookingBusy(true);
+    setProblem(null);
+    try {
+      if (choice === "now") {
+        await payAgain("held", step.id, shown);
+      } else {
+        await patientsPort().settleHeld(step.id, "booked");
+        if (shown !== null) confirmBooked({ ...shown.booked, status: "booked" });
+      }
+    } catch (error) {
+      const code = error instanceof PortError ? error.code : "";
+      setProblem(bookProblem(code, error instanceof PortError ? error.params : {}));
+    } finally {
+      setBookingBusy(false);
+    }
+  };
+
   const book = async () => {
+    if (step?.kind === "failed") {
+      await settleFailed();
+      return;
+    }
     if (!ready || type === null || day === null || time === null) return;
     setBookingBusy(true);
     setProblem(null);
@@ -116,6 +166,22 @@ export default function Details() {
         language: locale(),
         ...(returning ? {} : { newPatient: { name: b.name.trim(), born_on: b.bornOn.trim(), mobile: b.mobile.trim(), email: b.email.trim() === "" ? null : b.email.trim() } }),
       };
+      if (payNow) {
+        // Made waiting for its payment, its time held; then off to the pay page.
+        const made = await patientsPort().bookToPay(visit);
+        const shown: BookingShown = {
+          typeId: type.id,
+          clinicianId,
+          day,
+          time,
+          foundName: b.foundName ?? found?.name ?? "",
+          firstName: firstName(found?.name ?? ""),
+          reason: visit.reason,
+          booked: { ref: made.ref, starts_at: made.starts_at, minutes: made.minutes, clinician_id: made.clinician_id, status: made.status, fee: made.fee },
+        };
+        if ((await bookAndPay(made, shown)) === "desk") confirmBooked({ ...shown.booked, status: "booked" }, { payNotOpen: true });
+        return;
+      }
       await bookVisit(visit, { firstName: firstName(returning ? (found?.name ?? "") : b.name), email: returning ? null : visit.newPatient?.email ?? null });
       resetBooking();
       usePatients.setState({ time: null });
@@ -275,24 +341,41 @@ export default function Details() {
             <span style={{ fontSize: 13, fontWeight: 800 }}>{t("details.fee")}</span>
             <span style={mono(16, 600, "var(--fg)")}>{type === null ? "—" : money(type.fee, settings.currency)}</span>
           </div>
-          <p style={{ margin: "6px 0 0", fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)" }}>{t("details.payable")}</p>
-          {b.gone === null ? (
-            <Btn icon={CalendarCheck} busy={booking} disabled={!ready} onClick={() => void book()} style={{ width: "100%", marginBlockStart: 14, ...(ready ? {} : { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 }) }}>
-              {t("details.book")}
-            </Btn>
+          {!showChoices && step?.kind !== "taking" && step?.kind !== "checking" && (
+            <p style={{ margin: "6px 0 0", fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)" }}>{t("details.payable")}</p>
+          )}
+          {step?.kind === "failed" && <FailedBox />}
+          {showChoices && b.gone === null && <PayChoices choice={choice} onChoice={setChoice} />}
+          {step?.kind === "taking" ? (
+            <TakingBox />
+          ) : step?.kind === "checking" ? (
+            <CheckingBox />
+          ) : b.gone === null ? (
+            payNow ? (
+              <Btn icon={Lock} busy={booking} disabled={!ready && held === null} onClick={() => void book()} style={{ width: "100%", marginBlockStart: 14, ...(ready || held !== null ? {} : { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 }) }}>
+                {t("pay.now")}
+                <span style={{ fontFamily: "'JetBrains Mono', ui-monospace, monospace", fontWeight: 700 }}>{money(fee, settings.currency)}</span>
+              </Btn>
+            ) : (
+              <Btn icon={CalendarCheck} busy={booking} disabled={!ready && held === null} onClick={() => void book()} style={{ width: "100%", marginBlockStart: 14, ...(ready || held !== null ? {} : { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 }) }}>
+                {t("details.book")}
+              </Btn>
+            )
           ) : (
             <GoneBox
               near={b.gone}
+              away={step?.kind === "gone"}
               dayLabel={day === null ? "" : dayShort(day)}
               timeLabel={(tm) => (day === null ? tm : clockLabel(day, tm))}
               onPick={(tm) => {
                 setBooking({ gone: null });
+                usePaying.setState({ step: null, shown: null });
                 usePatients.setState({ time: tm });
               }}
             />
           )}
           {problem !== null && <Notice style={{ marginBlockStart: 12 }}>{bookWords(t, problem, settings.phone)}</Notice>}
-          {!ready && b.gone === null && <p style={{ margin: "9px 0 0", fontSize: 11.5, fontWeight: 700, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>{hint}</p>}
+          {!ready && held === null && b.gone === null && <p style={{ margin: "9px 0 0", fontSize: 11.5, fontWeight: 700, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>{hint}</p>}
         </aside>
       </div>
     </div>

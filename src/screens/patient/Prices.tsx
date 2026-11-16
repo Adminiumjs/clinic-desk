@@ -3,7 +3,7 @@
  * practice's cancellation window, and how to pay — at the desk, and through
  * an insurer when the practice says it takes one.
  */
-import { CalendarCheck, FileText, Store } from "lucide-react";
+import { CalendarCheck, FileText, Globe, Store } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useI18n } from "../../i18n/index.tsx";
@@ -12,16 +12,21 @@ import { soft, tint } from "../../lib/color.ts";
 import { money, num } from "../../lib/format.ts";
 import { go } from "../../state/ui.ts";
 import { PageHead, typeIcon, useCatalogue } from "./parts.tsx";
+import { usePaying } from "./paying.ts";
 
 export default function Prices() {
   const { t } = useI18n();
   const dark = useDark();
   const cat = useCatalogue();
+  const online = usePaying((s) => s.online === true);
   const settings = cat?.settings ?? null;
   if (cat === null || settings === null) return null;
+  // Paying online when they book, while the practice takes payments and lets patients pay ahead.
+  const payAhead = online && settings.pay_ahead === true;
   const ways: { id: string; icon: LucideIcon; label: string; body: string }[] = [
     { id: "desk", icon: Store, label: t("prices.atDesk"), body: settings.pay_note !== null && settings.pay_note !== "" ? settings.pay_note : t("prices.atDeskBody") },
   ];
+  if (payAhead) ways.push({ id: "online", icon: Globe, label: t("pay.wayOnline"), body: t("pay.wayOnlineBody") });
   if (settings.insurer_note !== null && settings.insurer_note !== "") ways.push({ id: "insurer", icon: FileText, label: t("prices.insurer"), body: settings.insurer_note });
 
   return (
@@ -45,7 +50,7 @@ export default function Prices() {
             );
           })}
         </ul>
-        <p style={{ margin: 0, padding: "15px 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.6, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("prices.window", { hours: num(settings.cancel_hours) })}</p>
+        <p style={{ margin: 0, padding: "15px 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.6, color: "var(--fg-muted)", textWrap: "pretty" }}>{payAhead ? t("pay.priceWindow", { hours: num(settings.cancel_hours) }) : t("prices.window", { hours: num(settings.cancel_hours) })}</p>
       </section>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(230px,1fr))", gap: 12 }}>
         {ways.map((w) => {

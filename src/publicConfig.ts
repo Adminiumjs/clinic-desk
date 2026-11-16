@@ -50,6 +50,12 @@ export interface SurfaceConfig {
    * app with none and an older server.
    */
   publicKeys?: Record<string, string>;
+  /**
+   * Handed only to a staff member who manages payments and is rehearsing the
+   * patients' pages in test mode, on the staff address: the token their
+   * writes carry (their own sign-in is beside them). Absent for everyone else.
+   */
+  rehearsal?: { csrfToken: string };
 }
 
 /** Test seams only — production call sites pass nothing. */
@@ -115,7 +121,15 @@ export async function resolveSurfaceConfig(
         : (opts.origin ?? window.location.origin);
     const tables = tablesOf((doc as { tables?: unknown }).tables);
     const publicKeys = tablesOf((doc as { publicKeys?: unknown }).publicKeys);
-    return { baseUrl, publishableKey: key, ...(tables === null ? {} : { tables }), ...(publicKeys === null ? {} : { publicKeys }) };
+    const rehearsal = (doc as { rehearsal?: { csrfToken?: unknown } | null }).rehearsal;
+    const rehearsalToken = typeof rehearsal?.csrfToken === "string" && rehearsal.csrfToken !== "" ? rehearsal.csrfToken : null;
+    return {
+      baseUrl,
+      publishableKey: key,
+      ...(tables === null ? {} : { tables }),
+      ...(publicKeys === null ? {} : { publicKeys }),
+      ...(rehearsalToken === null ? {} : { rehearsal: { csrfToken: rehearsalToken } }),
+    };
   } catch {
     // Network failure, or the SPA fallback answered with HTML (an instance
     // whose server predates the config route): both are "not configured".

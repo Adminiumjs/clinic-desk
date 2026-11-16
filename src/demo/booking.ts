@@ -15,7 +15,7 @@
  * everywhere else), so nothing a real practice runs depends on it.
  */
 import type { Appointment, Clinician, ClinicianHours, ClinicianVisitType, Closure, Day, Id, OpeningHours, Settings, Weekday } from "../data/types.ts";
-import { COUNTED } from "../data/types.ts";
+import { HELD } from "../data/types.ts";
 import { addDays, venueDay, venueStamp, venueTime } from "../data/venueTime.ts";
 import type { DayState, SlotTime } from "../data/ports.ts";
 
@@ -118,7 +118,7 @@ function judge(practice: Practice, clinician: Clinician, day: Day, start: number
   if (closed.has(null) || closed.has(clinician.id)) return "BOOKING_CLOSED";
   const end = start + minutes * 60_000;
   for (const other of practice.appointments) {
-    if (other.clinician_id !== clinician.id || other.id === ask.exclude || !COUNTED.includes(other.status)) continue;
+    if (other.clinician_id !== clinician.id || other.id === ask.exclude || !HELD.includes(other.status)) continue;
     const from = Date.parse(other.starts_at);
     if (from < end && from + other.minutes * 60_000 > start) return "BOOKING_TAKEN";
   }

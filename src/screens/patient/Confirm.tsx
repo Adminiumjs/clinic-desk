@@ -8,12 +8,12 @@
  * rings or emails once it has checked the new patient.
  */
 import { useState } from "react";
-import { Calendar, CalendarCheck, CalendarPlus, Check, ChevronLeft, ChevronRight, Clock, Mail, MapPin, NotebookPen, UserRound } from "lucide-react";
+import { Calendar, CalendarCheck, CalendarPlus, Check, CheckCheck, ChevronLeft, ChevronRight, Clock, Mail, MapPin, NotebookPen, UserRound } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
-import { Btn, cardStyle, chipStyle, mono, monoPill } from "../../components/ui.tsx";
+import { Btn, cardStyle, chipStyle, mono, monoPill, pill } from "../../components/ui.tsx";
 import { now } from "../../lib/clock.ts";
 import { dayLong, dayOf, money, num, timeRange } from "../../lib/format.ts";
 import { bookVisit, findMe, patientsPort, usePatients } from "../../state/patients.ts";
@@ -22,7 +22,7 @@ import { go } from "../../state/ui.ts";
 import { firstOpenTime } from "./FindDay.tsx";
 import { typesOffered } from "./Find.tsx";
 import { buildIcs, slugOf } from "./logic.ts";
-import { Fill, clinicianNamed, useCatalogue } from "./parts.tsx";
+import { Fill, Notice, clinicianNamed, useCatalogue } from "./parts.tsx";
 import { useTodayDay } from "./useToday.ts";
 import { atInstant } from "./when.ts";
 
@@ -168,12 +168,25 @@ export default function Confirm() {
           })}
         </div>
       </section>
-      {type !== undefined && (
-        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, lineHeight: 1.6, color: "var(--fg-muted)", textWrap: "pretty" }}>
-          <Fill text={t("confirm.fee")} name="fee">
-            <span style={mono(13, 600, "var(--fg)")}>{money(type.fee, settings.currency)}</span>
+      {booked.paidAhead !== undefined ? (
+        // Paid online as it was booked: the fee is said as paid, and the receipt comes by email.
+        <span role="status" style={{ ...pill("var(--pos-soft)", "var(--pos)"), alignSelf: "flex-start", fontSize: 13, padding: "7px 13px" }}>
+          <CheckCheck size={14} aria-hidden="true" />
+          <Fill text={t("pay.paidAhead")} name="amount">
+            <span style={mono(13, 600, "var(--pos)")}>{money(booked.paidAhead, settings.currency)}</span>
           </Fill>
-        </p>
+        </span>
+      ) : (
+        type !== undefined && (
+          <>
+            {booked.payNotOpen === true && <Notice>{t("pay.notOpen")}</Notice>}
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 600, lineHeight: 1.6, color: "var(--fg-muted)", textWrap: "pretty" }}>
+              <Fill text={t("confirm.fee")} name="fee">
+                <span style={mono(13, 600, "var(--fg)")}>{money(type.fee, settings.currency)}</span>
+              </Fill>
+            </p>
+          </>
+        )
       )}
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
         <button type="button" className="rh-chip" onClick={addToCalendar} style={chipStyle(false)}>

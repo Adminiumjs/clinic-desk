@@ -62,7 +62,13 @@ async function bootPatients(): Promise<void> {
   const { createPublicClient } = await import("@adminiumjs/public-client");
   // Every write this page makes (a claim, a booking, a registration) asks for the
   // human check: solve it first rather than be refused once and try again.
-  const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true });
+  // A staff member rehearsing payments in test mode writes with their own sign-in's token beside the key.
+  const client = createPublicClient({
+    baseUrl: config.baseUrl,
+    publishableKey: config.publishableKey,
+    humanCheck: true,
+    ...(config.rehearsal === undefined ? {} : { csrfToken: config.rehearsal.csrfToken }),
+  });
   if (client === null) {
     showStartupFailure({ key: "startup.noServer" }, "NO_BACKEND");
     return;
@@ -79,6 +85,9 @@ async function bootPatients(): Promise<void> {
   }
   useUi.setState({ persona: "patient", view: "find", theme: systemTheme() });
   void loadCatalogue();
+  // Whether "Pay now" shows; and a patient back from the pay page is taken to where they left.
+  const { loadPayments, comeBackFromPaying } = await import("./screens/patient/paying.ts");
+  void loadPayments();
 
   const [{ attachUrlSync }, { connectToHost }, { SURFACE_NAV, APP_KEY }, { go }] = await Promise.all([
     import("./urlSync.ts"),
@@ -100,6 +109,7 @@ async function bootPatients(): Promise<void> {
     onPath: (path) => sync.applyPath(path),
   });
   useUi.subscribe(sync.reflect);
+  void comeBackFromPaying();
 
   const { default: App } = await import("./app/App.tsx");
   render(App);
@@ -175,6 +185,16 @@ async function bootDesk(): Promise<void> {
   });
   setDeskReads(sessionDeskReads(transport, tables, (ref) => can(ref, "read")));
   setSink(sessionSink(transport, tables));
+  // Paying online, as the staff config says; all off when it says nothing, and the desk reads as it always has.
+  const { setDeskPay } = await import("./state/deskPay.ts");
+  setDeskPay({ ...staff.payments, kit: staff.kit, connectionId: staff.connectionId, csrfToken: staff.csrfToken });
+  // A visit is named to Adminium's payments by its table as Adminium knows it (with its schema).
+  if (staff.payments.on) {
+    void Promise.all([transport.connection(), transport.tableId(tables.appointments)]).then(
+      ([connectionId, visitsTable]) => setDeskPay({ connectionId, visitsTable }),
+      () => undefined,
+    );
+  }
   // The add-ons connected to this app: Invoices & Receipts (receipts for insurers), Holiday calendars (its days).
   const [{ loadConnectedAddOns }, { setConnectedAddOns }] = await Promise.all([import("./data/connectedAddOns.ts"), import("./state/features.ts")]);
   const connected = await loadConnectedAddOns();
@@ -294,7 +314,13 @@ async function bootDemo(): Promise<void> {
   ]);
   setDeskReads(ports.demoDeskReads(db));
   setSink(ports.demoSink(db, () => ({ origin: "desk", name: DEMO_DESK.name })));
+  // The demo takes payments (no money moves): the desk shows online money and what is owed back. It loads no kit,
+  // so Adminium's own refund and pay-link parts are not drawn.
+  const { setDeskPay } = await import("./state/deskPay.ts");
+  setDeskPay({ on: true, online: true, refund: true });
   setPatientsPort(ports.demoPatientsPort(db));
+  // The demo takes payments, with no money moving: "Pay now" shows, and the pay step plays out in the browser.
+  void import("./screens/patient/paying.ts").then(({ loadPayments }) => loadPayments());
   // The demo's kiosk keeps the real one's rules; its "Staff" goes straight back to the desk (there is no sign-in to leave).
   const [{ setKioskPort }, { demoKioskPort }, { go }] = await Promise.all([import("./data/kiosk.ts"), import("./demo/kiosk.ts"), import("./state/ui.ts")]);
   setKioskPort(demoKioskPort(db, async () => go("daysheet")));
@@ -309,6 +335,9 @@ async function bootDemo(): Promise<void> {
   const nurse = jab === undefined ? undefined : db.rows.clinicians.find((clinician) => clinician.id === jab.clinician_id);
   if (jab !== undefined) seedDemoSupplies(db, { id: jab.id, seenAt: jab.seen_at, by: nurse?.name ?? DEMO_DESK.name });
   setSuppliesPort(demoSuppliesPort(db));
+  // What a practice that takes payments would hold this morning: a visit paid ahead, and one owed back.
+  const { seedDemoPayments } = await import("./demo/payments.ts");
+  seedDemoPayments(db);
   setConnectedAddOns({ inventory: { version: "", settings: {} } });
   useDesk.setState({
     me: {

@@ -19,6 +19,7 @@ import { loadCatalogue, usePatients } from "../state/patients.ts";
 import { go, useUi } from "../state/ui.ts";
 import { Btn } from "./ui.tsx";
 import { PageSkeleton, useNarrow } from "../screens/patient/parts.tsx";
+import { TestBand } from "../screens/patient/payParts.tsx";
 
 const NAV: { view: PatientView; key: MessageKey }[] = [
   { view: "find", key: "nav.book" },
@@ -150,7 +151,10 @@ export default function PatientShell({ children }: { children: ReactNode }) {
             </Btn>
           </div>
         ) : loaded ? (
-          children
+          <>
+            <TestBand />
+            {children}
+          </>
         ) : (
           <PageSkeleton />
         )}

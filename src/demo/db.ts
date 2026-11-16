@@ -9,7 +9,7 @@
  * same refusals with the same codes (`BOOKING_TAKEN`, `BALANCE_EXCEEDED`, a
  * unique `client_key` or day). Only the demo build contains it.
  */
-import { COUNTED, type Appointment, type Id, type TableRef, type Tables } from "../data/types.ts";
+import { HELD, type Appointment, type Id, type TableRef, type Tables } from "../data/types.ts";
 import { venueDay } from "../data/venueTime.ts";
 import { checkBooking, type Practice } from "./booking.ts";
 
@@ -38,8 +38,8 @@ export class DemoRefusal extends Error {
 
 /** What a column starts as when a create leaves it out (the manifest's defaults). */
 const DEFAULTS: Partial<Record<TableRef, Row>> = {
-  appointments: { status: "booked", channel: "desk", late_cancel: false, waived: 0, paid: 0, check_status: null },
-  payments: { method: "card", voided: false },
+  appointments: { status: "booked", channel: "desk", late_cancel: false, waived: 0, paid: 0, refunded: 0, paid_online: 0, check_status: null },
+  payments: { method: "card", voided: false, payment_ref: null, provider: null, currency: null, refunded: 0 },
   appointment_supplies: { kit_id: null, qty: 1, not_used_at: null, batch_id: null, place_id: null, changed_by: null, changed_at: null },
   registrations: { status: "new" },
   recalls: { status: "due" },
@@ -160,10 +160,18 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
   function settle(appointmentId: Id) {
     const visit = find("appointments", appointmentId);
     if (visit === undefined) return;
-    const paid = rows.payments.filter((p) => p.appointment_id === appointmentId && !p.voided).reduce((s, p) => s + p.amount, 0);
-    const waived = rows.write_offs.filter((w) => w.appointment_id === appointmentId).reduce((s, w) => s + w.amount, 0);
     const round = (n: number) => Math.round(n * 100) / 100;
+    // Each payment keeps what was taken less what went back (`kept`), as the manifest's formula says.
+    const mine = rows.payments.filter((p) => p.appointment_id === appointmentId);
+    for (const p of mine) p.kept = round(p.amount - (p.refunded ?? 0));
+    const standing = mine.filter((p) => !p.voided);
+    const paid = standing.reduce((s, p) => s + p.kept, 0);
+    const refunded = standing.reduce((s, p) => s + (p.refunded ?? 0), 0);
+    const online = mine.filter((p) => p.method === "online").reduce((s, p) => s + p.kept, 0);
+    const waived = rows.write_offs.filter((w) => w.appointment_id === appointmentId).reduce((s, w) => s + w.amount, 0);
     visit["paid"] = round(paid);
+    visit["refunded"] = round(refunded);
+    visit["paid_online"] = round(online);
     visit["waived"] = round(waived);
     visit["balance"] = round(Number(visit["fee"] ?? 0) - waived - paid);
   }
@@ -233,8 +241,10 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
         row["minutes"] = type?.minutes ?? row["minutes"] ?? 15;
         if (row["fee"] === undefined || row["fee"] === null) row["fee"] = type?.fee ?? 0;
         row["ref"] = code(ref, "RH-");
-        if (COUNTED.includes(String(row["status"]) as Appointment["status"])) guard(row, writer, null, row["status"] !== "booked");
+        if (HELD.includes(String(row["status"]) as Appointment["status"])) guard(row, writer, null, row["status"] === "checked_in");
         row["balance"] = Number(row["fee"] ?? 0);
+        // Where an online payment's receipt goes: the patient's address on file (`copy`, `always`).
+        row["receipt_email"] = rows.patients.find((p) => p.id === row["patient_id"])?.email ?? null;
       }
       if (ref === "registrations") row["ref"] = code(ref, "RG-");
       if (ref === "appointment_supplies") {
@@ -289,7 +299,7 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
       }
       if (ref === "appointments") {
         const moved = ["starts_at", "clinician_id", "visit_type_id"].some((c) => c in next && next[c] !== before[c]);
-        const recounted = "status" in next && !COUNTED.includes(before["status"] as Appointment["status"]) && COUNTED.includes(next["status"] as Appointment["status"]);
+        const recounted = "status" in next && !HELD.includes(before["status"] as Appointment["status"]) && HELD.includes(next["status"] as Appointment["status"]);
         if (moved || recounted) {
           const trial: Row = { ...before, ...next };
           if ("visit_type_id" in next) trial["minutes"] = rows.visit_types.find((t) => t.id === trial["visit_type_id"])?.minutes ?? trial["minutes"];
@@ -306,8 +316,16 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
       stampStatus(ref, row, next, before, writer);
       Object.assign(row, next);
       if (ref === "payments" && "appointment_id" in next) copyFromVisit(row);
-      if (ref === "payments" && "voided" in next) settle(row["appointment_id"] as Id);
+      if (ref === "payments" && ("voided" in next || "refunded" in next)) settle(row["appointment_id"] as Id);
       if (ref === "appointments" && ("fee" in next || "visit_type_id" in next)) settle(id);
+      // What Adminium does with a visit paid ahead and cancelled before the cancellation window, while the
+      // practice refunds such cancellations by itself: its online money goes back in full (no money moves here).
+      if (ref === "appointments" && next["status"] === "cancelled" && before["status"] === "booked" && row["late_cancel"] !== true && rows.settings[0]?.auto_refund !== false) {
+        for (const payment of rows.payments) {
+          if (payment.appointment_id === id && payment.method === "online" && !payment.voided) payment.refunded = payment.amount;
+        }
+        settle(id);
+      }
       tell(ref, "record.update", id);
       return { ...row } as unknown as Tables[typeof ref];
     },

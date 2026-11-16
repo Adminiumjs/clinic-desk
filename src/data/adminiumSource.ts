@@ -150,6 +150,11 @@ export function sessionDeskReads(
         all("messages", { or: [{ column: "status", op: "in", value: ["queued", "failed"] }, { column: "created_at", op: "gte", value: yesterday }] }, "created_at.desc"),
         all("day_closes", { column: "day", op: "eq", value: today }, undefined, 1),
       ]);
+      // Cancelled or missed visits still holding money paid online: a refund owed, for someone to decide.
+      // Read only where the practice has ever been paid online (a desk that never was asks nothing new).
+      const owedBack = paymentsToday.some((p) => p.method === "online") || (await all("payments", { column: "method", op: "eq", value: "online" }, undefined, 1)).length > 0
+        ? await all("appointments", and({ column: "status", op: "in", value: ["cancelled", "no_show"] }, { column: "paid_online", op: "gt", value: 0 }), "starts_at.asc", PAGE)
+        : [];
       const owing = owingPlus.slice(0, PAGE);
       const notes = [
         ...(await byIds("check_notes", "registration_id", registrations.map((r) => r.id))),
@@ -162,6 +167,7 @@ export function sessionDeskReads(
         ...firstVisits.map((a) => a.patient_id),
         ...recalls.map((r) => r.patient_id),
         ...owing.map((a) => a.patient_id),
+        ...owedBack.map((a) => a.patient_id),
       ].filter((id): id is Id => id !== null);
       const patients = await byIds("patients", "id", named);
       const snap: DeskSnapshot = {
@@ -176,6 +182,7 @@ export function sessionDeskReads(
         recalls,
         owing,
         owingMore: owingPlus.length > PAGE,
+        owedBack,
         paymentsToday,
         writeOffsThisMonth,
         messages,
@@ -192,6 +199,7 @@ export function sessionDeskReads(
 
     patients: (ids) => byIds("patients", "id", ids),
     visits: (ids) => byIds("appointments", "id", ids),
+    visitPayments: (ids) => byIds("payments", "appointment_id", ids),
     rows: (ref, ids) => byIds(ref, "id", ids),
 
     async search(query: PatientSearch, today) {

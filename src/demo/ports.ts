@@ -120,6 +120,7 @@ export function demoDeskReads(db: DemoDb): DeskReads {
         recalls: r.recalls.filter((x) => (x.status === "due" || x.status === "noted") && x.due_on <= addDays(today, 60)),
         owing: owingAll.slice(0, 200),
         owingMore: owingAll.length > 200,
+        owedBack: r.appointments.filter((a) => (a.status === "cancelled" || a.status === "no_show") && (a.paid_online ?? 0) > 0),
         paymentsToday: r.payments.filter((p) => Date.parse(p.paid_at) >= midnight),
         writeOffsThisMonth: r.write_offs.filter((w) => w.written_at >= monthStart),
         messages: r.messages.filter((m) => m.status === "queued" || m.status === "failed" || (m.created_at ?? "") >= yesterday),
@@ -132,6 +133,7 @@ export function demoDeskReads(db: DemoDb): DeskReads {
         ...snap.firstVisits.map((a) => a.patient_id),
         ...snap.recalls.map((x) => x.patient_id),
         ...snap.owing.map((a) => a.patient_id),
+        ...snap.owedBack.map((a) => a.patient_id),
       ]);
       return plain(snap);
     },
@@ -143,6 +145,7 @@ export function demoDeskReads(db: DemoDb): DeskReads {
 
     patients: async (ids) => plain(patientsOf(ids)),
     visits: async (ids) => plain(r.appointments.filter((a) => ids.includes(a.id))),
+    visitPayments: async (ids) => plain(r.payments.filter((p) => ids.includes(p.appointment_id))),
     rows: async (ref, ids) => plain((r[ref] as { id: Id }[]).filter((row) => ids.includes(row.id)) as never),
 
     async search(query, today) {
@@ -215,7 +218,10 @@ export function demoDeskReads(db: DemoDb): DeskReads {
   };
 }
 
-const OWN_COLUMNS = ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance"] as const;
+const OWN_COLUMNS = ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance", "paid", "refunded"] as const;
+
+/** The demo's pay link: no address at all, only what the page plays out in the browser. */
+const DEMO_PAY = "demo-pay:";
 const ownVisit = (a: Appointment): OwnVisit => Object.fromEntries(OWN_COLUMNS.map((c) => [c, a[c]])) as unknown as OwnVisit;
 
 /** The patients' pages over the demo practice. */
@@ -354,7 +360,7 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
         };
         if (session !== null) {
           values["patient_id"] = session.patientId;
-          const upcoming = r.appointments.filter((a) => a.patient_id === session!.patientId && a.status === "booked" && Date.parse(a.starts_at) > db.now());
+          const upcoming = r.appointments.filter((a) => a.patient_id === session!.patientId && (a.status === "booked" || a.status === "paying") && Date.parse(a.starts_at) > db.now());
           if (upcoming.length >= 2) refuse("PUBLIC_LIMIT_REACHED", "Two visits are already booked.");
         } else {
           if (settings?.new_patients_online === false) refuse("PUBLIC_SWITCHED_OFF", "New patients cannot book online.");
@@ -411,6 +417,63 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
 
     async signOut() {
       session = null;
+    },
+
+    // ── paying online: the demo takes payments, and no money moves ──
+    payments: async () => ({ online: true, test: false }),
+
+    bookToPay: (visit) =>
+      attempt(() => {
+        if (onlineOff()) refuse("PUBLIC_SWITCHED_OFF", "Online booking is closed.");
+        // A patient on file only, as the server's own door.
+        if (session === null) return refuse("PUBLIC_CLAIM_REQUIRED", "Find yourself first.");
+        const patientId = session.patientId;
+        const upcoming = r.appointments.filter((a) => a.patient_id === patientId && (a.status === "booked" || a.status === "paying") && Date.parse(a.starts_at) > db.now());
+        if (upcoming.length >= 2) refuse("PUBLIC_LIMIT_REACHED", "Two visits are already booked.");
+        const row = db.insert(
+          "appointments",
+          {
+            visit_type_id: visit.visit_type_id,
+            clinician_id: visit.clinician_id,
+            starts_at: visit.starts_at,
+            reason: visit.reason,
+            desk_note: visit.desk_note,
+            language: visit.language,
+            patient_id: patientId,
+            status: "paying",
+            channel: "online",
+          },
+          patient,
+        );
+        return { id: row.id, ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status, fee: row.fee ?? 0, payUrl: `${DEMO_PAY}${String(row.id)}` };
+      }),
+
+    held: async (id) => {
+      const visit = r.appointments.find((a) => a.id === id && a.patient_id === session?.patientId);
+      if (visit === undefined || (visit.status !== "paying" && visit.status !== "lapsed")) return "booked";
+      return visit.status;
+    },
+
+    settleHeld: (id, to) =>
+      attempt(() => {
+        const visit = r.appointments.find((a) => a.id === id && a.patient_id === session?.patientId);
+        if (visit === undefined || visit.status !== "paying") refuse("PUBLIC_NOT_FOUND", "That visit cannot be changed.");
+        db.update("appointments", id, { status: to }, patient);
+      }),
+
+    payLink: async (id) => `${DEMO_PAY}${String(id)}`,
+
+    carrySession: () => null,
+    resumeSession: () => undefined,
+
+    /** The payment, played out: what is still owed is paid online, and a visit waiting for it is booked. */
+    async simulatePay(payUrl) {
+      const id = Number(payUrl.slice(DEMO_PAY.length));
+      const visit = r.appointments.find((a) => a.id === id);
+      if (visit === undefined || visit.balance <= 0) return;
+      const system: Writer = { origin: "desk", name: null };
+      db.insert("payments", { appointment_id: id, amount: visit.balance, method: "online", payment_ref: `demo-${String(id)}-${String(db.now())}`, currency: r.settings[0]?.currency ?? null }, system);
+      if (visit.status === "paying") db.update("appointments", id, { status: "booked" }, system);
     },
   };
 }
