@@ -52,7 +52,7 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.49 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.60 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
@@ -137,6 +137,47 @@ and blanks the name, email address and mobile copied onto a registration (the
 postal address, date of birth and person to ring typed on it stay: Adminium
 0.3.38 blanks only an address, a name or a phone copied there).
 
+## Paying online
+
+Clinic Desk can take payments for visits through the payments Adminium
+takes (Studio → Payments, with a card or wallet service connected). It arrives
+**switched off**: installing or updating the app needs no payments right, and
+nothing changes until someone who manages payments switches **Clinic Desk** on
+in Payments. Until then every page — the patients' and the desk's — reads
+exactly as it always has.
+
+Once it is on:
+
+- **After a visit**, a patient pays what a seen visit still owes from **My
+  visits** ("£25 still to pay" · **Pay now**), or from the link the desk emails
+  when it sends a visit off with a balance (once). The desk can copy the same
+  link from the visit, and from Accounts.
+- **Ahead of a visit**, a patient already on file may choose **Pay now** as
+  they book (desk setting **Patients may pay when they book**, on by default).
+  The visit is made waiting for its payment and its time is held for a few
+  minutes (**Time held while a patient pays**, 15 by default); the payment
+  books it. A patient who does not finish may try again or pay at the desk on
+  the day; a time not paid for in time goes back on the board and nothing is
+  taken — never while a payment for it is still on its way. A first visit by
+  someone not yet on file books as before: the desk checks it first.
+- The money lands in the practice's own **payments** table as `Online`, with
+  the service it went through, in the practice's own currency (the settings
+  row's), and Adminium emails the receipt. Accounts and Close the desk count
+  online money apart from the desk's card, cash and transfers ("Online
+  payments aren't in the drawer").
+- **Refunds** are Adminium's own two steps, from the visit, for someone who
+  may give money back (the clinic manager role carries the right; the install
+  review shows it and you may untick it). A visit paid ahead and cancelled
+  before the cancellation window — by the patient, or by someone who may
+  refund — is refunded by itself, unless the manager turns **Refund
+  cancellations automatically** off in the desk settings (it is there only
+  while payments are on). Off, or for a late cancellation, a no-show, or a
+  cancel by someone who may not refund, the visit shows **Refund owed** on the
+  desk and in Accounts' **Refunds owed**, and a person decides.
+
+The patients' pages read only what was paid of their own visits and what went
+back — never the payments themselves.
+
 ## Add-ons
 
 Clinic Desk runs a practice's day on its own. Three add-ons are offered when
@@ -220,6 +261,21 @@ Adminium's add-ons.
   later for this.
 
 ## Moving from 0.2.x
+
+The release after 0.3.3 adds paying online. Update Adminium to 0.3.60 first,
+then the app. It adds columns and keeps every row: a visit gets what was paid
+online of it and what went back, and the address its receipts go to (the
+patient's, kept in step); a payment gets its online reference, the service,
+its currency, what went back of it and what it keeps; the practice's settings
+get the three paying switches; and a visit, a payment and a message each take
+new values (`paying` and `lapsed`, `online`, `paid_ahead` and `balance`). A
+visit's paid and balance are worked out again over what each payment keeps —
+the same figures, since nothing has gone back yet. A visit's steps are now
+kept by Adminium (booked → in → room → with the clinician → ready → seen, a
+no-show or a cancellation, and a seen visit back to ready to put its supplies
+right), so a write that skips them is refused. The patients' pages are allowed
+to show what each visit was paid and given back, and the update asks someone
+who may manage the app's keys to allow that.
 
 0.3.3 changes no table: it updates in place whatever 0.3.2 did. Update
 Adminium to 0.3.49 first, then the app. A practice may then install the desk
