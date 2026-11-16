@@ -657,6 +657,8 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           // Made waiting for its payment, its time held; no pay link while the practice takes no payments online.
           expect([made.status, made.payUrl, Number(made.fee)]).toEqual(["paying", null, 45]);
           expect(await payer.held(made.id)).toBe("paying");
+          // Where its payment stands, read through the same door: none was started, since none could be.
+          expect(await payer.payState(made.id, "held")).toBe("none");
           const held = (await rows(at, "appointments")).find((a) => a.id === made.id)!;
           expect([held["status"], held["patient_id"], held["channel"], held["check_status"], held["receipt_email"]]).toEqual(["paying", patient.id, "online", null, CLAIM_INBOX]);
           const stranger = await patientPort();
