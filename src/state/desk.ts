@@ -38,6 +38,7 @@ import type {
   WaitingEntry,
   WriteOff,
 } from "../data/types.ts";
+import { NOT_YET } from "../data/types.ts";
 import type { StaffAccess, TableAction } from "../staffConnection.ts";
 import { addDays, venueMidnight } from "../data/venueTime.ts";
 import { practiceZone, today } from "../lib/clock.ts";
@@ -165,8 +166,21 @@ const LISTS: Partial<Record<TableRef, keyof DeskState>> = {
   faqs: "faqs",
 };
 
+/**
+ * The visits the desk holds: never one a patient is still paying for as they
+ * book, nor one whose time went unpaid. Those are not bookings yet (or never
+ * were), and the desk sees a visit once its payment, or the patient, books it.
+ */
+export function deskVisits<T extends { status: string }>(rows: readonly T[]): T[] {
+  return rows.filter((row) => !(NOT_YET as readonly string[]).includes(row.status));
+}
+
 /** One saved row, folded into whatever holds its table. */
 export function upsert(ref: TableRef, row: { id: Id }): void {
+  if (ref === "appointments" && deskVisits([row as unknown as Appointment]).length === 0) {
+    drop(ref, row.id);
+    return;
+  }
   const collection = COLLECTION[ref];
   if (collection !== undefined) {
     useDesk.setState((s) => ({ [collection]: merge(s[collection] as ById<{ id: Id }>, [row]) }) as Partial<DeskState>);
@@ -217,7 +231,7 @@ export function applySnapshot(snap: DeskSnapshot): void {
     clinicianHours: snap.clinicianHours,
     closures: snap.closures,
     faqs: snap.faqs,
-    visits: keyed([...snap.day, ...snap.firstVisits, ...snap.owing]),
+    visits: keyed(deskVisits([...snap.day, ...snap.firstVisits, ...snap.owing, ...snap.owedBack])),
     patients: merge(s.patients, snap.patients),
     waiting: keyed(snap.waiting),
     registrations: keyed(snap.registrations),
@@ -250,7 +264,7 @@ export async function ensureDays(from: Day, days = 1): Promise<void> {
   const zone = practiceZone();
   const { visits, patients } = await deskReads().between(venueMidnight(from, zone), venueMidnight(addDays(from, days), zone));
   useDesk.setState((s) => ({
-    visits: merge(s.visits, visits),
+    visits: merge(s.visits, deskVisits(visits)),
     patients: merge(s.patients, patients),
     daysRead: { ...s.daysRead, ...Object.fromEntries(wanted.map((d) => [d, true])) },
   }));

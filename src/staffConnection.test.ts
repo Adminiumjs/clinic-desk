@@ -104,6 +104,8 @@ describe("loadStaffConfig", () => {
       csrfToken: "tok",
       publicKeys: { kiosk: "adm_pub_k", broken: 3 },
       access: { tables: { tickets: ["read", "update", "fly"], odd: "all" }, roles: [{ slug: "pos-cashier", name: "POS cashier" }, { name: "no slug" }] },
+      payments: { on: true, online: true, test: "yes", refund: true },
+      kit: { contract: 1, entry: "/kit/kit-abc.js", styles: ["/kit/kit-abc.css", "https://elsewhere.example/x.css", 4] },
     });
     expect(await loadStaffConfig({ hostedStaff: true, base: "/apps/pos/staff/", fetchImpl })).toEqual({
       connectionId: "con_42",
@@ -119,7 +121,17 @@ describe("loadStaffConfig", () => {
       csrfToken: "tok",
       publicKeys: { kiosk: "adm_pub_k" },
       access: { tables: { tickets: ["read", "update"] }, roles: [{ slug: "pos-cashier", name: "POS cashier" }] },
+      // Each flag only when the server said it; the kit only from this same address.
+      payments: { on: true, online: true, test: false, refund: true },
+      kit: { entry: "/kit/kit-abc.js", styles: ["/kit/kit-abc.css"] },
     });
+  });
+
+  it("reads payments as off, and no kit, when the server says nothing of them: the desk then reads as it always has", async () => {
+    const config = await loadStaffConfig({ hostedStaff: true, base: "/apps/pos/staff/", fetchImpl: ok({ connectionId: "con_42", tables: {} }) });
+    expect([config?.payments, config?.kit]).toEqual([{ on: false, online: false, test: false, refund: false }, null]);
+    const elsewhere = await loadStaffConfig({ hostedStaff: true, base: "/apps/pos/staff/", fetchImpl: ok({ connectionId: "con_42", kit: { entry: "https://elsewhere.example/kit.js" } }) });
+    expect(elsewhere?.kit).toBeNull();
   });
 
   it("says nothing of access when the server said nothing, so no button is hidden on a guess", async () => {

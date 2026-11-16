@@ -116,6 +116,43 @@ export interface StaffConfig {
    * shows, and the server refuses what it refuses.
    */
   access: StaffAccess | null;
+  /**
+   * Whether the app takes payments, and what this person may do with them:
+   * `on` someone switched the app on in Adminium's Payments; `online` patients
+   * can pay online right now; `test` this person is rehearsing it; `refund`
+   * they may give money back. All false from a server that does not say, and
+   * then the desk reads exactly as it always has.
+   */
+  payments: StaffPayments;
+  /** Where Adminium's kit is loaded from (its refund and pay-link parts), or null when it serves none. */
+  kit: StaffKit | null;
+}
+
+export interface StaffPayments {
+  on: boolean;
+  online: boolean;
+  test: boolean;
+  refund: boolean;
+}
+
+export interface StaffKit {
+  entry: string;
+  styles: string[];
+}
+
+/** `payments` as the server sent it: each flag true only when it said so. */
+export function paymentsOf(value: unknown): StaffPayments {
+  const doc = record(value);
+  return { on: doc.on === true, online: doc.online === true, test: doc.test === true, refund: doc.refund === true };
+}
+
+/** `kit` as the server sent it: a same-origin module and its style sheets, or null. */
+export function kitOf(value: unknown): StaffKit | null {
+  const doc = record(value);
+  const entry = text(doc.entry);
+  if (entry === null || !entry.startsWith("/")) return null;
+  const styles = (Array.isArray(doc.styles) ? doc.styles : []).filter((sheet): sheet is string => typeof sheet === "string" && sheet.startsWith("/"));
+  return { entry, styles };
 }
 
 export type TableAction = "read" | "create" | "update" | "delete";
@@ -191,6 +228,8 @@ export async function loadStaffConfig(opts: StaffConfigOptions = {}): Promise<St
         Object.entries(record(d.publicKeys)).filter((entry): entry is [string, string] => typeof entry[1] === "string" && entry[1] !== ""),
       ),
       access: accessOf(d.access),
+      payments: paymentsOf(d.payments),
+      kit: kitOf(d.kit),
     };
   } catch {
     // An older server answers this path with the SPA index (HTML).

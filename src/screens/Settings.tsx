@@ -17,6 +17,7 @@ import { visitsOn } from "../lib/desk.ts";
 import { useNow } from "../lib/useNow.ts";
 import { saveSettings } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
+import { useDeskPay } from "../state/deskPay.ts";
 import { SuppliesGone } from "../data/supplies.ts";
 import { SUPPLIES } from "../lib/features.ts";
 import { forgetAddOn, useFeature } from "../state/features.ts";
@@ -28,6 +29,8 @@ import { Screen, ScreenHead, cardStyle } from "./deskwork/parts.tsx";
 
 const NO_SHOW = [10, 15, 20, 30];
 const CANCEL = [12, 24, 48];
+/** How long a time is held while a patient pays for it as they book. */
+const HOLD = [10, 15, 20, 30];
 
 type Patch = Partial<Omit<Row, "id">>;
 
@@ -37,6 +40,8 @@ export default function Settings() {
   const settings = useDesk((s) => s.settings);
   const desk = useDesk();
   const manager = useCan("settings", "update");
+  // Paying online: shown only while the practice takes payments; until then the screen reads as it always has.
+  const payOn = useDeskPay((s) => s.on);
   const [saving, setSaving] = useState<string | null>(null);
   // The shelves supplies can come off: Inventory's places, read only where Inventory is connected.
   const supplies = useFeature(SUPPLIES);
@@ -155,7 +160,38 @@ export default function Settings() {
             disabled={!manager || saving !== null}
             onChange={(next) => void save("bk", { online_booking_on: next })}
           />
+          {payOn && (
+            <>
+              <Toggle
+                label={t("settings.payAhead")}
+                body={t("settings.payAheadBody")}
+                on={settings.pay_ahead}
+                busy={saving === "pa"}
+                disabled={!manager || saving !== null}
+                onChange={(next) => void save("pa", { pay_ahead: next })}
+              />
+              <Toggle
+                label={t("settings.autoRefund")}
+                body={t("settings.autoRefundBody")}
+                on={settings.auto_refund}
+                busy={saving === "ar"}
+                disabled={!manager || saving !== null}
+                onChange={(next) => void save("ar", { auto_refund: next })}
+              />
+            </>
+          )}
         </div>
+        {payOn && settings.pay_ahead && (
+          <Part id="st-hold" title={t("settings.hold")} body={t("settings.holdBody")}>
+            <div role="group" aria-labelledby="st-hold" style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 11 }}>
+              {HOLD.map((n) => (
+                <Chip key={n} on={settings.pay_hold_minutes === n} disabled={!manager || saving !== null} onClick={() => void save("hold", { pay_hold_minutes: n })}>
+                  {t("settings.minutes", counted(n), n)}
+                </Chip>
+              ))}
+            </div>
+          </Part>
+        )}
         <div style={{ paddingBlockStart: 18, borderBlockStart: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("settings.hoursLine")}</span>
           <button type="button" className="rh-btn" onClick={() => go("hours")} style={{ ...btnGhostSm, height: 38 }}>

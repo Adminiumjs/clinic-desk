@@ -48,6 +48,7 @@ import { addDays, venueDay } from "../data/venueTime.ts";
 import { now, practiceZone } from "../lib/clock.ts";
 import { stepKey } from "../lib/keys.ts";
 import { deskReads, drop, ensurePatients, upsert, useDesk } from "./desk.ts";
+import { useDeskPay } from "./deskPay.ts";
 import { forgetAddOn } from "./features.ts";
 import { loadSupplies, useSupplies } from "./supplies.ts";
 import { sink } from "./writes.ts";
@@ -399,8 +400,39 @@ export function sendOff(input: SendOffInput): Promise<Outcome<{ visit: Appointme
     }
     const seen = (await update("appointments", visit.id, { status: "seen", recall_weeks: input.recallWeeks })) as unknown as Appointment;
     if (payment !== null) await refreshVisits([visit.id]);
-    return { visit: visitOf(visit.id) ?? seen, payment, recall };
+    const after = visitOf(visit.id) ?? seen;
+    await mailBalance(after, input.key);
+    return { visit: after, payment, recall };
   });
+}
+
+/**
+ * A visit sent off with something still to pay, while patients can pay online:
+ * the patient is emailed the amount and the link to pay it — once (a visit
+ * taken back and sent off again is not mailed a second time). The link is the
+ * visit's own, which Adminium fills as the message goes. A failure to queue it
+ * never undoes the send-off: the desk can copy the link from the visit.
+ */
+async function mailBalance(visit: Appointment, key: string): Promise<void> {
+  if (!useDeskPay.getState().online || visit.balance <= 0 || visit.patient_id === null) return;
+  if (Object.values(useDesk.getState().messages).some((m) => m.kind === "balance" && m.appointment_id === visit.id)) return;
+  try {
+    await ensurePatients([visit.patient_id]);
+    const patient = patientOf(visit.patient_id);
+    if (patient?.email === null || patient?.email === undefined || patient.email === "") return;
+    const message = (await insert("messages", {
+      kind: "balance",
+      patient_id: visit.patient_id,
+      appointment_id: visit.id,
+      to_address: patient.email,
+      language: patient.language ?? visit.language ?? null,
+      status: "queued",
+      client_key: stepKey(key, "d"),
+    })) as unknown as Message;
+    upsert("messages", message);
+  } catch {
+    // The visit is seen and its money stands; the pay link is still the desk's to copy.
+  }
 }
 
 /** Record a payment on a seen visit. More than the balance is refused by the server. */

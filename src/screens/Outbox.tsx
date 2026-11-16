@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, Receipt, Send, UserRoundX } from "lucide-react";
+import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, Receipt, Send, UserRoundX, Wallet } from "lucide-react";
 
 import type { Appointment, Id, MessageKind } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -39,6 +39,8 @@ const KINDS: Record<MessageKind, { bg: string; fg: string; icon: LucideIcon; key
   cancelled: { bg: "var(--danger-soft)", fg: "var(--danger)", icon: DoorClosed, key: "outbox.kind.cancelled" },
   confirmation: { bg: "var(--pos-soft)", fg: "var(--pos)", icon: CalendarCheck, key: "outbox.kind.confirmation" },
   receipt: { bg: "var(--surface-3)", fg: "var(--fg-muted)", icon: Receipt, key: "outbox.kind.receipt" },
+  paid_ahead: { bg: "var(--pos-soft)", fg: "var(--pos)", icon: CalendarCheck, key: "outbox.kind.paid_ahead" },
+  balance: { bg: "var(--warn-soft)", fg: "var(--warn)", icon: Wallet, key: "outbox.kind.balance" },
 };
 
 /** A visit the desk may still remind: booked, and not started. */
@@ -317,7 +319,8 @@ function lineFor(row: OutboxRow, visit: Appointment | undefined, desk: DeskState
   const who = clinicianOf(desk, visit?.clinician_id ?? null)?.short_name ?? "";
   switch (row.kind) {
     case "reminder":
-    case "confirmation": {
+    case "confirmation":
+    case "paid_ahead": {
       if (start === null) return "";
       const base = row.kind === "reminder" ? (who === "" ? at(start) : t("outbox.line.with", { at: at(start), who })) : t("outbox.line.booked", { at: at(start), who });
       return visit?.reason ? `${base} · ${visit.reason}` : base;
@@ -348,5 +351,7 @@ function lineFor(row: OutboxRow, visit: Appointment | undefined, desk: DeskState
       if (payment === undefined) return "";
       return t("outbox.line.receipt", { amount: amountText(payment.amount), day: dayMonthNear(dayOf(payment.paid_at), day) });
     }
+    case "balance":
+      return visit === undefined || visit.balance <= 0 ? "" : t("outbox.line.balance", { amount: amountText(visit.balance) });
   }
 }
