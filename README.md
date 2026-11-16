@@ -170,8 +170,8 @@ Once it is on:
   review shows it and you may untick it). A visit paid ahead and cancelled
   before the cancellation window — by the patient, or by someone who may
   refund — is refunded by itself, unless the manager turns **Refund
-  cancellations automatically** off in the desk settings (it is there only
-  while payments are on). Off, or for a late cancellation, a no-show, or a
+  cancellations automatically** off in the desk settings (it is there while
+  payments are on, and while a visit paid ahead is still to come). Off, or for a late cancellation, a no-show, or a
   cancel by someone who may not refund, the visit shows **Refund owed** on the
   desk and in Accounts' **Refunds owed**, and a person decides.
 

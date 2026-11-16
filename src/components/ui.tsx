@@ -397,13 +397,14 @@ export function Stepper({ fewer, more, onFewer, onMore, canFewer = true, disable
 }
 
 /** The design's switch (52 × 30), a real `role="switch"` with its state. */
-export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+export function Switch({ on, onChange, label, disabled, describedBy }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean; describedBy?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
       aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
       className="rh-gi"
       onClick={() => onChange(!on)}

@@ -7,7 +7,7 @@
  * everyone else the screen shows them as they are, with a line saying who can
  * change them. A control shows its new value once the server has saved it.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Clock } from "lucide-react";
 
 import type { Settings as Row } from "../data/types.ts";
@@ -42,6 +42,8 @@ export default function Settings() {
   const manager = useCan("settings", "update");
   // Paying online: shown only while the practice takes payments; until then the screen reads as it always has.
   const payOn = useDeskPay((s) => s.on);
+  // The refund switch still governs a visit paid ahead that is yet to come, even once payments are off.
+  const aheadToCome = Object.values(desk.visits).some((v) => (v.paid_online ?? 0) > 0 && v.status !== "seen" && v.status !== "cancelled" && v.status !== "no_show" && v.status !== "lapsed");
   const [saving, setSaving] = useState<string | null>(null);
   // The shelves supplies can come off: Inventory's places, read only where Inventory is connected.
   const supplies = useFeature(SUPPLIES);
@@ -161,24 +163,24 @@ export default function Settings() {
             onChange={(next) => void save("bk", { online_booking_on: next })}
           />
           {payOn && (
-            <>
-              <Toggle
-                label={t("settings.payAhead")}
-                body={t("settings.payAheadBody")}
-                on={settings.pay_ahead}
-                busy={saving === "pa"}
-                disabled={!manager || saving !== null}
-                onChange={(next) => void save("pa", { pay_ahead: next })}
-              />
-              <Toggle
-                label={t("settings.autoRefund")}
-                body={t("settings.autoRefundBody")}
-                on={settings.auto_refund}
-                busy={saving === "ar"}
-                disabled={!manager || saving !== null}
-                onChange={(next) => void save("ar", { auto_refund: next })}
-              />
-            </>
+            <Toggle
+              label={t("settings.payAhead")}
+              body={t("settings.payAheadBody")}
+              on={settings.pay_ahead}
+              busy={saving === "pa"}
+              disabled={!manager || saving !== null}
+              onChange={(next) => void save("pa", { pay_ahead: next })}
+            />
+          )}
+          {(payOn || aheadToCome) && (
+            <Toggle
+              label={t("settings.autoRefund")}
+              body={t("settings.autoRefundBody")}
+              on={settings.auto_refund}
+              busy={saving === "ar"}
+              disabled={!manager || saving !== null}
+              onChange={(next) => void save("ar", { auto_refund: next })}
+            />
           )}
         </div>
         {payOn && settings.pay_ahead && (
@@ -217,13 +219,15 @@ function Part({ id, title, body, first = false, children }: { id: string; title:
 }
 
 function Toggle({ label, body, on, busy, disabled, onChange }: { label: string; body: string; on: boolean; busy: boolean; disabled: boolean; onChange: (next: boolean) => void }) {
+  // The line under the name says what the switch does: read out with it.
+  const bodyId = useId();
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }} aria-busy={busy || undefined}>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.022em" }}>{label}</span>
-        <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{body}</span>
+        <span id={bodyId} style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{body}</span>
       </span>
-      <Switch on={on} onChange={onChange} label={label} disabled={disabled} />
+      <Switch on={on} onChange={onChange} label={label} disabled={disabled} describedBy={bodyId} />
     </div>
   );
 }
