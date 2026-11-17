@@ -1,5 +1,5 @@
 /**
- * What a visit costs (P7): each visit type with its length and fee, the
+ * What a visit costs: each visit type with its length and fee, the
  * practice's cancellation window, and how to pay — at the desk, and through
  * an insurer when the practice says it takes one.
  */

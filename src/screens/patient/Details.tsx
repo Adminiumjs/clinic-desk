@@ -1,5 +1,5 @@
 /**
- * Who is coming in (P2): a returning patient finds their record by mobile and
+ * Who is coming in: a returning patient finds their record by mobile and
  * date of birth ("Found you, Cormac E."); someone new gives their details;
  * both say what the visit is for. The rail sums the visit up and books it.
  *

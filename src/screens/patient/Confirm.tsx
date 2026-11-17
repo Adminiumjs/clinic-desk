@@ -1,5 +1,5 @@
 /**
- * The confirmation (P3): booked — or moved — with the reference, the visit
+ * The confirmation: booked — or moved — with the reference, the visit
  * in five rows, the fee, "Add to calendar" and what happens by email.
  *
  * The calendar file is built here, in the browser, from what the server

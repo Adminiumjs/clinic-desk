@@ -1,5 +1,5 @@
 /**
- * Online booking is closed for now (P13): the whole patients' side is this
+ * Online booking is closed for now: the whole patients' side is this
  * one page while the desk has switched online booking off — the practice's
  * number to ring and its address. The server refuses every patients' write
  * meanwhile; this only says so before anyone tries.

@@ -1,4 +1,4 @@
-/** The patients' 404 (P12): the page is not here; start again from booking or My visits. */
+/** The patients' 404: the page is not here; start again from booking or My visits. */
 import { CalendarCheck } from "lucide-react";
 
 import { useI18n } from "../../i18n/index.tsx";

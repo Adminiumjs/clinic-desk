@@ -1,5 +1,5 @@
 /**
- * My visits (P4): find yourself, type the emailed code, then what is coming
+ * My visits: find yourself, type the emailed code, then what is coming
  * up (move it, cancel it), what has been, and anything still to pay at the
  * desk. "Not you? Sign out" ends the session.
  *

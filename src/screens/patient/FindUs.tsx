@@ -1,5 +1,5 @@
 /**
- * Find us (P6): the address, the desk's number, the opening hours, the
+ * Find us: the address, the desk's number, the opening hours, the
  * entrance photo and a maps link, how to get here — and the days ahead the
  * practice is shut, with its note for patients.
  *

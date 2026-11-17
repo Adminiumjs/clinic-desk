@@ -184,7 +184,7 @@ export function codeMessage(t: ReturnType<typeof useI18n>["t"], problem: CodePro
   }
 }
 
-/** The whole code step (P4c): what was sent where, the boxes, check, resend, and the way back. */
+/** The whole code step: what was sent where, the boxes, check, resend, and the way back. */
 export function CodeStep({
   prefix,
   sent,

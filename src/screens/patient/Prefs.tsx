@@ -1,5 +1,5 @@
 /**
- * Reminders & my details (P10): after the code, the patient's mobile (shown,
+ * Reminders & my details: after the code, the patient's mobile (shown,
  * not changed here — no step confirms a new number, so the desk changes it),
  * their email, whether and when to be reminded, and "Save how we contact
  * you".
