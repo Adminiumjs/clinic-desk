@@ -97,6 +97,9 @@ const NEW_COLUMNS: Record<string, string[]> = {
 /** The enums this build widens, and only these: each keeps every value it had. */
 const WIDER_ENUMS: Record<string, string[]> = { appointments: ["status"], payments: ["method"], messages: ["kind"] };
 
+/** The new columns that are unique, and only these: each engine's index (and Postgres's constraint) on it comes. */
+const NEW_UNIQUE: Record<string, string[]> = { payments: ["payment_ref"] };
+
 /** A check as any engine spells it: SQLite writes the checks of a table it rebuilt in capitals. */
 const spelled = (constraint: string): string => constraint.replace(/^check \(/i, "CHECK (").replace(/" in \(/g, '" IN (');
 /** The values a check allows, on every engine (`'seen'`, `'seen'::character varying`, MySQL's `_utf8mb4\'seen\'`). */
@@ -107,7 +110,8 @@ const widenedIn = (ref: string, check: string): string[] => (WIDER_ENUMS[ref] ??
 /**
  * The constraints of a table that went, and that came, leaving out each
  * widened enum's check that was declared again with every value it allowed
- * and more. Both empty: nothing else changed.
+ * and more, and the uniqueness of a new unique column. Both empty: nothing
+ * else changed.
  */
 function changedConstraints(ref: string, was: string[], now: string[]): [string[], string[]] {
   const before = was.map(spelled);
@@ -123,6 +127,8 @@ function changedConstraints(ref: string, was: string[], now: string[]): [string[
     gone = gone.filter((c) => c !== old);
     came = came.filter((c) => c !== wider);
   }
+  // A new unique column's index, as SQLite (`index unique c (payment_ref)`), Postgres and MySQL list it.
+  came = came.filter((c) => !(/unique/i.test(c) && (NEW_UNIQUE[ref] ?? []).some((column) => c.endsWith(`(${column})`))));
   return [gone, came];
 }
 
