@@ -1,5 +1,5 @@
 /**
- * The six emails the practice sends through its outbox, in the eight
+ * The eight emails the practice sends through its outbox, in the eight
  * languages the app ships.
  *
  * Each email's words are a small table of sentences (`…Words`), and the
@@ -102,8 +102,28 @@ export interface ReceiptWords {
   footer: string;
 }
 
+/** The confirmation of a visit paid for as it was booked: the confirmation's words, its fee line said as paid. */
+export interface PaidAheadWords {
+  name: string;
+  paid: string;
+}
+
+/** What a seen visit still owes, with the link to pay it online. */
+export interface BalanceWords {
+  name: string;
+  subject: string;
+  preheader: string;
+  heading: string;
+  line: string;
+  pay: string;
+  where: string;
+  footer: string;
+}
+
 export interface EmailWords {
   confirmation: ConfirmationWords;
+  paidAhead: PaidAheadWords;
+  balance: BalanceWords;
   reminder: ReminderWords;
   missed: MissedWords;
   recall: RecallWords;
@@ -130,6 +150,20 @@ export const EMAIL_EN: EmailWords = {
     manage: "See my visits",
     cancel: "No charge to change or cancel until {{practice.cancel_hours}} hours before.",
     fee: "{{appointment.fee}} is payable at the desk.",
+    footer: FOOT,
+  },
+  paidAhead: {
+    name: "Visit confirmation, paid ahead",
+    paid: "Paid ahead · {{appointment.paid}}. Your receipt comes in its own email.",
+  },
+  balance: {
+    name: "Still to pay",
+    subject: "Your visit on {{appointment.starts_at.day_month}}",
+    preheader: "{{appointment.balance}} still to pay · {{appointment.ref}}",
+    heading: "{{appointment.balance}} still to pay",
+    line: "From your visit with {{clinician.name}} on {{appointment.starts_at.date}} ({{visit_type.name}}).",
+    pay: "Pay {{appointment.balance}} online",
+    where: "You’ll pay on a secure payment page.",
     footer: FOOT,
   },
   reminder: {
@@ -191,7 +225,8 @@ export const EMAIL_EN: EmailWords = {
   },
 };
 
-type Block = { block: string; id: string; data: Record<string, unknown> };
+/** A block of an email; `showWhen` sends it only while that value is there (a pay link). */
+type Block = { block: string; id: string; data: Record<string, unknown>; showWhen?: { var: string } };
 const heading = (text: string): Block => ({ block: "email.heading", id: "heading", data: { text } });
 const para = (id: string, ...paras: string[]): Block => ({ block: "email.text", id, data: { paras } });
 const list = (id: string, items: string[]): Block => ({ block: "email.list", id, data: { items } });
@@ -204,7 +239,7 @@ interface Content {
   footer: string;
 }
 
-function confirmation(w: ConfirmationWords): Content {
+function confirmation(w: ConfirmationWords, fee: string = w.fee): Content {
   return {
     subject: w.subject,
     preheader: w.preheader,
@@ -216,7 +251,31 @@ function confirmation(w: ConfirmationWords): Content {
       // The patient's own words for the visit, when they gave any.
       { block: "email.quote", id: "reason", data: { text: "{{appointment.reason}}" } },
       button("manage", w.manage, "{{manage_url}}"),
-      para("notes", w.cancel, w.fee),
+      para("notes", w.cancel, fee),
+    ],
+    footer: w.footer,
+  };
+}
+
+/** The same confirmation, for a visit the patient paid for as they booked: the fee is said as paid. */
+function paidAhead(w: EmailWords): Content {
+  return confirmation(w.confirmation, w.paidAhead.paid);
+}
+
+/**
+ * What a seen visit still owes. The button is the visit's own pay link, which
+ * Adminium fills only while the visit can be paid online: without one the
+ * button and its line are left out, never sent dead.
+ */
+function balance(w: BalanceWords): Content {
+  return {
+    subject: w.subject,
+    preheader: w.preheader,
+    blocks: [
+      heading(w.heading),
+      para("line", w.line),
+      { ...button("pay", w.pay, "{{pay_url}}"), showWhen: { var: "pay_url" } },
+      { ...para("where", w.where), showWhen: { var: "pay_url" } },
     ],
     footer: w.footer,
   };
@@ -290,9 +349,32 @@ function receipt(w: ReceiptWords): Content {
   };
 }
 
-const LAYOUTS = { confirmation, reminder, missed, recall, cancelled, receipt } as const;
+/** Each email's layout, by the words it reads: most read their own; the paid confirmation reads the confirmation's too. */
+const LAYOUTS: Record<keyof EmailWords, (w: EmailWords) => Content> = {
+  confirmation: (w) => confirmation(w.confirmation),
+  reminder: (w) => reminder(w.reminder),
+  missed: (w) => missed(w.missed),
+  recall: (w) => recall(w.recall),
+  cancelled: (w) => cancelled(w.cancelled),
+  receipt: (w) => receipt(w.receipt),
+  paidAhead,
+  balance: (w) => balance(w.balance),
+};
+/** The template key each email is kept under. */
+const KEYS: Record<keyof EmailWords, string> = {
+  confirmation: "clinic-confirmation",
+  paidAhead: "clinic-paid-ahead",
+  balance: "clinic-balance",
+  reminder: "clinic-reminder",
+  missed: "clinic-missed",
+  recall: "clinic-recall",
+  cancelled: "clinic-cancelled",
+  receipt: "clinic-receipt",
+};
 const VARS: Record<keyof EmailWords, string[]> = {
   confirmation: ["recipient.first_name", "appointment.ref", "appointment.starts_at", "appointment.time_range", "appointment.minutes", "appointment.reason", "appointment.fee", "clinician.name", "clinician.short_name", "clinician.role_label", "visit_type.name", "practice.address", "practice.cancel_hours", "manage_url"],
+  paidAhead: ["recipient.first_name", "appointment.ref", "appointment.starts_at", "appointment.time_range", "appointment.minutes", "appointment.reason", "appointment.paid", "clinician.name", "clinician.short_name", "clinician.role_label", "visit_type.name", "practice.address", "practice.cancel_hours", "manage_url"],
+  balance: ["appointment.ref", "appointment.balance", "appointment.starts_at", "clinician.name", "visit_type.name", "pay_url"],
   reminder: ["appointment.ref", "appointment.starts_at", "clinician.name", "clinician.short_name", "clinician.role_label", "practice.address", "practice.phone", "manage_url"],
   missed: ["appointment.starts_at", "clinician.short_name", "practice.phone", "booking_url"],
   recall: ["recall.clinician.short_name", "recall.due_on", "booking_url"],
@@ -313,14 +395,11 @@ export function emailWords(): Record<Tag, EmailWords> {
 /** The manifest's `emailTemplates`: one per kind, each in all eight languages. */
 export function emailTemplates(): unknown[] {
   const words = emailWords();
-  return (Object.keys(LAYOUTS) as (keyof EmailWords)[]).map((kind) => {
-    const layout = LAYOUTS[kind] as (w: EmailWords[typeof kind]) => Content;
-    return {
-      key: `clinic-${kind}`,
-      name: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, w[kind].name])),
-      vars: VARS[kind],
-      ...(ATTACH[kind] === undefined ? {} : { attach: ATTACH[kind] }),
-      locales: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, layout(w[kind] as never)])),
-    };
-  });
+  return (Object.keys(LAYOUTS) as (keyof EmailWords)[]).map((kind) => ({
+    key: KEYS[kind],
+    name: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, w[kind].name])),
+    vars: VARS[kind],
+    ...(ATTACH[kind] === undefined ? {} : { attach: ATTACH[kind] }),
+    locales: Object.fromEntries(Object.entries(words).map(([tag, w]) => [tag, LAYOUTS[kind](w)])),
+  }));
 }

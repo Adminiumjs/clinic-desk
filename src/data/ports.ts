@@ -109,6 +109,8 @@ export interface DeskSnapshot extends Reference {
   owing: Appointment[];
   /** Whether there are more owing visits than the snapshot holds. */
   owingMore: boolean;
+  /** Cancelled or missed visits still holding money paid online: a refund owed, for a person to decide. */
+  owedBack: Appointment[];
   paymentsToday: Payment[];
   writeOffsThisMonth: WriteOff[];
   /** Queued and failed, and everything of the last two days. */
@@ -141,6 +143,15 @@ export interface DeskReads {
   patients(ids: readonly Id[]): Promise<Patient[]>;
   /** Visits by key, as they stand now (a payment changed one's balance). */
   visits(ids: readonly Id[]): Promise<Appointment[]>;
+  /** Every payment of these visits, voided ones too: how each was paid, online ones with their service. */
+  visitPayments(ids: readonly Id[]): Promise<Payment[]>;
+  /**
+   * The refunds of a visit's online payments that went through, as Adminium's
+   * payment panel tells them to someone who may see them: who gave the money
+   * back (null when it went back by itself) and the reason they picked. Absent
+   * where there is no Adminium to ask (the website's demo).
+   */
+  refundsTold?(visitId: Id): Promise<RefundTold[]>;
   /**
    * Any table's rows by key, as they stand now — what a live update reads,
    * since the stream's own copy of a row arrives with the personal columns
@@ -181,11 +192,51 @@ export interface Catalogue {
 
 export type Level = "lookup" | "verified";
 
-/** A visit as its patient sees it. */
+/** The reason a person picked when they gave money back, in Adminium's own words for it. */
+export type RefundReason = "requested_by_customer" | "duplicate" | "fraudulent" | "other";
+
+/** One refund that went through, and who gave it and why, when the reader may see that. */
+export interface RefundTold {
+  amount: number;
+  by: string | null;
+  reason: RefundReason | null;
+}
+
+/** A visit as its patient sees it: what was paid of it and what went back, never the payments. */
 export type OwnVisit = Pick<
   Appointment,
-  "id" | "ref" | "clinician_id" | "visit_type_id" | "starts_at" | "minutes" | "status" | "late_cancel" | "reason" | "balance"
+  "id" | "ref" | "clinician_id" | "visit_type_id" | "starts_at" | "minutes" | "status" | "late_cancel" | "reason" | "balance" | "paid" | "refunded"
 >;
+
+/** Whether the practice takes payments online right now, and whether this visitor is a staff member rehearsing it (test mode). */
+export interface PayState {
+  online: boolean;
+  test: boolean;
+}
+
+/** A visit booked to be paid for as it is booked: where to pay, or null when the practice cannot take the payment now. */
+export interface BookedToPay extends Booked {
+  id: Id;
+  fee: number;
+  payUrl: string | null;
+}
+
+/**
+ * Where a visit being paid for as it was booked stands: still waiting for its
+ * payment, its time gone (`lapsed`), or booked — by the payment, or by the
+ * patient choosing the desk. A booked one leaves the read that answers this.
+ */
+export type HeldState = "paying" | "lapsed" | "booked";
+
+/** Which visit a payment is started for: the one being paid for as it is booked, or one of the patient's own visits. */
+export type PayFor = "held" | "visit";
+
+/**
+ * Where a visit's newest online payment stands, as Adminium tells the patient
+ * who comes back from the pay page: none started, a checkout still open, the
+ * bank confirming it, paid, not finished, or its time to pay ran out.
+ */
+export type PayAttemptState = "none" | "open" | "confirming" | "paid" | "failed" | "expired";
 
 export interface OwnDetails {
   name: string;
@@ -283,4 +334,30 @@ export interface PatientsPort {
    */
   joinWaitlist(wish: Wish): Promise<{ rank: number | null }>;
   signOut(): Promise<void>;
+
+  // ── paying online ──
+  /** Whether "Pay now" may be offered: false on a practice that takes no payments, and the pages read as ever. */
+  payments(): Promise<PayState>;
+  /** Book the visit to pay for it now: made waiting for its payment, its time held, with the link to pay. */
+  bookToPay(visit: NewVisit): Promise<BookedToPay>;
+  /** Where the visit being paid for as it was booked stands. */
+  held(id: Id): Promise<HeldState>;
+  /** The visit waiting for its payment, booked to pay at the desk after all; or let go. */
+  settleHeld(id: Id, to: "booked" | "lapsed"): Promise<void>;
+  /** The link to pay a visit the patient can read: the one being paid for as it is booked, or one of their own. */
+  payLink(id: Id, of: PayFor): Promise<string>;
+  /** Where the visit's newest online payment stands, read through the same door it was started through. */
+  payState(id: Id, of: PayFor): Promise<PayAttemptState>;
+  /**
+   * The session this page holds, to carry across the pay page and back (null
+   * when it holds none); and the one carried back, held again.
+   */
+  carrySession(): unknown;
+  resumeSession(carried: unknown): void;
+  /**
+   * The website's demo only: it never leaves for a pay page. It plays the
+   * payment out in the browser (nothing moves) and the page comes back as
+   * from a paid one.
+   */
+  simulatePay?(payUrl: string): Promise<void>;
 }

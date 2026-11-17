@@ -16,6 +16,7 @@ import { useNow } from "../lib/useNow.ts";
 import { visitName, visitsOn } from "../lib/desk.ts";
 import { closeDesk } from "../state/actions.ts";
 import { useDesk } from "../state/desk.ts";
+import { useDeskPay } from "../state/deskPay.ts";
 import { toast, type Sheet as SheetKind } from "../state/ui.ts";
 import { Btn, Sheet, fieldStyle, mono, monoPill } from "../components/ui.tsx";
 import { parseAmount } from "./bits/logic.ts";
@@ -41,6 +42,9 @@ export default function CloseDesk({ onClose }: { sheet: Extract<SheetKind, { kin
   const cash = Object.values(desk.payments)
     .filter((p) => !p.voided && p.method === "cash" && dayOf(p.paid_at) === today)
     .reduce((sum, p) => sum + p.amount, 0);
+  // Money paid online today is never in the drawer: said so, once the practice takes it.
+  const payOn = useDeskPay((s) => s.on);
+  const withOnline = payOn || Object.values(desk.payments).some((p) => !p.voided && p.method === "online" && dayOf(p.paid_at) === today);
   const count = parseAmount(counted);
   const diff = count === null ? null : Math.round((count - cash) * 100) / 100;
 
@@ -116,6 +120,7 @@ export default function CloseDesk({ onClose }: { sheet: Extract<SheetKind, { kin
               <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: "var(--fg-muted)" }}>{t("closeDesk.cashTaken")}</span>
               <span style={mono(15, 600, "var(--fg)")}>{money(cash)}</span>
             </div>
+            {withOnline && <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("deskPay.drawer")}</span>}
             <div style={{ display: "flex", alignItems: "flex-end", gap: 10, flexWrap: "wrap" }}>
               <label style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 6 }}>
                 <span style={labelText}>{t("closeDesk.counted")}</span>

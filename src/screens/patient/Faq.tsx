@@ -1,5 +1,5 @@
 /**
- * Questions (P11): the practice's own questions and answers, each opening in
+ * Questions: the practice's own questions and answers, each opening in
  * place, with the practice's phone number, no-show grace and cancellation
  * window put in where an answer says `{phone}`, `{no_show_minutes}` or
  * `{cancel_hours}` — so the answers stay true when the desk changes them.

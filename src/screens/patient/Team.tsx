@@ -1,5 +1,5 @@
 /**
- * Our clinicians (P5): who works here, what they do, their next open time
+ * Our clinicians: who works here, what they do, their next open time
  * and how many times they still have today, the first three open times to
  * tap, and "Book with them".
  *

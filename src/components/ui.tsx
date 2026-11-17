@@ -209,6 +209,9 @@ export const screenSub: CSSProperties = { margin: "6px 0 0", fontSize: 14, fontW
 
 /** The design's colours and icon for each status (`statusMeta`). */
 export const STATUS_META: Record<AppointmentStatus, { bg: string; fg: string; icon: LucideIcon }> = {
+  // Never on the desk's screens (it holds no such visit): named for the record pages and the overview only.
+  paying: { bg: "var(--info-soft)", fg: "var(--info)", icon: Circle },
+  lapsed: { bg: "var(--surface-3)", fg: "var(--fg-subtle)", icon: CircleX },
   booked: { bg: "var(--surface-3)", fg: "var(--fg-subtle)", icon: Circle },
   checked_in: { bg: "var(--info-soft)", fg: "var(--info)", icon: LogIn },
   roomed: { bg: "var(--info-soft)", fg: "var(--info)", icon: DoorOpen },
@@ -394,13 +397,14 @@ export function Stepper({ fewer, more, onFewer, onMore, canFewer = true, disable
 }
 
 /** The design's switch (52 × 30), a real `role="switch"` with its state. */
-export function Switch({ on, onChange, label, disabled }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean }) {
+export function Switch({ on, onChange, label, disabled, describedBy }: { on: boolean; onChange: (next: boolean) => void; label: string; disabled?: boolean; describedBy?: string }) {
   return (
     <button
       type="button"
       role="switch"
       aria-checked={on}
       aria-label={label}
+      aria-describedby={describedBy}
       disabled={disabled}
       className="rh-gi"
       onClick={() => onChange(!on)}

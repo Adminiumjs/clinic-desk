@@ -7,7 +7,7 @@
  * everyone else the screen shows them as they are, with a line saying who can
  * change them. A control shows its new value once the server has saved it.
  */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useId, useState, type ReactNode } from "react";
 import { Clock } from "lucide-react";
 
 import type { Settings as Row } from "../data/types.ts";
@@ -17,6 +17,7 @@ import { visitsOn } from "../lib/desk.ts";
 import { useNow } from "../lib/useNow.ts";
 import { saveSettings } from "../state/actions.ts";
 import { useCan, useDesk } from "../state/desk.ts";
+import { useDeskPay } from "../state/deskPay.ts";
 import { SuppliesGone } from "../data/supplies.ts";
 import { SUPPLIES } from "../lib/features.ts";
 import { forgetAddOn, useFeature } from "../state/features.ts";
@@ -28,6 +29,8 @@ import { Screen, ScreenHead, cardStyle } from "./deskwork/parts.tsx";
 
 const NO_SHOW = [10, 15, 20, 30];
 const CANCEL = [12, 24, 48];
+/** How long a time is held while a patient pays for it as they book. */
+const HOLD = [10, 15, 20, 30];
 
 type Patch = Partial<Omit<Row, "id">>;
 
@@ -37,6 +40,10 @@ export default function Settings() {
   const settings = useDesk((s) => s.settings);
   const desk = useDesk();
   const manager = useCan("settings", "update");
+  // Paying online: shown only while the practice takes payments; until then the screen reads as it always has.
+  const payOn = useDeskPay((s) => s.on);
+  // The refund switch still governs a visit paid ahead that is yet to come, even once payments are off.
+  const aheadToCome = Object.values(desk.visits).some((v) => (v.paid_online ?? 0) > 0 && v.status !== "seen" && v.status !== "cancelled" && v.status !== "no_show" && v.status !== "lapsed");
   const [saving, setSaving] = useState<string | null>(null);
   // The shelves supplies can come off: Inventory's places, read only where Inventory is connected.
   const supplies = useFeature(SUPPLIES);
@@ -155,7 +162,38 @@ export default function Settings() {
             disabled={!manager || saving !== null}
             onChange={(next) => void save("bk", { online_booking_on: next })}
           />
+          {payOn && (
+            <Toggle
+              label={t("settings.payAhead")}
+              body={t("settings.payAheadBody")}
+              on={settings.pay_ahead}
+              busy={saving === "pa"}
+              disabled={!manager || saving !== null}
+              onChange={(next) => void save("pa", { pay_ahead: next })}
+            />
+          )}
+          {(payOn || aheadToCome) && (
+            <Toggle
+              label={t("settings.autoRefund")}
+              body={t("settings.autoRefundBody")}
+              on={settings.auto_refund}
+              busy={saving === "ar"}
+              disabled={!manager || saving !== null}
+              onChange={(next) => void save("ar", { auto_refund: next })}
+            />
+          )}
         </div>
+        {payOn && settings.pay_ahead && (
+          <Part id="st-hold" title={t("settings.hold")} body={t("settings.holdBody")}>
+            <div role="group" aria-labelledby="st-hold" style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 11 }}>
+              {HOLD.map((n) => (
+                <Chip key={n} on={settings.pay_hold_minutes === n} disabled={!manager || saving !== null} onClick={() => void save("hold", { pay_hold_minutes: n })}>
+                  {t("settings.minutes", counted(n), n)}
+                </Chip>
+              ))}
+            </div>
+          </Part>
+        )}
         <div style={{ paddingBlockStart: 18, borderBlockStart: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
           <span style={{ flex: 1, minWidth: 200, fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("settings.hoursLine")}</span>
           <button type="button" className="rh-btn" onClick={() => go("hours")} style={{ ...btnGhostSm, height: 38 }}>
@@ -181,13 +219,15 @@ function Part({ id, title, body, first = false, children }: { id: string; title:
 }
 
 function Toggle({ label, body, on, busy, disabled, onChange }: { label: string; body: string; on: boolean; busy: boolean; disabled: boolean; onChange: (next: boolean) => void }) {
+  // The line under the name says what the switch does: read out with it.
+  const bodyId = useId();
   return (
     <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }} aria-busy={busy || undefined}>
       <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
         <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.022em" }}>{label}</span>
-        <span style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{body}</span>
+        <span id={bodyId} style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{body}</span>
       </span>
-      <Switch on={on} onChange={onChange} label={label} disabled={disabled} />
+      <Switch on={on} onChange={onChange} label={label} disabled={disabled} describedBy={bodyId} />
     </div>
   );
 }

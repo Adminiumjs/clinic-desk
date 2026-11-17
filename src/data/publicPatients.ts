@@ -19,6 +19,7 @@ import { normalise, normaliseAll } from "./rows.ts";
 import {
   PortError,
   type Booked,
+  type BookedToPay,
   type Catalogue,
   type CodeResult,
   type DayState,
@@ -42,6 +43,10 @@ interface Refs {
   identity: string;
   details: string;
   book: string;
+  /** Booking a visit to pay for as it is booked; null on a key that has none. */
+  payBook: string | null;
+  /** The visit being paid for as it was booked, while it waits; null on a key that has none. */
+  held: string | null;
   visits: string;
   register: string;
   /** The earlier-time list; null on a key that has none (the page then says it cannot join). */
@@ -72,8 +77,13 @@ export function refsOf(config: PublicConfig, tables: Record<string, string>): Re
     availability: pick("availability", of("appointments").filter(([, r]) => r.kind === "availability")),
     identity: pick("patient lookup", identity === "" ? [] : [[identity, null]]),
     details: pick("patient details", of("patients").filter(([ref, r]) => ref !== identity && r.actions.includes("update"))),
-    book: pick("booking", of("appointments").filter(([, r]) => r.actions.includes("create"))),
-    visits: pick("own visits", of("appointments").filter(([, r]) => r.actions.includes("update"))),
+    // Two doors book a visit: as ever (its reply names no fee), and paying as it is booked (its reply names the fee).
+    book: pick("booking", of("appointments").filter(([, r]) => r.actions.includes("create") && !r.expose.includes("fee"))),
+    payBook: of("appointments").find(([, r]) => r.actions.includes("create") && r.expose.includes("fee"))?.[0] ?? null,
+    // Two doors read and change a patient's visits: all of them once verified (they show a late cancel), and the one
+    // they are paying for as they book, while it waits.
+    held: of("appointments").find(([, r]) => r.actions.includes("update") && !r.expose.includes("late_cancel"))?.[0] ?? null,
+    visits: pick("own visits", of("appointments").filter(([, r]) => r.actions.includes("update") && r.expose.includes("late_cancel"))),
     register: pick("registration", of("registrations").filter(([, r]) => r.actions.includes("create"))),
     waitlist: of("waiting_list").find(([, r]) => r.actions.includes("create"))?.[0] ?? null,
   };
@@ -93,7 +103,7 @@ const guard = async <T>(run: () => Promise<T>): Promise<T> => {
   }
 };
 
-const VISIT_COLUMNS = ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance"] as const;
+const VISIT_COLUMNS = ["id", "ref", "clinician_id", "visit_type_id", "starts_at", "minutes", "status", "late_cancel", "reason", "balance", "paid", "refunded"] as const;
 const ownVisit = (raw: Record<string, unknown>): OwnVisit => {
   const row = normalise("appointments", raw) as unknown as Record<string, unknown>;
   return Object.fromEntries(VISIT_COLUMNS.map((c) => [c, row[c] ?? null])) as unknown as OwnVisit;
@@ -168,12 +178,15 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
 
     times: (query) =>
       guard(async (): Promise<SlotTime[]> =>
-        client.bookingTimes(refs.availability, {
-          kind: String(query.kind),
-          ...(query.resource === undefined ? {} : { resource: String(query.resource) }),
-          ...(query.exclude === undefined ? {} : { exclude: String(query.exclude) }),
-          date: query.date,
-        }),
+        // A time the server holds back for now ("paused") is not one to book: the page shows it taken.
+        (
+          await client.bookingTimes(refs.availability, {
+            kind: String(query.kind),
+            ...(query.resource === undefined ? {} : { resource: String(query.resource) }),
+            ...(query.exclude === undefined ? {} : { exclude: String(query.exclude) }),
+            date: query.date,
+          })
+        ).map((slot) => ({ ...slot, state: slot.state === "free" ? "free" : "full" })),
       ),
 
     days: (query) =>
@@ -265,6 +278,79 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
       }),
 
     signOut: () => guard(() => client.signOut()),
+
+    // ── paying online ──
+    // Only ever asked, never decided here: "Pay now" shows while the server says the practice takes payments online.
+    payments: () =>
+      guard(async () => {
+        if (refs.payBook === null && refs.held === null) return { online: false, test: false };
+        const answer = await client.payments.available();
+        return { online: answer.online, test: answer.test === true };
+      }),
+
+    bookToPay: (visit) =>
+      guard(async (): Promise<BookedToPay> => {
+        if (refs.payBook === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        const row = normalise(
+          "appointments",
+          await client.create<Record<string, unknown>>(refs.payBook, {
+            visit_type_id: visit.visit_type_id,
+            clinician_id: visit.clinician_id,
+            starts_at: visit.starts_at,
+            reason: visit.reason,
+            desk_note: visit.desk_note,
+            language: visit.language,
+          }),
+        );
+        // The link to pay it, for the visit this page has just made and can read; none while the practice cannot take it.
+        let payUrl: string | null = null;
+        if (refs.held !== null) {
+          try {
+            payUrl = (await client.payments.start(refs.held, String(row.id))).payUrl;
+          } catch (error) {
+            if (!(error instanceof PublicApiError) || error.code !== "PUBLIC_PAY_REFUSED") throw error;
+          }
+        }
+        return { id: row.id, ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status, fee: row.fee ?? 0, payUrl };
+      }),
+
+    held: (id) =>
+      guard(async () => {
+        if (refs.held === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        const found = (await client.list<Record<string, unknown>>(refs.held, { limit: 50 })).data.find((row) => String(row["id"]) === String(id));
+        // A visit the payment (or the desk) booked has left this read, which serves only one still waiting or gone.
+        if (found === undefined) return "booked";
+        return found["status"] === "lapsed" ? "lapsed" : "paying";
+      }),
+
+    settleHeld: (id, to) =>
+      guard(async () => {
+        if (refs.held === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        await client.update(refs.held, String(id), { status: to });
+      }),
+
+    payLink: (id, of) =>
+      guard(async () => {
+        const ref = of === "held" ? refs.held : refs.visits;
+        if (ref === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        return (await client.payments.start(ref, String(id))).payUrl;
+      }),
+
+    payState: (id, of) =>
+      guard(async () => {
+        const ref = of === "held" ? refs.held : refs.visits;
+        if (ref === null) throw new PortError("PUBLIC_SETUP", "this page's key has no booking to pay for");
+        return (await client.payments.state(ref, String(id))).state;
+      }),
+
+    carrySession: () => client.session(),
+
+    resumeSession: (carried) => {
+      const held = carried as { token?: unknown; level?: unknown; expiresAt?: unknown } | null;
+      if (held === null || typeof held !== "object" || typeof held.token !== "string" || typeof held.expiresAt !== "number") return;
+      if (held.expiresAt <= Date.now()) return;
+      client.adoptSession({ token: held.token, expiresAt: held.expiresAt, ...(held.level === "lookup" || held.level === "verified" ? { level: held.level } : {}) });
+    },
   };
 }
 

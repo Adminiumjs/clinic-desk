@@ -14,6 +14,7 @@ import { emailTemplates } from "./emails.ts";
 import { untranslated } from "./labels.ts";
 import { OUTBOX } from "./outbox.ts";
 import { NAV_GROUPS, pages } from "./pages.ts";
+import { PAYMENTS } from "./payments.ts";
 import { PEOPLE } from "./people.ts";
 import { PUBLIC_ACCESS, PUBLIC_KEYS } from "./public.ts";
 import { ROLES } from "./roles.ts";
@@ -39,9 +40,13 @@ export const VERSION = "0.3.3";
  * (0.3.18 to 0.3.20); and who the practice's patients are and where they are
  * copied, each email's class, and the tables the law keeps (0.3.38); and a
  * desk that is one install of several, one per database, and says which on
- * every call (0.3.49).
+ * every call (0.3.49); and visits paid for online — a visit's states, a time
+ * held while a patient pays, refunds that start by themselves, and the refund
+ * right a role holds (0.3.60); and, back from paying, where that payment
+ * stands, read by the patient (0.3.61); and a booking door open only while the
+ * practice takes payments online (0.3.62).
  */
-export const MIN_ADMINIUM = "0.3.49";
+export const MIN_ADMINIUM = "0.3.62";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
@@ -123,6 +128,7 @@ export function buildManifest(): Record<string, unknown> {
     people: PEOPLE,
     outbox: OUTBOX,
     emailTemplates: emailTemplates(),
+    payments: PAYMENTS,
     documents: DOCUMENTS,
     sampleData: { file: "seeds/clinic.sample.json", addOns: { inventory: { file: "seeds/clinic.inventory.sample.json" } } },
   };

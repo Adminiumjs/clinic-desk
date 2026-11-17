@@ -38,7 +38,20 @@ export interface PatientsState {
   level: Level | null;
 
   /** The visit just booked, for the confirmation page. */
-  booked: (Booked & { firstVisit: boolean; firstName: string; email: string | null; typeId: Id; reason: string | null; moved: boolean }) | null;
+  booked:
+    | (Booked & {
+        firstVisit: boolean;
+        firstName: string;
+        email: string | null;
+        typeId: Id;
+        reason: string | null;
+        moved: boolean;
+        /** Paid online as it was booked: the amount. */
+        paidAhead?: number;
+        /** Booked to pay at the desk because paying online was not open just then. */
+        payNotOpen?: boolean;
+      })
+    | null;
 
   visits: OwnVisit[] | null;
   details: OwnDetails | null;
@@ -184,4 +197,8 @@ export async function signOutPatient(): Promise<void> {
     .signOut()
     .catch(() => undefined);
   usePatients.setState({ found: null, level: null, visits: null, details: null, moving: null });
+  // Nothing carried across a pay page outlives a sign-out.
+  const { forgetCarried, usePaying } = await import("../screens/patient/paying.ts");
+  forgetCarried();
+  usePaying.setState({ awayVisit: null, rowState: null, paidNow: null });
 }

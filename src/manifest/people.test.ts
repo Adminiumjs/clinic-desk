@@ -43,11 +43,13 @@ describe("the practice's patients", () => {
           { table: "appointments", column: "new_name", holds: "name", via: "patient_id" },
           { table: "appointments", column: "new_email", holds: "email", via: "patient_id" },
           { table: "appointments", column: "new_mobile", holds: "phone", via: "patient_id" },
+          // Where the receipt of a payment made online goes: the patient's own address, kept in step.
+          { table: "appointments", column: "receipt_email", holds: "email", via: "patient_id" },
         ],
       },
     ]);
-    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.49, installs per database).
-    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.49", "0.3.49"]);
+    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.62, a booking door open only while payments are on).
+    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.62", "0.3.62"]);
   });
 
   it("have one address: the one the outbox writes to and the one their emailed code goes to", () => {

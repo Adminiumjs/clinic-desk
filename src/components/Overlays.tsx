@@ -27,6 +27,9 @@ import { Btn, btnGhost, btnPrimary, iconBtnStyle, kicker, mono, monoPill, pill, 
 import { toastIcon } from "./desk/icons.ts";
 import { advanceVisit, checkInVisit, noShowVisit } from "./desk/moves.ts";
 import { insideWindow, panelActions, type PanelAction } from "../screens/daysheet/model.ts";
+import { MoneyActions, OnlineChip, OwedBadge, OwedWhy, RefundsTold, useReadVisitPayments, useVisitPayments } from "./pay/VisitMoney.tsx";
+import { useDeskPay } from "../state/deskPay.ts";
+import { amountText } from "../sheets/deskwork/money.ts";
 
 const CHAIN: AppointmentStatus[] = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
 const CHAIN_ICON: Record<string, LucideIcon> = { booked: Circle, checked_in: LogIn, roomed: DoorOpen, with_clinician: UserRoundCheck, ready: CheckCheck, seen: Check };
@@ -108,7 +111,13 @@ function VisitPanel({ visit }: { visit: Appointment }) {
   const tabs = useTabs();
 
   const fee = visit.fee ?? type?.fee ?? 0;
-  const note = visit.status === "seen" ? (visit.balance > 0 ? t("panel.owing", { amount: money(visit.balance) }) : t("panel.settled")) : t("panel.atDesk");
+  // Money paid online: read with the visit, so the panel says how it was paid and what is owed back.
+  useReadVisitPayments(visit);
+  const payments = useVisitPayments(visit.id);
+  const paidOnline = payments.some((p) => p.method === "online" && !p.voided);
+  // A visit paid ahead online is not "payable at the desk": its chip says how it was paid.
+  const paidAhead = visit.status !== "seen" && paidOnline && visit.balance <= 0;
+  const note = visit.status === "seen" ? (visit.balance > 0 ? t("panel.owing", { amount: money(visit.balance) }) : t("panel.settled")) : paidAhead ? null : t("panel.atDesk");
   const actions = panelActions(visit, { role, update, pay, seePatients, supplies: supplies && recordsSupplies });
 
   const run = (action: PanelAction, work: () => Promise<unknown>) => {
@@ -227,6 +236,7 @@ function VisitPanel({ visit }: { visit: Appointment }) {
         </div>
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 13 }}>
           <span style={monoPill("var(--surface-3)", "var(--fg-subtle)")}>{visit.ref}</span>
+          <OwedBadge visit={visit} />
           {allergies !== null && allergies.trim() !== "" && (
             <span style={pill("var(--warn-soft)", "var(--warn)")}>
               <ShieldAlert size={11} aria-hidden="true" />
@@ -258,16 +268,22 @@ function VisitPanel({ visit }: { visit: Appointment }) {
               {t("panel.when", { day: dayShort(dayOf(visit.starts_at)), range: timeRange(visit.starts_at, visit.minutes), minutes: num(visit.minutes) })}
             </span>
             <span style={{ fontSize: 13.5, fontWeight: 700, letterSpacing: "-.02em", color: "var(--fg)", textWrap: "pretty" }}>{visit.reason ?? type?.name ?? ""}</span>
-            <span style={{ display: "flex", alignItems: "baseline", gap: 9, marginBlockStart: 4 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBlockStart: 4 }}>
               <span style={mono(13.5, 600, "var(--fg)")}>{money(fee)}</span>
-              <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{note}</span>
+              {note !== null && <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{note}</span>}
+              {paidOnline && <OnlineChip visit={visit} payments={payments} />}
             </span>
+            <OwedWhy visit={visit} />
+            <RefundsTold visit={visit} />
           </div>
           <div style={{ marginBlockStart: 18 }}>
             <h3 style={{ ...kicker, margin: 0 }}>{t("panel.where")}</h3>
             <Chain status={visit.status} />
           </div>
           {actions.length > 0 && <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBlockStart: 18 }}>{actions.map(button)}</div>}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBlockStart: 8 }}>
+            <MoneyActions visit={visit} />
+          </div>
           </div>
         )}
       </div>
@@ -287,9 +303,15 @@ export function CancelDialog({ sheet, onClose }: { sheet: Extract<Sheet, { kind:
   const name = useDesk((s) => (visit === undefined ? "" : visitName(s, visit)));
   const clinician = useDesk((s) => clinicianOf(s, visit?.clinician_id ?? null));
   const hours = useDesk((s) => s.settings?.cancel_hours ?? 24);
+  const autoRefund = useDesk((s) => s.settings?.auto_refund !== false);
+  const mayRefund = useDeskPay((s) => s.refund);
   const [busy, setBusy] = useState(false);
   if (visit === undefined) return null;
   const late = insideWindow(visit.starts_at, now(), hours);
+  // Paid ahead online: it goes back by itself when cancelled in time by someone who may refund (and the practice
+  // refunds so); otherwise the visit shows "Refund owed" for someone who may.
+  const paidAhead = visit.paid_online ?? 0;
+  const goesBack = paidAhead > 0 && autoRefund && !late && mayRefund;
   const confirm = async () => {
     setBusy(true);
     const out = await cancelVisit(visit.id);
@@ -299,7 +321,8 @@ export function CancelDialog({ sheet, onClose }: { sheet: Extract<Sheet, { kind:
       return;
     }
     onClose();
-    if (late) toast(t("cancel.toast.late", { ref: visit.ref }), { icon: "triangle-alert", tone: "warn" });
+    if (goesBack) toast(t("deskPay.toastAuto", { amount: amountText(paidAhead), name }), { icon: "circle-check" });
+    else if (late) toast(t("cancel.toast.late", { ref: visit.ref }), { icon: "triangle-alert", tone: "warn" });
     else toast(t("cancel.toast.done", { ref: visit.ref }), { icon: "circle-check" });
   };
   return (
@@ -319,6 +342,11 @@ export function CancelDialog({ sheet, onClose }: { sheet: Extract<Sheet, { kind:
           </span>
         </span>
       </div>
+      {paidAhead > 0 && (
+        <p style={{ margin: "12px 0 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>
+          {goesBack ? t("deskPay.cancelAuto", { amount: amountText(paidAhead) }) : t("deskPay.cancelOwed", { amount: amountText(paidAhead) })}
+        </p>
+      )}
       <div style={{ display: "flex", gap: 10, marginBlockStart: 16 }}>
         <Btn kind="ghost" onClick={onClose} style={{ flex: 1 }}>
           {t("cancel.keep")}

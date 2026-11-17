@@ -21,7 +21,7 @@ import { clinicianOf, typeOf } from "../../lib/desk.ts";
 import { useNow } from "../../lib/useNow.ts";
 import { HOSTED } from "../../surface.ts";
 import { isEmbedded } from "../../embed.ts";
-import { deskReads, upsert, useCan, useDesk } from "../../state/desk.ts";
+import { deskReads, deskVisits, upsert, useCan, useDesk } from "../../state/desk.ts";
 import { go, openPanel, openSheet, toast, useUi } from "../../state/ui.ts";
 import { Btn, Dot, Skeleton, Tile, btnGhostSm, mono, monoPill, pill, useDark } from "../../components/ui.tsx";
 import { tint } from "../../lib/color.ts";
@@ -59,7 +59,8 @@ export default function PatientPage({ id }: { id: Id }) {
         upsert("patients", read.patient);
         for (const visit of read.visits) upsert("appointments", visit);
         for (const payment of read.payments) upsert("payments", payment);
-        setPage(read);
+        // A visit still being paid for online, or never paid for, is not on their record yet.
+        setPage({ ...read, visits: deskVisits(read.visits) });
       })
       .catch(() => live && setFailed(true));
     return () => {

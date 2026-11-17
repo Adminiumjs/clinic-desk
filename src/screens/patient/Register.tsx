@@ -1,5 +1,5 @@
 /**
- * Register with us (P9): a new patient's details go to the desk, which reads
+ * Register with us: a new patient's details go to the desk, which reads
  * every one and rings to say hello. The thank-you shows the registration's
  * reference, and "Book a first visit" carries the details to Find a time with
  * the new-patient visit chosen.

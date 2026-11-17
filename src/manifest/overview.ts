@@ -29,7 +29,7 @@
  * practice's currency.
  */
 import type { Labels } from "./labels.ts";
-import { TABLES } from "./tables.ts";
+import { COUNTED, TABLES } from "./tables.ts";
 import { APP_KEY, SURFACE_NAV } from "../surface-nav.ts";
 
 // ── where a card leads ───────────────────────────────────────────────────────
@@ -63,7 +63,8 @@ const sum = (column: string, alias: string): Json => ({ fn: "sum", column, alias
 
 const eq = (column: string, value: unknown): Json => ({ column, op: "eq", value });
 const oneOf = (column: string, value: string[]): Json => ({ column, op: "in", value });
-const notCancelled: Json = { column: "status", op: "neq", value: "cancelled" };
+/** A visit that is one: booked or begun, seen, or missed — never cancelled, nor one still being paid for online or never paid for. */
+const notCancelled: Json = { column: "status", op: "in", value: [...COUNTED, "no_show"] };
 /** A seen visit that still has money on it: what the practice is owed. */
 const owed: Json[] = [eq("status", "seen"), { column: "balance", op: "gt", value: 0 }];
 

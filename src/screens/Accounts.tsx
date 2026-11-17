@@ -10,7 +10,7 @@
  */
 import { useEffect, useMemo } from "react";
 import type { LucideIcon } from "lucide-react";
-import { BadgeCheck, Banknote, ClockAlert, Receipt, UserRoundX } from "lucide-react";
+import { BadgeCheck, Banknote, ClockAlert, Globe, Receipt, UserRoundX } from "lucide-react";
 
 import type { Appointment } from "../data/types.ts";
 import { addDays } from "../data/venueTime.ts";
@@ -19,8 +19,11 @@ import { today } from "../lib/clock.ts";
 import { dayOf, daysBetween, num } from "../lib/format.ts";
 import { typeOf, visitName, weekdayOf } from "../lib/desk.ts";
 import { ensureDays, useCan, useDesk } from "../state/desk.ts";
+import { useDeskPay } from "../state/deskPay.ts";
+import { KitPart } from "../components/pay/KitPart.tsx";
+import { OwedBadge, owedBack } from "../components/pay/VisitMoney.tsx";
 import { useDemoSignal } from "../state/demoSignal.ts";
-import { openSheet } from "../state/ui.ts";
+import { openPanel, openSheet } from "../state/ui.ts";
 import { Dot, Tile, btnGhostSm, mono, monoPill, pill } from "../components/ui.tsx";
 import { amountText, half } from "../sheets/deskwork/money.ts";
 import { METHODS } from "../sheets/RecordPayment.tsx";
@@ -60,15 +63,23 @@ export default function Accounts() {
     [desk.visits],
   );
   const paidToday = Object.values(desk.payments).filter((p) => !p.voided && dayOf(p.paid_at) === day);
-  const taken = paidToday.reduce((sum, p) => sum + p.amount, 0);
+  // What each payment keeps: the amount, less what went back of one paid online.
+  const kept = (p: (typeof paidToday)[number]) => p.kept ?? p.amount;
+  const taken = paidToday.reduce((sum, p) => sum + kept(p), 0);
+  const pay = useDeskPay();
+  const onlineToday = paidToday.filter((p) => p.method === "online").reduce((sum, p) => sum + kept(p), 0);
+  // Online money is its own line, apart from what the desk took by card, cash or transfer.
+  const showOnline = pay.on || onlineToday > 0;
+  // Cancelled or missed visits still holding money paid online: owed back, for someone to decide.
+  const owedVisits = Object.values(desk.visits).filter((v) => owedBack(v) > 0).sort((a, b) => a.starts_at.localeCompare(b.starts_at) || a.id - b.id);
   const outstanding = bills.reduce((sum, v) => sum + v.balance, 0);
   const noShows = Object.values(desk.visits).filter((v) => v.status === "no_show" && dayOf(v.starts_at) >= monday && dayOf(v.starts_at) <= day).length;
   const month = day.slice(0, 7);
   const writtenOff = Object.values(desk.writeOffs)
     .filter((w) => dayOf(w.written_at).slice(0, 7) === month)
     .reduce((sum, w) => sum + w.amount, 0);
-  const byMethod = METHODS.map((m) => ({ ...m, amount: paidToday.filter((p) => p.method === m.id).reduce((sum, p) => sum + p.amount, 0) }));
-  const methodTotal = byMethod.reduce((sum, m) => sum + m.amount, 0);
+  const byMethod = METHODS.map((m) => ({ ...m, amount: paidToday.filter((p) => p.method === m.id).reduce((sum, p) => sum + kept(p), 0) }));
+  const methodTotal = byMethod.reduce((sum, m) => sum + m.amount, 0) + onlineToday;
   const fees = [...desk.visitTypes].filter((v) => v.active).sort((a, b) => a.position - b.position);
 
   // The card's "Part payment": the oldest bill, half of it, in cash.
@@ -123,16 +134,37 @@ export default function Accounts() {
             </div>
           )}
           {desk.owingMore && <p style={{ margin: "12px 0 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)" }}>{t("accounts.more")}</p>}
+          {owedVisits.length > 0 && (
+            <div style={{ marginBlockStart: 18, paddingBlockStart: 16, borderBlockStart: "1px solid var(--border)" }}>
+              <h2 id="ac-back" style={sectionTitle}>
+                {t("deskPay.owedTitle")}
+              </h2>
+              <p style={{ margin: "6px 0 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("deskPay.owedLede")}</p>
+              <ul aria-labelledby="ac-back" style={{ listStyle: "none", margin: "11px 0 0", padding: 0, display: "flex", flexDirection: "column", gap: 7 }}>
+                {owedVisits.map((v) => (
+                  <li key={v.id}>
+                    <button type="button" className="rh-row" onClick={() => openPanel(v.id)} style={{ width: "100%", display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "12px 14px", borderRadius: 13, border: "1px solid var(--border)", background: "var(--surface-2)", color: "var(--fg)", textAlign: "start", cursor: "pointer" }}>
+                      <span style={{ flex: 1, minWidth: 140, display: "flex", flexDirection: "column", gap: 3 }}>
+                        <span style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.022em" }}>{visitName(desk, v)}</span>
+                        <span style={{ ...mono(11.5, 600, "var(--fg-subtle)"), whiteSpace: "normal" }}>{[t(`status.${v.status}`), dayMonthNear(dayOf(v.starts_at), day), v.ref].join(" · ")}</span>
+                      </span>
+                      <OwedBadge visit={v} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </section>
 
         <section style={{ ...cardStyle, alignSelf: "start", display: "flex", flexDirection: "column", gap: 18 }}>
           <div>
             <h2 style={sectionTitle}>{t("accounts.byMethod")}</h2>
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBlockStart: 13 }}>
-              {byMethod.map((m) => {
+              {[...byMethod, ...(showOnline ? [{ id: "online" as const, icon: Globe, key: "deskPay.online" as const, amount: onlineToday }] : [])].map((m) => {
                 const pct = methodTotal > 0 ? Math.round((m.amount / methodTotal) * 100) : 0;
                 return (
-                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div key={m.id} style={{ display: "flex", alignItems: "center", gap: 10, ...(m.id === "online" ? { paddingBlockStart: 10, borderBlockStart: "1px solid var(--border)" } : {}) }}>
                     <m.icon size={14} aria-hidden="true" style={{ color: "var(--fg-subtle)", flexShrink: 0 }} />
                     <span style={{ fontSize: 12.5, fontWeight: 700, minWidth: 58 }}>{t(m.key)}</span>
                     <span aria-hidden="true" style={{ flex: 1, minWidth: 60, height: 5, borderRadius: 3, background: "var(--surface-3)", overflow: "hidden" }}>
@@ -183,7 +215,7 @@ export default function Accounts() {
               </div>
             ))}
           </div>
-          <p style={{ margin: "13px 0 0", fontSize: 11.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("accounts.payNote")}</p>
+          <p style={{ margin: "13px 0 0", fontSize: 11.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>{pay.on ? t("deskPay.feeNote") : t("accounts.payNote")}</p>
         </section>
       </div>
     </Screen>
@@ -193,6 +225,7 @@ export default function Accounts() {
 function Bill({ visit: b, canPay, canWriteOff }: { visit: Appointment; canPay: boolean; canWriteOff: boolean }) {
   const { t } = useI18n();
   const desk = useDesk();
+  const pay = useDeskPay();
   const day = today();
   const name = visitName(desk, b);
   const type = typeOf(desk, b.visit_type_id);
@@ -217,6 +250,12 @@ function Bill({ visit: b, canPay, canWriteOff }: { visit: Appointment; canPay: b
         <button type="button" className="rh-btn" onClick={() => openSheet({ kind: "writeOff", visitId: b.id })} aria-label={t("accounts.writeOffFor", { name })} style={{ ...btnGhostSm, height: 36, color: "var(--fg-muted)" }}>
           {t("accounts.writeOff")}
         </button>
+      )}
+      {pay.online && pay.connectionId !== null && pay.visitsTable !== null && (
+        // The visit's own pay link, to send the patient: Adminium's "Copy pay link".
+        <span style={{ flexBasis: "100%" }}>
+          <KitPart part="pay-link" props={{ payable: { kind: "profile", connectionId: pay.connectionId, tableName: pay.visitsTable, rowKey: String(b.id) } }} />
+        </span>
       )}
     </div>
   );

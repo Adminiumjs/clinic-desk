@@ -56,6 +56,8 @@ import { DAY_SOURCES } from "./daySources.ts";
 const DELIVERY_CLAIMS: Record<string, string> = {
   "receipt.insurer.sent":
     "BACKED: shown only for an outbox row of kind `receipt` whose `status` Adminium has set to `sent` — `sheets/receipt/ForInsurer.tsx` Status reads the message row the live stream keeps current, and the time is its `sent_at`.",
+  "pay.cancelledBack":
+    "BACKED: shown only for a cancelled visit whose `refunded` total is above zero — a rollup of its payments' `refunded`, which Adminium writes once a refund of the online payment is done at the service (`screens/patient/MyVisits.tsx` UpcomingCard). Until then the card says the clinic will refund it.",
 };
 
 

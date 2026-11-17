@@ -1,5 +1,5 @@
 /**
- * Find a time (P1): what the visit is for, who with, a day and a time — then
+ * Find a time: what the visit is for, who with, a day and a time — then
  * "Continue" to say who is coming in. Moving a visit uses the same page,
  * locked to that visit's type and clinician, and saves the new time on the
  * same visit.

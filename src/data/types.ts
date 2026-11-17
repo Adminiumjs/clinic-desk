@@ -57,6 +57,12 @@ export interface Settings {
   reminders_on: boolean;
   default_lead_hours: number;
   kiosk_on: boolean;
+  /** Once the practice takes payments online: a patient on file may pay as they book. */
+  pay_ahead: boolean;
+  /** How long a time is held while its patient pays as they book, in minutes. */
+  pay_hold_minutes: number;
+  /** A visit paid ahead and cancelled in time is refunded by itself; off, the desk sees "Refund owed". */
+  auto_refund: boolean;
   /** The place in Inventory a visit's supplies come off; null for Inventory's own default place. */
   supplies_place_id: Id | null;
 }
@@ -180,6 +186,8 @@ export interface Registration {
 }
 
 export type AppointmentStatus =
+  /** Booked online and being paid for as it is booked: its time is held, and the desk does not see it. */
+  | "paying"
   | "booked"
   | "checked_in"
   | "roomed"
@@ -187,12 +195,18 @@ export type AppointmentStatus =
   | "ready"
   | "seen"
   | "no_show"
-  | "cancelled";
+  | "cancelled"
+  /** Never paid for in time: its time went back, and nothing was taken. */
+  | "lapsed";
 
 /** The four statuses of someone in the building, in the order they move. */
 export const IN_THE_BUILDING: readonly AppointmentStatus[] = ["checked_in", "roomed", "with_clinician", "ready"];
-/** The statuses that hold a clinician's time (the server's booking rule counts the same). */
+/** The statuses that hold a clinician's time on the desk's screens. */
 export const COUNTED: readonly AppointmentStatus[] = ["booked", "checked_in", "roomed", "with_clinician", "ready", "seen"];
+/** What the booking rule counts against a time (the server's counts the same): those, and a time held while its patient pays. */
+export const HELD: readonly AppointmentStatus[] = ["paying", ...COUNTED];
+/** A visit not yet booked, or never: one the desk's screens leave out. */
+export const NOT_YET: readonly AppointmentStatus[] = ["paying", "lapsed"];
 
 export type Channel = "online" | "phone" | "desk" | "walk_in" | "waiting_list" | "recall";
 export type CheckStatus = "to_check" | "rang" | "accepted" | "linked" | "declined";
@@ -214,6 +228,10 @@ export interface Appointment {
   waived: number;
   paid: number;
   balance: number;
+  /** What went back to the patient of what was paid. */
+  refunded: number;
+  /** What the visit holds that was paid online (less what went back). */
+  paid_online: number;
   reason: string | null;
   desk_note: string | null;
   status: AppointmentStatus;
@@ -258,7 +276,8 @@ export interface SupplyLine {
   client_key: string | null;
 }
 
-export type PayMethod = "card" | "cash" | "transfer";
+/** `online`: paid on the pay page, written by Adminium alone. */
+export type PayMethod = "card" | "cash" | "transfer" | "online";
 
 export interface Payment {
   id: Id;
@@ -276,6 +295,15 @@ export interface Payment {
   voided: boolean;
   void_reason: string | null;
   voided_by: string | null;
+  /** An online payment's reference (Adminium's own); null on one taken at the desk. */
+  payment_ref: string | null;
+  /** The service an online payment went through ("Stripe", "PayPal"), as Adminium names it. */
+  provider: string | null;
+  currency: string | null;
+  /** What went back of it. */
+  refunded: number;
+  /** What it keeps: the amount less what went back. */
+  kept: number;
   client_key: string | null;
 }
 
@@ -332,7 +360,7 @@ export interface WaitingEntry {
   created_at: Instant | null;
 }
 
-export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled" | "receipt";
+export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled" | "receipt" | "paid_ahead" | "balance";
 export type MessageStatus = "queued" | "sent" | "failed" | "skipped";
 
 export interface Message {

@@ -15,6 +15,7 @@ import { today } from "../lib/clock.ts";
 import { clockOf, dayLong, dayOf, hhmmOf, minutesOf, time, num } from "../lib/format.ts";
 import { clinicianOf, practiceHours, typeOf, visitName, visitsOn } from "../lib/desk.ts";
 import { ensureDays, useCan, useDesk } from "../state/desk.ts";
+import { useDeskPay } from "../state/deskPay.ts";
 import { go, openSheet } from "../state/ui.ts";
 import { Btn, Dot, btnGhostSm, mono } from "../components/ui.tsx";
 import { amountText } from "../sheets/deskwork/money.ts";
@@ -32,6 +33,7 @@ export default function Endofday() {
   const tomorrow = addDays(day, 1);
   const desk = useDesk();
   const canClose = useCan("day_closes", "create");
+  const payOn = useDeskPay((s) => s.on);
 
   useEffect(() => {
     void ensureDays(tomorrow, 1).catch(() => undefined);
@@ -44,9 +46,11 @@ export default function Endofday() {
   const noShows = todays.filter((v) => v.status === "no_show");
   const messages = Object.values(desk.messages);
   const noted = noShows.filter((v) => messages.some((m) => m.kind === "missed" && m.appointment_id === v.id && m.status !== "skipped" && m.status !== "failed")).length;
-  const taken = Object.values(desk.payments)
-    .filter((p) => !p.voided && dayOf(p.paid_at) === day)
-    .reduce((sum, p) => sum + p.amount, 0);
+  const takenToday = Object.values(desk.payments).filter((p) => !p.voided && dayOf(p.paid_at) === day);
+  // What each payment keeps: the amount, less what went back of one paid online.
+  const taken = takenToday.reduce((sum, p) => sum + (p.kept ?? p.amount), 0);
+  // Online money counts in what came in today; the desk still counts only its drawer.
+  const withOnline = payOn || takenToday.some((p) => p.method === "online");
   const remindersOn = desk.settings?.reminders_on ?? true;
 
   const opens = practiceHours(desk, tomorrow);
@@ -82,7 +86,7 @@ export default function Endofday() {
       button: t("eod.goAccounts"),
     },
     { id: "n", icon: UserRoundX, label: t("eod.noShows"), value: num(noShows.length), note: noShowNote, tone: noShows.length > 0 ? "danger" : "pos", to: "outbox", button: t("eod.openOutbox") },
-    { id: "t", icon: Banknote, label: t("eod.taken"), value: amountText(taken), note: t("eod.methods"), tone: "pos", to: "accounts", button: t("eod.goAccounts") },
+    { id: "t", icon: Banknote, label: t("eod.taken"), value: amountText(taken), note: withOnline ? t("deskPay.methods") : t("eod.methods"), tone: "pos", to: "accounts", button: t("eod.goAccounts") },
   ];
 
   return (

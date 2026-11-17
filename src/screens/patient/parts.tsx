@@ -272,13 +272,18 @@ export const timeChip: CSSProperties = {
  * "That time has just gone": the warning, and the nearest free times on the
  * same day to tap instead — or, when none is left, a line saying so.
  */
-export function GoneBox({ near, dayLabel, onPick, timeLabel }: { near: Hhmm[]; dayLabel: string; onPick: (time: Hhmm) => void; timeLabel: (time: Hhmm) => string }) {
+/**
+ * "That time has just gone" and the nearest open times. `away`: it went while
+ * the patient was on the pay page (their hold ran out), and nothing was taken.
+ */
+export function GoneBox({ near, dayLabel, onPick, timeLabel, away = false }: { near: Hhmm[]; dayLabel: string; onPick: (time: Hhmm) => void; timeLabel: (time: Hhmm) => string; away?: boolean }) {
   const { t } = useI18n();
+  const said = away ? (near.length > 0 ? t("pay.goneLine") : t("pay.goneNone", { day: dayLabel })) : near.length > 0 ? t("details.gone") : t("details.goneNone", { day: dayLabel });
   return (
-    <div role="alert" style={{ marginBlockStart: 14, display: "flex", flexDirection: "column", gap: 10, padding: 13, borderRadius: 13, background: "var(--warn-soft)", color: "var(--warn)" }}>
+    <div role={away ? "status" : "alert"} style={{ marginBlockStart: 14, display: "flex", flexDirection: "column", gap: 10, padding: 13, borderRadius: 13, background: "var(--warn-soft)", color: "var(--warn)" }}>
       <span style={{ display: "flex", alignItems: "flex-start", gap: 8, fontSize: 12.5, fontWeight: 800, lineHeight: 1.5, textWrap: "pretty" }}>
         <ClockAlert size={15} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 1 }} />
-        <span>{near.length > 0 ? t("details.gone") : t("details.goneNone", { day: dayLabel })}</span>
+        <span>{said}</span>
       </span>
       {near.length > 0 && (
         <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>

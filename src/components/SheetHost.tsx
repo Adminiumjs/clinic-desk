@@ -19,6 +19,7 @@ import CloseDesk from "../sheets/CloseDesk.tsx";
 import Registration from "../sheets/Registration.tsx";
 import WaitlistAsk from "../sheets/WaitlistAsk.tsx";
 import { CancelDialog } from "./Overlays.tsx";
+import { RefundSheet } from "./pay/VisitMoney.tsx";
 
 export default function SheetHost() {
   const sheet = useUi((s) => s.sheet);
@@ -37,6 +38,8 @@ export default function SheetHost() {
       return <RecordPayment sheet={sheet} onClose={onClose} />;
     case "receipt":
       return <Receipt sheet={sheet} onClose={onClose} />;
+    case "refund":
+      return <RefundSheet visitId={sheet.visitId} onClose={onClose} />;
     case "writeOff":
       return <WriteOff sheet={sheet} onClose={onClose} />;
     case "notNeeded":

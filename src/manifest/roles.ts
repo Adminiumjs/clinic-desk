@@ -7,7 +7,8 @@
  *   clinician   the day sheet and the waiting room: reads the day and moves a
  *               visit along — roomed → with them → ready, and the server
  *               refuses anything else (`limits`);
- *   manager     everything, the Manage pages included;
+ *   manager     everything, the Manage pages included, and giving back
+ *               what a patient paid online;
  *   kiosk       the arrivals tablet at the door: its sign-in opens the kiosk
  *               screen and nothing else — no table at all. The tablet checks
  *               people in through its own browser key, which answers only
@@ -163,6 +164,8 @@ export const ROLES = [
       ...PAGE_REFS.flatMap((page) => [view(page), `page:@${page}:edit`]),
       ...DESK_PII.map(pii),
       HOLIDAY_SETTINGS,
+      // Gives back what patients paid online for the practice's own visits (the install review shows it, and may untick it).
+      "payments:@:refund",
     ],
     tables: STOCK_RECORDING,
   },

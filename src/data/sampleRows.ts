@@ -22,9 +22,10 @@
  *   - what the database fills in is filled in: each column's default ("now"
  *     is the adding moment), null for the rest;
  *   - a visit's `minutes` always come from its visit type, its `fee` when the
- *     row has none; then `paid` (payments not voided), `waived` (write-offs)
- *     and `balance` (fee − waived − paid) are settled from the rows that feed
- *     them, once every row is in.
+ *     row has none; then a payment's `kept` (amount less refunded), and a
+ *     visit's `paid` (what its payments not voided keep), `refunded`,
+ *     `paid_online`, `waived` (write-offs) and `balance` (fee − waived − paid)
+ *     are settled from the rows that feed them, once every row is in.
  *
  * Instants come out as ISO strings in UTC (`…Z`), dates as `YYYY-MM-DD` on the
  * venue's clock, money as numbers.
@@ -63,7 +64,7 @@ type Fill = string | number | boolean | null | typeof NOW | typeof REQUIRED;
  */
 // ── written by `npm run sample` from manifest.json; do not edit by hand ──
 export const COLUMNS: Record<string, Record<string, Fill>> = {
-  settings: { practice_name: REQUIRED, mark: REQUIRED, address: REQUIRED, phone: REQUIRED, email: null, intro: null, directions: null, map_link: null, entrance_photo: null, pay_note: null, insurer_note: null, privacy_link: null, currency: "USD", language: "en-US", slot_minutes: 15, booking_days: 10, min_notice_minutes: 60, new_patients_online: true, online_booking_on: true, no_show_minutes: 15, cancel_hours: 24, reminders_on: true, default_lead_hours: 24, kiosk_on: false, supplies_place_id: null },
+  settings: { practice_name: REQUIRED, mark: REQUIRED, address: REQUIRED, phone: REQUIRED, email: null, intro: null, directions: null, map_link: null, entrance_photo: null, pay_note: null, insurer_note: null, privacy_link: null, currency: "USD", language: "en-US", slot_minutes: 15, booking_days: 10, min_notice_minutes: 60, new_patients_online: true, online_booking_on: true, no_show_minutes: 15, cancel_hours: 24, reminders_on: true, default_lead_hours: 24, kiosk_on: false, pay_ahead: true, pay_hold_minutes: 15, auto_refund: true, supplies_place_id: null },
   opening_hours: { weekday: REQUIRED, open: true, opens: "08:30", closes: "17:30", break_start: null, break_end: null },
   clinicians: { name: REQUIRED, short_name: REQUIRED, role_label: REQUIRED, color: "#0369a1", photo: null, bio: null, bookable_online: true, active: true, position: 0, staff_email: null },
   visit_types: { name: REQUIRED, short_name: REQUIRED, minutes: 15, fee: 0, color: "#3b6fbd", icon: "stethoscope", bookable_online: true, new_patients_only: false, active: true, position: 0 },
@@ -73,9 +74,9 @@ export const COLUMNS: Record<string, Record<string, Fill>> = {
   faqs: { question: REQUIRED, answer: REQUIRED, position: 0, active: true },
   patients: { client_key: null, name: REQUIRED, born_on: REQUIRED, mobile: REQUIRED, email: null, address: null, emergency_contact: null, allergies_note: null, insurer: null, policy_ref: null, language: null, remind_email: true, remind_lead_hours: 24, status: "active", created_at: NOW },
   registrations: { ref: REQUIRED, name: REQUIRED, born_on: REQUIRED, mobile: REQUIRED, email: null, address: null, emergency_contact: null, language: null, status: "new", patient_id: null, outcome: null, note: null, handled_by: null, handled_at: null, created_at: NOW },
-  appointments: { ref: REQUIRED, patient_id: null, new_name: null, new_born_on: null, new_mobile: null, new_email: null, clinician_id: null, visit_type_id: REQUIRED, starts_at: REQUIRED, minutes: 15, fee: null, waived: null, paid: null, balance: null, reason: null, desk_note: null, status: "booked", channel: "desk", checked_in_at: null, roomed_at: null, seen_at: null, cancelled_at: null, late_cancel: false, cancelled_by: null, recall_weeks: null, language: null, booked_by: null, check_status: null, client_key: null, created_at: NOW },
+  appointments: { ref: REQUIRED, patient_id: null, new_name: null, new_born_on: null, new_mobile: null, new_email: null, clinician_id: null, visit_type_id: REQUIRED, starts_at: REQUIRED, minutes: 15, fee: null, waived: null, paid: null, balance: null, refunded: null, paid_online: null, reason: null, desk_note: null, status: "booked", channel: "desk", checked_in_at: null, roomed_at: null, seen_at: null, cancelled_at: null, late_cancel: false, cancelled_by: null, recall_weeks: null, language: null, receipt_email: null, booked_by: null, check_status: null, client_key: null, created_at: NOW },
   appointment_supplies: { appointment_id: REQUIRED, kit_id: null, item_id: null, qty: 1, not_used_at: null, batch_id: null, place_id: null, recorded_by: null, recorded_at: null, changed_by: null, changed_at: null, client_key: null },
-  payments: { appointment_id: REQUIRED, patient_id: null, visit_type_id: null, clinician_id: null, amount: REQUIRED, method: "card", taken_by: null, paid_at: NOW, voided: false, void_reason: null, voided_by: null, client_key: null },
+  payments: { appointment_id: REQUIRED, patient_id: null, visit_type_id: null, clinician_id: null, amount: REQUIRED, method: "card", taken_by: null, paid_at: NOW, voided: false, void_reason: null, voided_by: null, payment_ref: null, provider: null, currency: null, refunded: 0, kept: null, client_key: null },
   write_offs: { appointment_id: REQUIRED, amount: REQUIRED, reason: REQUIRED, written_by: null, written_at: NOW, client_key: null },
   check_notes: { registration_id: null, appointment_id: null, note: REQUIRED, written_by: null, client_key: null, created_at: NOW },
   recalls: { patient_id: REQUIRED, from_appointment_id: null, visit_type_id: null, clinician_id: REQUIRED, client_key: null, weeks: REQUIRED, due_on: REQUIRED, status: "due", reason: null, dismiss_reason: null, booked_appointment_id: null, created_at: NOW },
@@ -96,12 +97,16 @@ export const COPIES = [
   { table: "payments", column: "patient_id", via: "appointment_id", to: "appointments", from: "patient_id", always: true },
   { table: "payments", column: "visit_type_id", via: "appointment_id", to: "appointments", from: "visit_type_id", always: true },
   { table: "payments", column: "clinician_id", via: "appointment_id", to: "appointments", from: "clinician_id", always: true },
+  { table: "appointments", column: "receipt_email", via: "patient_id", to: "patients", from: "email", always: true },
 ] as const;
 
 /** The manifest's `rollup` rules on a visit, and the balance they leave. */
 export const ROLLUPS = {
   table: "appointments",
-  paid: { from: "payments", via: "appointment_id", sum: "amount", unless: "voided" },
+  /** A payment keeps what was taken less what went back (`kept`, a formula on the payment). */
+  paid: { from: "payments", via: "appointment_id", sum: "kept", unless: "voided" },
+  refunded: { from: "payments", via: "appointment_id", sum: "refunded", unless: "voided" },
+  paidOnline: { from: "payments", via: "appointment_id", sum: "kept", method: "online" },
   waived: { from: "write_offs", via: "appointment_id", sum: "amount" },
   balance: { of: "fee", minus: ["waived", "paid"] },
 } as const;
@@ -283,18 +288,24 @@ export function resolveSample(bundle: SampleBundle, options: ResolveOptions): Re
 
 /** The totals a visit keeps, from every row that feeds them — last, as the loader does. */
 function settle(out: ResolvedSample): void {
-  const sums = (table: string, only: (row: ResolvedRow) => boolean) => {
+  // A payment's `kept`: what was taken, less what went back.
+  for (const payment of out["payments"] ?? []) payment["kept"] = round2(Number(payment["amount"]) - Number(payment["refunded"] ?? 0));
+  const sums = (table: string, column: string, only: (row: ResolvedRow) => boolean) => {
     const by = new Map<unknown, number>();
     for (const row of out[table] ?? []) {
       if (!only(row)) continue;
-      by.set(row["appointment_id"], (by.get(row["appointment_id"]) ?? 0) + Number(row["amount"]));
+      by.set(row["appointment_id"], (by.get(row["appointment_id"]) ?? 0) + Number(row[column]));
     }
     return by;
   };
-  const paid = sums(ROLLUPS.paid.from, (row) => row[ROLLUPS.paid.unless] !== true);
-  const waived = sums(ROLLUPS.waived.from, () => true);
+  const paid = sums(ROLLUPS.paid.from, ROLLUPS.paid.sum, (row) => row[ROLLUPS.paid.unless] !== true);
+  const refunded = sums(ROLLUPS.refunded.from, ROLLUPS.refunded.sum, (row) => row[ROLLUPS.refunded.unless] !== true);
+  const online = sums(ROLLUPS.paidOnline.from, ROLLUPS.paidOnline.sum, (row) => row["method"] === ROLLUPS.paidOnline.method);
+  const waived = sums(ROLLUPS.waived.from, ROLLUPS.waived.sum, () => true);
   for (const visit of out[ROLLUPS.table] ?? []) {
     visit["paid"] = round2(paid.get(visit["id"]) ?? 0);
+    visit["refunded"] = round2(refunded.get(visit["id"]) ?? 0);
+    visit["paid_online"] = round2(online.get(visit["id"]) ?? 0);
     visit["waived"] = round2(waived.get(visit["id"]) ?? 0);
     visit["balance"] = visit["fee"] === null ? null : round2(Number(visit["fee"]) - Number(visit["waived"]) - Number(visit["paid"]));
   }

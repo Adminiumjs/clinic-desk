@@ -115,8 +115,14 @@ export default function Receipt({ sheet, onClose }: { sheet: Extract<Sheet, { ki
         <div aria-hidden="true" style={{ marginBlock: 10, borderBlockStart: "1px dashed #c9c9d1" }} />
         <div style={{ ...line, fontSize: 13, fontWeight: 700, lineHeight: "normal" }}>
           <span>{t("receipt.paid")}</span>
-          <span>{`${amountText(payment.amount)} · ${t(`payment.paidBy.${payment.method}`)}`}</span>
+          <span>{`${amountText(payment.amount)} · ${t(`payment.paidBy.${payment.method}`)}${payment.method === "online" && payment.provider ? ` · ${payment.provider}` : ""}`}</span>
         </div>
+        {payment.method === "online" && (payment.refunded ?? 0) > 0 && (
+          <div style={line}>
+            <span style={{ color: QUIET }}>{t("deskPay.refunded")}</span>
+            <span>{amountText(payment.refunded)}</span>
+          </div>
+        )}
         <div style={line}>
           <span style={{ color: QUIET }}>{t("receipt.owing")}</span>
           <span>{visit.balance > 0 ? amountText(visit.balance) : t("receipt.nothing")}</span>
@@ -139,7 +145,7 @@ export default function Receipt({ sheet, onClose }: { sheet: Extract<Sheet, { ki
         </button>
       </div>
       <ForInsurer payment={payment} visit={visit} />
-      {canVoid && !payment.voided && !voiding && (
+      {canVoid && !payment.voided && !voiding && payment.method !== "online" && (
         <button type="button" className="rh-btn" onClick={() => setVoiding(true)} style={{ ...btnGhostSm, alignSelf: "center", color: "var(--fg-muted)" }}>
           <Undo2 size={14} aria-hidden="true" />
           {t("receipt.void")}

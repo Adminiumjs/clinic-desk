@@ -77,6 +77,8 @@ function visit(at: string, status: AppointmentStatus, extra: Partial<Appointment
     waived: 0,
     paid: 0,
     balance: 45,
+    refunded: 0,
+    paid_online: 0,
     reason: null,
     desk_note: null,
     status,

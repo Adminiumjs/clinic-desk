@@ -81,13 +81,68 @@ const ADMIN = { email: process.env["E2E_ADMIN_EMAIL"] ?? "e2e@adminium.local", p
 const PREFIX = "clinic_";
 
 /**
- * What 0.3.2 adds to 0.3.1's tables: nothing. It tells Adminium who the
- * patients are, each email's class and the tables the law keeps, and none of
- * that is a table, a column or an enum value. The update's plan must be
- * exactly this.
+ * What this build adds to 0.3.1's tables: no table; the columns paying online
+ * needs — the practice's three paying settings, what a visit was paid online
+ * and given back and where its receipts go, and a payment's online reference,
+ * service, currency, what went back of it and what it keeps — and the values
+ * that go with them (a visit `paying` or `lapsed`, a payment `online`, a
+ * message `paid_ahead` or `balance`). The update's plan must be exactly this.
  */
 const NEW_TABLES: string[] = [];
-const NEW_COLUMNS: Record<string, string[]> = {};
+const NEW_COLUMNS: Record<string, string[]> = {
+  settings: ["auto_refund", "pay_ahead", "pay_hold_minutes"],
+  appointments: ["paid_online", "receipt_email", "refunded"],
+  payments: ["currency", "kept", "payment_ref", "provider", "refunded"],
+};
+/** The enums this build widens, and only these: each keeps every value it had. */
+const WIDER_ENUMS: Record<string, string[]> = { appointments: ["status"], payments: ["method"], messages: ["kind"] };
+
+/** The new columns that are unique, and only these: each engine's index (and Postgres's constraint) on it comes. */
+const NEW_UNIQUE: Record<string, string[]> = { payments: ["payment_ref"] };
+
+/** A check as any engine spells it: SQLite writes the checks of a table it rebuilt in capitals. */
+const spelled = (constraint: string): string => constraint.replace(/^check \(/i, "CHECK (").replace(/" in \(/g, '" IN (');
+/** The values a check allows, on every engine (`'seen'`, `'seen'::character varying`, MySQL's `_utf8mb4\'seen\'`). */
+const allowed = (check: string): string[] => [...check.matchAll(/'([a-z_]+)\\?'/g)].map((m) => m[1]!);
+/** The widened enum columns a check is on, as SQLite (`"kind"`), Postgres (`(kind)`) and MySQL (`` `kind` ``) name it. */
+const widenedIn = (ref: string, check: string): string[] => (WIDER_ENUMS[ref] ?? []).filter((c) => [`"${c}"`, `(${c})`, `\`${c}\``].some((n) => check.includes(n)));
+
+/**
+ * The constraints of a table that went, and that came, leaving out each
+ * widened enum's check that was declared again with every value it allowed
+ * and more, and the uniqueness of a new unique column. Both empty: nothing
+ * else changed.
+ */
+function changedConstraints(ref: string, was: string[], now: string[]): [string[], string[]] {
+  const before = was.map(spelled);
+  const after = now.map(spelled);
+  let gone = before.filter((c) => !after.includes(c));
+  let came = after.filter((c) => !before.includes(c));
+  for (const old of [...gone]) {
+    const columns = widenedIn(ref, old);
+    if (columns.length !== 1) continue;
+    const values = allowed(old);
+    const wider = came.find((c) => widenedIn(ref, c).join() === columns.join() && values.every((v) => allowed(c).includes(v)) && allowed(c).length > values.length);
+    if (wider === undefined) continue;
+    gone = gone.filter((c) => c !== old);
+    came = came.filter((c) => c !== wider);
+  }
+  // A new unique column's index, as SQLite (`index unique c (payment_ref)`), Postgres and MySQL list it.
+  came = came.filter((c) => !(/unique/i.test(c) && (NEW_UNIQUE[ref] ?? []).some((column) => c.endsWith(`(${column})`))));
+  return [gone, came];
+}
+
+/**
+ * The new columns an update fills on the rows already there: a setting's
+ * literal default, and what Adminium works out (a payment's refunded total
+ * and what it keeps, a visit's totals over them, the patient's address). The
+ * rest of the new columns hold nothing on a row that was there.
+ */
+const FILLED: Record<string, string[]> = {
+  settings: ["auto_refund", "pay_ahead", "pay_hold_minutes"],
+  payments: ["kept", "refunded"],
+  appointments: ["paid_online", "receipt_email", "refunded"],
+};
 
 /** The yes/no columns of a table, as the manifest being installed declares them. */
 const yesNoColumns = (ref: string): string[] => (TABLES.find((t) => t.ref === ref)?.columns ?? []).filter((c) => c.type === "bool").map((c) => c.ref);
@@ -334,7 +389,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           addOns?: { key: string; need: string; action: string | null }[];
         };
 
-        it(`plans the update to ${TO}: no new table, column or enum value, nothing dropped, renamed or rewritten, and the add-on the practice has kept as it is`, async () => {
+        it(`plans the update to ${TO}: the columns and enum values paying online needs, nothing dropped, renamed or rewritten, and the add-on the practice has kept as it is`, async () => {
           const app = appBundle();
           await upload("apps", app);
           plan = ok(await staff.post<{ plan: typeof plan }>("/api/v1/apps/plan", { key: app.key, version: app.version, connectionId })).plan;
@@ -358,15 +413,21 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
             const planned = byRef[ref]!;
             // The app's own table, kept where it is, under its name.
             expect([ref, planned.action, planned.class, planned.table, planned.renameExistingTo, planned.blocked]).toEqual([ref, "reuse", "own-leftover", `${PREFIX}${ref}`, undefined, []]);
-            // Only an addition: a column added; never a column changed in type or width, never an enum touched.
+            // Only additions: columns added, and enums given new values; never a column changed in type or width.
             expect([ref, planned.edits.filter((e) => e.kind === "add-column").map((e) => e.column).sort()]).toEqual([ref, NEW_COLUMNS[ref] ?? []]);
-            expect([ref, planned.edits.filter((e) => e.kind !== "add-column")]).toEqual([ref, []]);
+            const others = planned.edits.filter((e) => e.kind !== "add-column");
+            expect([ref, [...new Set(others.map((e) => e.column))].sort()]).toEqual([ref, WIDER_ENUMS[ref] ?? []]);
+            for (const edit of others) expect([ref, edit.column, edit.kind]).toEqual([ref, edit.column, expect.stringMatching(/enum/i)]);
           }
         }, 120_000);
 
         it(`updates in place to ${TO}, as planned`, async () => {
           const reply = await staff.post<{ from: string; to: string; app: { version: string; schema?: { created: string[]; reused: string[] }; rules?: { skipped: unknown[] } } }>("/api/v1/apps/clinic/update", {
             planChecksum: plan.checksum,
+            // The manager's right to give back what a patient paid online, and the patients' pages showing what each
+            // visit was paid and given back: both asked of whoever updates, and allowed here.
+            roleGrants: true,
+            publicWider: true,
             // The practice that set up its stock first connects it as it updates.
             ...(run.inventory ? { addOns: [{ key: "inventory", version: packedVersion("inventory").version }] } : {}),
           });
@@ -397,16 +458,24 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
               if (now!.columns[column] !== declared) redeclared.push(`${name}.${column}: ${declared} → ${now!.columns[column]!}`);
             }
             // Every row: the same key, the same values as the engine spells them, in the same order.
-            expect([name, now!.rows.length]).toEqual([name, was.rows.length]);
+            const before_ = new Set(was.rows.map((row) => JSON.stringify(row["id"] ?? null)));
+            const arrived = now!.rows.filter((row) => !before_.has(JSON.stringify(row["id"] ?? null)));
+            expect([name, now!.rows.length], `rows that came: ${JSON.stringify(arrived).slice(0, 1200)}`).toEqual([name, was.rows.length]);
             const kept = now!.rows.map((found) => Object.fromEntries(Object.keys(was.columns).map((c) => [c, found[c]])));
             expect(kept, `the rows of ${name}`).toEqual(was.rows);
-            // A column the update adds holds nothing on a row that was there.
-            for (const column of added[name]!) expect([name, column, now!.rows.filter((found) => found[column] !== null).length]).toEqual([name, column, 0]);
-            // Every index, foreign key and check that was there is still there, and none came.
-            expect([name, now!.constraints], `the constraints of ${name}`).toEqual([name, was.constraints]);
+            // A column the update adds holds nothing on a row that was there, unless the update fills it.
+            const filled = FILLED[name.slice(PREFIX.length)] ?? [];
+            for (const column of added[name]!.filter((c) => !filled.includes(c))) expect([name, column, now!.rows.filter((found) => found[column] !== null).length]).toEqual([name, column, 0]);
+            // Every index, foreign key and check that was there is still there, and none came — but a widened
+            // enum's check, which allows every value it did and the new ones.
+            expect([name, ...changedConstraints(name.slice(PREFIX.length), was.constraints, now!.constraints)], `the constraints of ${name}`).toEqual([name, [], []]);
           }
           console.info(`[redeclared, ${engine}${run.title}] ${JSON.stringify(redeclared)}`);
-          expect(redeclared).toEqual([]);
+          // Only the widened enums are declared again (with every value they had, and the new ones).
+          expect(redeclared.filter((line) => !Object.entries(WIDER_ENUMS).some(([ref, columns]) => columns.some((c) => line.startsWith(`${PREFIX}${ref}.${c}:`))))).toEqual([]);
+          // What a payment keeps is what it took: nothing went back yet, so every visit's money is what it was.
+          const payments = await rows("payments");
+          for (const p of payments) expect([p.id, Number(p["refunded"]), Number(p["kept"])]).toEqual([p.id, 0, Number(p["amount"])]);
           // No column at all.
           expect(Object.fromEntries(Object.entries(added).filter(([, list]) => list.length > 0))).toEqual(Object.fromEntries(Object.entries(NEW_COLUMNS).map(([ref, list]) => [`${PREFIX}${ref}`, list])));
           // And over HTTP: every row Adminium hands out is the one it handed out before.

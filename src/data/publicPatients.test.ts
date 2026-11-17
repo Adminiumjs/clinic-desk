@@ -27,8 +27,11 @@ function fakeClient(asked: { ref: string; opts: unknown }[]): PublicClient {
       clinic_appointments_availability: ref(["read"], [], "availability"),
       clinic_patients_claim: ref(["read"]),
       clinic_patients_verified: ref(["read", "update"]),
-      clinic_appointments_claimed: ref(["create"]),
-      clinic_appointments_verified: ref(["read", "update"]),
+      clinic_appointments_claimed: ref(["create"], ["ref", "starts_at", "minutes", "clinician_id", "status"]),
+      clinic_appointments_verified: ref(["read", "update"], ["id", "ref", "status", "late_cancel", "balance", "paid", "refunded"]),
+      // Paying as they book: the booking that answers a pay link, and the visit while it waits for its payment.
+      clinic_appointments_claimed_4: ref(["create"], ["id", "ref", "starts_at", "minutes", "clinician_id", "status", "fee"]),
+      clinic_appointments_claimed_5: ref(["read", "update"], ["id", "ref", "status", "fee", "balance"]),
       clinic_registrations: ref(["create"]),
     },
   };

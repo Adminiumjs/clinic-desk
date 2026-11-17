@@ -29,6 +29,8 @@ export type Sheet =
   | { kind: "sendOff"; visitId: Id }
   | { kind: "payment"; visitId: Id; amount?: number }
   | { kind: "receipt"; paymentId: Id }
+  /** Giving back money a patient paid online: Adminium's own two steps. */
+  | { kind: "refund"; visitId: Id }
   | { kind: "writeOff"; visitId: Id }
   | { kind: "notNeeded"; recallId: Id }
   | { kind: "closure"; prefill?: { clinicianId: Id | null; from: Day; to: Day; label: string; note: string | null } }

@@ -31,6 +31,9 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     reminders_on: "bool",
     default_lead_hours: "int",
     kiosk_on: "bool",
+    pay_ahead: "bool",
+    pay_hold_minutes: "int",
+    auto_refund: "bool",
     supplies_place_id: "int",
   },
   opening_hours: { id: "int", open: "bool" },
@@ -54,6 +57,8 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     waived: "money",
     paid: "money",
     balance: "money",
+    refunded: "money",
+    paid_online: "money",
     checked_in_at: "instant",
     roomed_at: "instant",
     seen_at: "instant",
@@ -64,7 +69,7 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
   },
   // `qty` is a count with up to three decimals: held as a number, like money.
   appointment_supplies: { id: "int", appointment_id: "int", kit_id: "int", item_id: "int", qty: "money", not_used_at: "instant", batch_id: "int", place_id: "int", recorded_at: "instant", changed_at: "instant" },
-  payments: { id: "int", appointment_id: "int", patient_id: "int", visit_type_id: "int", clinician_id: "int", amount: "money", paid_at: "instant", voided: "bool" },
+  payments: { id: "int", appointment_id: "int", patient_id: "int", visit_type_id: "int", clinician_id: "int", amount: "money", paid_at: "instant", voided: "bool", refunded: "money", kept: "money" },
   write_offs: { id: "int", appointment_id: "int", amount: "money", written_at: "instant" },
   check_notes: { id: "int", registration_id: "int", appointment_id: "int", created_at: "instant" },
   recalls: {

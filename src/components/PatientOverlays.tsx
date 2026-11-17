@@ -14,15 +14,18 @@ import { CalendarCheck, CalendarSync, CalendarX, Check, CircleCheck, ListOrdered
 
 import { PortError } from "../data/ports.ts";
 import { useI18n } from "../i18n/index.tsx";
-import { dayOf, dayShort, num, timeRange } from "../lib/format.ts";
+import { dayOf, dayShort, money, num, timeRange } from "../lib/format.ts";
 import { now } from "../lib/clock.ts";
-import { cancelMine, usePatients } from "../state/patients.ts";
+import { cancelMine, loadMyVisits, usePatients } from "../state/patients.ts";
 import { closeSheet, toast, useUi } from "../state/ui.ts";
 import { Btn, Dialog, btnGhost, mono } from "./ui.tsx";
 import { Toasts } from "./ui.tsx";
 import { insideWindow, sessionEnded } from "../screens/patient/logic.ts";
-import { ClinicianTile, Notice, clinicianNamed, useCatalogue } from "../screens/patient/parts.tsx";
+import { ClinicianTile, Fill, Notice, clinicianNamed, useCatalogue } from "../screens/patient/parts.tsx";
 import { endSession } from "../screens/patient/VerifyFlow.tsx";
+
+/** How long after a cancel the visits are read again, for a refund Adminium makes by itself. */
+const REREAD_MS = 4_000;
 
 const ICONS: Record<string, LucideIcon> = {
   check: Check,
@@ -60,6 +63,8 @@ function PatientCancel({ visitId }: { visitId: number }) {
 
   const late = insideWindow(visit.starts_at, now(), settings.cancel_hours);
   const who = clinicianNamed(cat, visit.clinician_id);
+  // Paid ahead online (nothing of a booked visit is paid at the desk before it).
+  const paidAhead = visit.paid ?? 0;
   const hours = num(settings.cancel_hours);
 
   const confirm = async () => {
@@ -68,6 +73,9 @@ function PatientCancel({ visitId }: { visitId: number }) {
     try {
       const done = await cancelMine(visit.id);
       closeSheet();
+      // Paid ahead and cancelled in time, while the clinic refunds such cancellations by itself: the refund is
+      // Adminium's to make, in moments. The visits are read again shortly so the card says it is on its way.
+      if (paidAhead > 0 && settings.auto_refund === true && !done.late_cancel) setTimeout(() => void loadMyVisits().catch(() => undefined), REREAD_MS);
       if (done.late_cancel) toast(t("pCancel.doneLate", { ref: visit.ref }), { icon: "triangle-alert", tone: "warn" });
       else toast(t("pCancel.done", { ref: visit.ref }), { icon: "circle-check" });
     } catch (error) {
@@ -97,6 +105,14 @@ function PatientCancel({ visitId }: { visitId: number }) {
           <span style={{ ...mono(12, 600, "var(--fg-muted)"), whiteSpace: "normal" }}>{`${dayShort(dayOf(visit.starts_at))} · ${timeRange(visit.starts_at, visit.minutes)} · ${visit.ref}`}</span>
         </span>
       </div>
+      {paidAhead > 0 && (
+        // What happens to what they paid ahead: back by itself when cancelled in time (and the clinic refunds so), else the clinic refunds it.
+        <p style={{ margin: "12px 0 0", fontSize: 13, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>
+          <Fill text={settings.auto_refund === true && !late ? t("pay.cancelBack") : t("pay.cancelOwed")} name="amount">
+            <span style={mono(13, 600, "var(--fg)")}>{money(paidAhead, settings.currency)}</span>
+          </Fill>
+        </p>
+      )}
       {refused && <Notice style={{ marginBlockStart: 12 }}>{t("pCancel.refused", { phone: settings.phone })}</Notice>}
       <div style={{ display: "flex", gap: 10, marginBlockStart: 16 }}>
         <button type="button" className="rh-gi" onClick={closeSheet} style={{ ...btnGhost, flex: 1 }}>
