@@ -457,6 +457,19 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asBrowser });
           return publicPatientsPort(client!, config.tables ?? {});
         };
+        /**
+         * The patients' pages opened by a payments manager rehearsing the
+         * checkout: the same key, carrying their own sign-in from the same
+         * address, as the staff side's rehearsal does.
+         */
+        const rehearsingPort = async (): Promise<PatientsPort> => {
+          const config = await resolveSurfaceConfig({ baked: {}, hostedCustomer: true, base: `${at.server.base}/apps/clinic/customer/`, origin: at.server.base });
+          if (config === null) throw new Error("the patients' pages were served no key");
+          const signedIn = at.staff.session();
+          const asStaff: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: at.server.base, cookie: signedIn.cookie } });
+          const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asStaff, csrfToken: signedIn.csrf });
+          return publicPatientsPort(client!, config.tables ?? {});
+        };
         /** The practice's next working days after today, on its own clock. */
         const workingDays = (from: string, n: number): string[] => {
           const out: string[] = [];
@@ -647,18 +660,35 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await refusal(() => own.myVisits())).code).toBe("PUBLIC_REF_NOT_FOUND");
         }, 180_000);
 
-        it("holds a time while a found patient pays as they book: unseen by the desk, booked at the desk after all, or let go", async () => {
+        it("holds no time for a payment while the practice takes none online: a direct create into paying is refused", async () => {
           const payer = await patientPort();
           expect(await payer.find(String(patient["mobile"]), String(patient["born_on"]))).not.toBeNull();
           // Nobody switched the app on in Payments: "Pay now" is not offered, and the pages read as ever.
           expect(await payer.payments()).toEqual({ online: false, test: false });
+          const paying = (await rows(at, "appointments")).filter((a) => a["status"] === "paying").length;
+          const time = firstFree(await payer.times({ kind: 1, resource: 2, date: later }), "10:00");
+          // The paying door itself is shut, whoever calls it: nothing is made, and the time stays free.
+          const shut = await refusal(() => payer.bookToPay({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, time, DEMO_ZONE), reason: null, desk_note: null, language: "en-US" }));
+          expect(shut.code).toBe("PUBLIC_SWITCHED_OFF");
+          expect((await rows(at, "appointments")).filter((a) => a["status"] === "paying").length).toBe(paying);
+          expect((await payer.times({ kind: 1, resource: 2, date: later })).find((s) => s.time === time)?.state).toBe("free");
+          await payer.signOut();
+        }, 180_000);
+
+        it("holds a time while a found patient pays as they book, once payments are on: unseen by the desk, booked at the desk after all, or let go", async () => {
+          // Payments on for the person rehearsing the checkout (the way a practice tries it before going live).
+          expect(ok(await at.staff.put<{ data: { until: number | null } }>("/api/v1/payments/rehearsal", { on: true })).data.until).not.toBeNull();
+          const payer = await rehearsingPort();
+          expect(await payer.find(String(patient["mobile"]), String(patient["born_on"]))).not.toBeNull();
+          expect(await payer.payments()).toEqual({ online: true, test: true });
           const time = firstFree(await payer.times({ kind: 1, resource: 2, date: later }), "10:00");
           const made = await payer.bookToPay({ visit_type_id: 1, clinician_id: 2, starts_at: instantOf(later, time, DEMO_ZONE), reason: null, desk_note: null, language: "en-US" });
-          // Made waiting for its payment, its time held; no pay link while the practice takes no payments online.
-          expect([made.status, made.payUrl, Number(made.fee)]).toEqual(["paying", null, 45]);
+          // Made waiting for its payment, its time held, with a test link to pay it on this address.
+          expect([made.status, Number(made.fee)]).toEqual(["paying", 45]);
+          expect(made.payUrl === null || made.payUrl.startsWith(at.server.base), String(made.payUrl)).toBe(true);
           expect(await payer.held(made.id)).toBe("paying");
-          // Where its payment stands, read through the same door: none was started, since none could be.
-          expect(await payer.payState(made.id, "held")).toBe("none");
+          // Where its payment stands, read through the same door: a checkout open, or none started yet.
+          expect(["open", "none"]).toContain(await payer.payState(made.id, "held"));
           const held = (await rows(at, "appointments")).find((a) => a.id === made.id)!;
           expect([held["status"], held["patient_id"], held["channel"], held["check_status"], held["receipt_email"]]).toEqual(["paying", patient.id, "online", null, CLAIM_INBOX]);
           const stranger = await patientPort();
@@ -682,6 +712,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await refusal(() => payer.settleHeld(made.id, "lapsed"))).code).toMatch(/^PUBLIC_/);
           // The rest of their visits stay theirs to read only once verified: the waiting read shows nothing booked.
           await payer.signOut();
+          ok(await at.staff.put("/api/v1/payments/rehearsal", { on: false }));
         }, 180_000);
 
         it("stops someone who keeps guessing at a patient, and says so in a code the page knows", async () => {

@@ -351,6 +351,11 @@ export class Caller {
     this.headers = headers;
   }
 
+  /** The sign-in this caller holds, as a browser page on the same address carries it: its cookie, and its token for a write. */
+  session(): { cookie: string; csrf: string } {
+    return { cookie: this.cookie, csrf: this.csrf };
+  }
+
   async send<T = unknown>(method: string, path: string, body?: unknown, extra: Record<string, string> = {}): Promise<Reply<T>> {
     for (let attempt = 0; ; attempt += 1) {
       const res = await fetch(`${this.base}${path}`, {
