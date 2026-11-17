@@ -259,6 +259,8 @@ export const PUBLIC_ACCESS = [
     humanCheck: true,
     maxOpen: { column: "status", values: ["booked", "paying"], n: 2, upcoming: "starts_at" },
     requireSetting: [setting("online_booking_on"), setting("pay_ahead")],
+    // Open only while the practice takes payments online: no time is ever held for a payment that cannot be made.
+    requirePayments: "on",
   },
   // The booking they are paying for: whether it still waits, or its time went.
   // A visit the payment confirmed leaves this read, which is how the page knows

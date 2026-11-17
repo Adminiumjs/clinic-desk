@@ -11,7 +11,7 @@
 import { useState } from "react";
 import { CalendarCheck, Check, ChevronLeft, ChevronRight, Lock, PhoneCall, Search } from "lucide-react";
 
-import { PortError } from "../../data/ports.ts";
+import { PortError, type BookedToPay } from "../../data/ports.ts";
 import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
 import { Btn, cardStyle, mono, pill, segWide } from "../../components/ui.tsx";
@@ -23,7 +23,7 @@ import { findMessage } from "./VerifyFlow.tsx";
 import { resetBooking, setBooking, useFlow, type FindProblem } from "./flow.ts";
 import { bookProblem, firstAndInitial, firstName, isEmail, lookupProblem, personReady, type BookProblem } from "./logic.ts";
 import { nearestFor } from "./nearest.ts";
-import { bookAndPay, payAgain, usePaying, type BookingShown } from "./paying.ts";
+import { bookAndPay, loadPayments, payAgain, payingOnline, usePaying, type BookingShown } from "./paying.ts";
 import { CheckingBox, FailedBox, PayChoices, TakingBox, type PayChoice } from "./payParts.tsx";
 import { ClinicianTile, GoneBox, Notice, TextInput, clinicianNamed, labelStyle, sectionLabel, useCatalogue, useNarrow } from "./parts.tsx";
 import { useTodayDay } from "./useToday.ts";
@@ -168,7 +168,18 @@ export default function Details() {
       };
       if (payNow) {
         // Made waiting for its payment, its time held; then off to the pay page.
-        const made = await patientsPort().bookToPay(visit);
+        let made: BookedToPay;
+        try {
+          made = await patientsPort().bookToPay(visit);
+        } catch (error) {
+          // Paying online closed since the page asked: the time is booked to pay at the desk, as it always was.
+          if (!(error instanceof PortError) || error.code !== "PUBLIC_SWITCHED_OFF") throw error;
+          await loadPayments();
+          if (payingOnline()) throw error;
+          const booked = await patientsPort().book(visit);
+          confirmBooked(booked, { payNotOpen: true });
+          return;
+        }
         const shown: BookingShown = {
           typeId: type.id,
           clinicianId,

@@ -43,9 +43,10 @@ export const VERSION = "0.3.3";
  * every call (0.3.49); and visits paid for online — a visit's states, a time
  * held while a patient pays, refunds that start by themselves, and the refund
  * right a role holds (0.3.60); and, back from paying, where that payment
- * stands, read by the patient (0.3.61).
+ * stands, read by the patient (0.3.61); and a booking door open only while the
+ * practice takes payments online (0.3.62).
  */
-export const MIN_ADMINIUM = "0.3.61";
+export const MIN_ADMINIUM = "0.3.62";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },

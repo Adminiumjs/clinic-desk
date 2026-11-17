@@ -18,7 +18,7 @@
     "operations"
   ],
   "compatibility": {
-    "minAdminiumVersion": "0.3.61",
+    "minAdminiumVersion": "0.3.62",
     "engines": [
       "sqlite",
       "postgres",
@@ -9694,7 +9694,8 @@
           "table": "settings",
           "column": "pay_ahead"
         }
-      ]
+      ],
+      "requirePayments": "on"
     },
     {
       "table": "appointments",

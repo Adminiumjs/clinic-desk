@@ -52,7 +52,7 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.61 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.62 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
@@ -262,7 +262,7 @@ Adminium's add-ons.
 
 ## Moving from 0.2.x
 
-The release after 0.3.3 adds paying online. Update Adminium to 0.3.61 first,
+The release after 0.3.3 adds paying online. Update Adminium to 0.3.62 first,
 then the app. It adds columns and keeps every row: a visit gets what was paid
 online of it and what went back, and the address its receipts go to (the
 patient's, kept in step); a payment gets its online reference, the service,
