@@ -27,7 +27,7 @@ import { Btn, btnGhost, btnPrimary, iconBtnStyle, kicker, mono, monoPill, pill, 
 import { toastIcon } from "./desk/icons.ts";
 import { advanceVisit, checkInVisit, noShowVisit } from "./desk/moves.ts";
 import { insideWindow, panelActions, type PanelAction } from "../screens/daysheet/model.ts";
-import { MoneyActions, OnlineChip, OwedBadge, OwedWhy, useReadVisitPayments, useVisitPayments } from "./pay/VisitMoney.tsx";
+import { MoneyActions, OnlineChip, OwedBadge, OwedWhy, RefundsTold, useReadVisitPayments, useVisitPayments } from "./pay/VisitMoney.tsx";
 import { useDeskPay } from "../state/deskPay.ts";
 import { amountText } from "../sheets/deskwork/money.ts";
 
@@ -274,6 +274,7 @@ function VisitPanel({ visit }: { visit: Appointment }) {
               {paidOnline && <OnlineChip visit={visit} payments={payments} />}
             </span>
             <OwedWhy visit={visit} />
+            <RefundsTold visit={visit} />
           </div>
           <div style={{ marginBlockStart: 18 }}>
             <h3 style={{ ...kicker, margin: 0 }}>{t("panel.where")}</h3>

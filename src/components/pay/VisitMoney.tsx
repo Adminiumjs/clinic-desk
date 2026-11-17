@@ -15,10 +15,11 @@
  * not refund leaves it owed, and a person decides. The panel shows whichever
  * is true, read from the visit's own totals.
  */
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BadgeCheck, CircleDollarSign, Globe, Undo2 } from "lucide-react";
 
 import type { Appointment, Payment } from "../../data/types.ts";
+import type { RefundTold } from "../../data/ports.ts";
 import { useI18n } from "../../i18n/index.tsx";
 import { dayOf, dayShort, money } from "../../lib/format.ts";
 import { visitName } from "../../lib/desk.ts";
@@ -114,6 +115,51 @@ export function OwedWhy({ visit }: { visit: Appointment }) {
     visit.status === "no_show" ? t("deskPay.noShowOn", { day }) : visit.cancelled_by === "patient" ? t("deskPay.cancelledByPatient", { day }) : visit.status === "cancelled" ? t("deskPay.cancelledByDesk", { day }) : null;
   if (line === null) return null;
   return <span style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>{line}</span>;
+}
+
+/**
+ * Who gave the money back, and why: "Refunded by Ruth Okonjo · Requested by
+ * customer", or "Refunded automatically" — one line per refund that went
+ * through, as Adminium's payment panel tells it to someone who may see it.
+ * Nothing at all where it says nothing (a reader who may not see payments,
+ * or the website's demo).
+ */
+export function RefundsTold({ visit }: { visit: Pick<Appointment, "id" | "refunded"> }) {
+  const { t } = useI18n();
+  const [told, setTold] = useState<RefundTold[]>([]);
+  const refunded = visit.refunded ?? 0;
+  useEffect(() => {
+    const read = deskReads().refundsTold;
+    if (refunded <= 0 || read === undefined) {
+      setTold([]);
+      return;
+    }
+    let live = true;
+    void read(visit.id)
+      .then((list) => {
+        if (live) setTold(list);
+      })
+      .catch(() => {
+        if (live) setTold([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [visit.id, refunded]);
+  if (told.length === 0) return null;
+  return (
+    <>
+      {told.map((refund, i) => {
+        const who = refund.by === null ? t("deskPay.refundedAuto") : t("deskPay.refundedBy", { name: refund.by });
+        const line = refund.reason === null || refund.by === null ? who : `${who} · ${t(`deskPay.reason.${refund.reason}`)}`;
+        return (
+          <span key={i} style={{ fontSize: 11.5, fontWeight: 700, color: "var(--fg-subtle)" }}>
+            {line}
+          </span>
+        );
+      })}
+    </>
+  );
 }
 
 /** The panel's "Refund" (for someone who may) and "Copy pay link" (on a seen visit still owing, while patients can pay online). */

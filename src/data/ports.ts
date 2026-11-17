@@ -146,6 +146,13 @@ export interface DeskReads {
   /** Every payment of these visits, voided ones too: how each was paid, online ones with their service. */
   visitPayments(ids: readonly Id[]): Promise<Payment[]>;
   /**
+   * The refunds of a visit's online payments that went through, as Adminium's
+   * payment panel tells them to someone who may see them: who gave the money
+   * back (null when it went back by itself) and the reason they picked. Absent
+   * where there is no Adminium to ask (the website's demo).
+   */
+  refundsTold?(visitId: Id): Promise<RefundTold[]>;
+  /**
    * Any table's rows by key, as they stand now — what a live update reads,
    * since the stream's own copy of a row arrives with the personal columns
    * blanked. A key missing from the answer is a row that is gone (or no
@@ -184,6 +191,16 @@ export interface Catalogue {
 }
 
 export type Level = "lookup" | "verified";
+
+/** The reason a person picked when they gave money back, in Adminium's own words for it. */
+export type RefundReason = "requested_by_customer" | "duplicate" | "fraudulent" | "other";
+
+/** One refund that went through, and who gave it and why, when the reader may see that. */
+export interface RefundTold {
+  amount: number;
+  by: string | null;
+  reason: RefundReason | null;
+}
 
 /** A visit as its patient sees it: what was paid of it and what went back, never the payments. */
 export type OwnVisit = Pick<
