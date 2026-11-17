@@ -96,6 +96,36 @@ const NEW_COLUMNS: Record<string, string[]> = {
 };
 /** The enums this build widens, and only these: each keeps every value it had. */
 const WIDER_ENUMS: Record<string, string[]> = { appointments: ["status"], payments: ["method"], messages: ["kind"] };
+
+/** A check as any engine spells it: SQLite writes the checks of a table it rebuilt in capitals. */
+const spelled = (constraint: string): string => constraint.replace(/^check \(/i, "CHECK (").replace(/" in \(/g, '" IN (');
+/** The values a check allows, on every engine (`'seen'`, `'seen'::character varying`, MySQL's `_utf8mb4\'seen\'`). */
+const allowed = (check: string): string[] => [...check.matchAll(/'([a-z_]+)\\?'/g)].map((m) => m[1]!);
+/** The widened enum columns a check is on, as SQLite (`"kind"`), Postgres (`(kind)`) and MySQL (`` `kind` ``) name it. */
+const widenedIn = (ref: string, check: string): string[] => (WIDER_ENUMS[ref] ?? []).filter((c) => [`"${c}"`, `(${c})`, `\`${c}\``].some((n) => check.includes(n)));
+
+/**
+ * The constraints of a table that went, and that came, leaving out each
+ * widened enum's check that was declared again with every value it allowed
+ * and more. Both empty: nothing else changed.
+ */
+function changedConstraints(ref: string, was: string[], now: string[]): [string[], string[]] {
+  const before = was.map(spelled);
+  const after = now.map(spelled);
+  let gone = before.filter((c) => !after.includes(c));
+  let came = after.filter((c) => !before.includes(c));
+  for (const old of [...gone]) {
+    const columns = widenedIn(ref, old);
+    if (columns.length !== 1) continue;
+    const values = allowed(old);
+    const wider = came.find((c) => widenedIn(ref, c).join() === columns.join() && values.every((v) => allowed(c).includes(v)) && allowed(c).length > values.length);
+    if (wider === undefined) continue;
+    gone = gone.filter((c) => c !== old);
+    came = came.filter((c) => c !== wider);
+  }
+  return [gone, came];
+}
+
 /**
  * The new columns an update fills on the rows already there: a setting's
  * literal default, and what Adminium works out (a payment's refunded total
@@ -428,8 +458,9 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
             // A column the update adds holds nothing on a row that was there, unless the update fills it.
             const filled = FILLED[name.slice(PREFIX.length)] ?? [];
             for (const column of added[name]!.filter((c) => !filled.includes(c))) expect([name, column, now!.rows.filter((found) => found[column] !== null).length]).toEqual([name, column, 0]);
-            // Every index, foreign key and check that was there is still there, and none came.
-            expect([name, now!.constraints], `the constraints of ${name}`).toEqual([name, was.constraints]);
+            // Every index, foreign key and check that was there is still there, and none came — but a widened
+            // enum's check, which allows every value it did and the new ones.
+            expect([name, ...changedConstraints(name.slice(PREFIX.length), was.constraints, now!.constraints)], `the constraints of ${name}`).toEqual([name, [], []]);
           }
           console.info(`[redeclared, ${engine}${run.title}] ${JSON.stringify(redeclared)}`);
           // Only the widened enums are declared again (with every value they had, and the new ones).
