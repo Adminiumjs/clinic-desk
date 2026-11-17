@@ -458,7 +458,9 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
               if (now!.columns[column] !== declared) redeclared.push(`${name}.${column}: ${declared} → ${now!.columns[column]!}`);
             }
             // Every row: the same key, the same values as the engine spells them, in the same order.
-            expect([name, now!.rows.length]).toEqual([name, was.rows.length]);
+            const before_ = new Set(was.rows.map((row) => JSON.stringify(row["id"] ?? null)));
+            const arrived = now!.rows.filter((row) => !before_.has(JSON.stringify(row["id"] ?? null)));
+            expect([name, now!.rows.length], `rows that came: ${JSON.stringify(arrived).slice(0, 1200)}`).toEqual([name, was.rows.length]);
             const kept = now!.rows.map((found) => Object.fromEntries(Object.keys(was.columns).map((c) => [c, found[c]])));
             expect(kept, `the rows of ${name}`).toEqual(was.rows);
             // A column the update adds holds nothing on a row that was there, unless the update fills it.
