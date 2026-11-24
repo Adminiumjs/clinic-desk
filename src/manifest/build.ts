@@ -27,11 +27,12 @@ import { TEXT_REPLIES, textTemplates } from "./texts.ts";
  * 0.3.1 changes no table: fixes in the desk's own screens. 0.3.2 changes no
  * table either: it tells Adminium who the patients are, that every email is
  * service mail, and which tables the law keeps. 0.3.3 changes no table: a
- * practice may install the desk once per database. 0.4.0 adds a table and
- * columns: visit texts, the answers patients give about them, and the name the
- * texts use.
+ * practice may install the desk once per database. 0.3.4 adds a table and
+ * columns — visit texts, the answers patients give about them, and the name
+ * the texts use — and stays a 0.3: Holiday Calendars names the clinic versions
+ * it works with as `^0.2.0 || ^0.3.0`, and a 0.4 would be refused beside it.
  */
-export const VERSION = "0.4.0";
+export const VERSION = "0.3.4";
 
 /**
  * The Adminium release that first reads everything below: booking, the

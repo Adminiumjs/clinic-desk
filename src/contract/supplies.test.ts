@@ -148,7 +148,7 @@ describe.skipIf(why !== null)(`a visit's supplies on a built Adminium with Inven
         expect(JSON.stringify(installed.rules.skipped)).toBe("[]");
         expect(installed.addOns?.installed.map((a) => a.key)).toEqual(["inventory"]);
         await learnTables();
-        expect(Object.keys(tableIds).filter((name) => name.startsWith("clinic_") && name !== "clinic_sample_data").length).toBe(19);
+        expect(Object.keys(tableIds).filter((name) => name.startsWith("clinic_") && name !== "clinic_sample_data").length).toBe(20);
         const desk = ok(await staff.get<{ addOns?: Record<string, unknown> }>("/apps/clinic/staff/surface-config.json"));
         expect(Object.keys(desk.addOns ?? {})).toEqual(["inventory"]);
       }, 240_000);

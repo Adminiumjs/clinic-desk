@@ -636,7 +636,8 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const answers = await rows(at, "text_answers");
           expect(answers.map((a) => [a["patient_id"], a["mobile"], Boolean(a["texts_ok"]), Boolean(a["texts_off"]), a["source"], a["about_ref"]])).toEqual([[null, "07700 900601", true, false, "booking", booked.ref]]);
           // Nobody's page reads the answers but their own: a stranger's port has no door to them.
-          expect((await refusal(() => anon.myTextAnswers())).code).toMatch(/^PUBLIC_CLAIM_/);
+          // Without a verified session the door is not there at all.
+          expect((await refusal(() => anon.myTextAnswers())).code).toMatch(/^PUBLIC_(CLAIM_|REF_NOT_FOUND)/);
           expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
         }, 120_000);
 
@@ -901,10 +902,11 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           const widening = await at.staff.post("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true });
           expect([widening.status, widening.code, widening.details["reason"]]).toEqual([422, "VALIDATION_FAILED", "PUBLIC_WIDER"]);
           const wider = widening.details["publicWider"] as { ref: string; columns: string[]; methods: string[]; rows: boolean }[];
-          // And the practice's settings: whether a patient may pay as they book, and whether a cancel in time goes back by itself.
+          // And the practice's settings: whether a patient may pay as they book, whether a cancel in time goes back by
+          // itself, and whether the practice sends visit texts (the box shows only then).
           expect(wider.map((entry) => [entry.ref, [...entry.methods].sort(), [...entry.columns].sort(), entry.rows]).sort((a, b) => String(a[0]).localeCompare(String(b[0])))).toEqual([
             ["clinic_appointments_verified", [], ["paid", "refunded"], false],
-            [expect.stringMatching(/^clinic_settings/), [], ["auto_refund", "pay_ahead"], false],
+            [expect.stringMatching(/^clinic_settings/), [], ["auto_refund", "pay_ahead", "texts_on"], false],
           ]);
           expect((await rows(at, "payments")).length).toBe(before.length);
           const updated = await at.staff.post<{ from: string; to: string; app: { addOns?: { installed: { key: string }[] } } }>("/api/v1/apps/clinic/update", { ...choice, roleTables: true, roleGrants: true, publicWider: true });
