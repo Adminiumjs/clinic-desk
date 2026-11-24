@@ -20,10 +20,9 @@
  *
  * A patient may also ask for visit texts: a box of its own, unticked, beside
  * the details a first booking or a registration asks for, and "Remind me by
- * text" in their Prefs. Each answer is a row of `text_answers`, written after
- * the booking or the registration is made, so nothing waits on it; Adminium
- * keeps each yes in its text consent log for that number, with the words shown
- * and their version.
+ * text" in their Prefs. Nothing books or registers on it. Adminium keeps each
+ * answer in its text consent log for that number, with the words shown and
+ * their version; the app keeps none of its own.
  *
  * No entry exposes payments, messages, notes, other people's details, the
  * desk's note on anyone else's visit, or allergies.
@@ -133,7 +132,10 @@ export const PUBLIC_ACCESS = [
     table: "patients",
     methods: ["GET", "PATCH"],
     select: ["id", "name", "email", "mobile", "remind_email", "remind_lead_hours"],
-    writable: ["remind_email", "remind_lead_hours"],
+    // And "Remind me by text": the box, ticked, is their yes for the number on file (a verified person's own fresh
+    // yes replaces their own earlier no; it never lifts a STOP).
+    writable: ["remind_email", "remind_lead_hours", "remind_text", "texts_off"],
+    textConsent: { column: "remind_text", phone: "mobile", class: "service", wording: textWording() },
     claimedBy: { table: "patients", column: "id" },
     level: "verified",
     sensitive: true,
@@ -155,7 +157,10 @@ export const PUBLIC_ACCESS = [
       "new_mobile",
       "new_email",
       "language",
+      "texts_ok",
     ],
+    // A first visit's box for texts: the yes is kept for the mobile typed beside it, on the visit until the desk accepts it.
+    textConsent: { column: "texts_ok", phone: "new_mobile", class: "service", wording: textWording() },
     defaults: { status: "booked", channel: "online", check_status: "to_check" },
     claimedBy: { table: "patients", column: "patient_id", optional: true },
     onClaim: { clear: ["new_name", "new_born_on", "new_mobile", "new_email", "check_status"] },
@@ -202,7 +207,13 @@ export const PUBLIC_ACCESS = [
     table: "registrations",
     methods: ["POST"],
     select: ["ref"],
-    writable: ["name", "born_on", "mobile", "email", "address", "emergency_contact", "language"],
+    writable: ["name", "born_on", "mobile", "email", "address", "emergency_contact", "language", "texts_ok"],
+    // Its box for texts: the yes is kept for the mobile typed, on the registration itself (the page sends it with
+    // nobody signed in, so the claim is always empty: it names the patients the yes is about, for Adminium).
+    claimedBy: { table: "patients", column: "patient_id", optional: true },
+    textConsent: { column: "texts_ok", phone: "mobile", class: "service", wording: textWording() },
+    sensitive: false,
+    reason: "the reply is only the registration's reference",
     humanCheck: true,
     anonymous: { perValue: { columns: ["mobile", "email"], n: 2 }, perKeyHour: 20, plainText: ["name"] },
     requireSetting: [setting("online_booking_on")],
@@ -297,47 +308,18 @@ export const PUBLIC_ACCESS = [
     requireSetting: [setting("online_booking_on"), setting("pay_ahead")],
   },
   // ── visit texts (after every older entry, so each one keeps its name) ──
-  // The box ticked in a first booking or a registration, sent once that is made: nobody is on file yet,
-  // so the answer row itself is the person the yes is kept for, with the number typed beside the box.
-  // It writes a yes and nothing else: no entry lets a stranger say "no" for someone else's number.
+  // "Remind me by text" switched off in their Prefs, once verified: the box that means "no", for the number on
+  // file. Their next yes (the details entry above) unticks it again.
   {
-    table: "text_answers",
-    methods: ["POST"],
+    table: "patients",
+    methods: ["PATCH"],
     select: ["id"],
-    writable: ["name", "mobile", "texts_ok", "source", "about_ref"],
-    writableValues: { source: ["booking", "register"] },
-    textConsent: { column: "texts_ok", phone: "mobile", class: "service", wording: textWording() },
-    sensitive: false,
-    reason: "the reply is only the new answer's key",
-    anonymous: { perValue: { columns: ["mobile"], n: 3 }, perKeyHour: 20, plainText: ["name"] },
-    requireSetting: [setting("online_booking_on"), setting("texts_on")],
-  },
-  // "Remind me by text" in their Prefs, once verified: their answers, newest last, and a yes for the
-  // number on file (the page sends it; a yes for any other number counts for no text of theirs).
-  {
-    table: "text_answers",
-    methods: ["GET", "POST"],
-    select: ["id", "texts_ok", "texts_off", "source", "created_at"],
-    writable: ["mobile", "texts_ok", "source"],
-    writableValues: { source: ["prefs"] },
-    textConsent: { column: "texts_ok", phone: "mobile", class: "service", wording: textWording() },
-    claimedBy: { table: "patients", column: "patient_id" },
+    writable: ["remind_text", "texts_off"],
+    claimedBy: { table: "patients", column: "id" },
     level: "verified",
-    sensitive: true,
-    requireSetting: [setting("online_booking_on")],
-  },
-  // And switched off: their "no", for the number on file. Texts stop at once.
-  {
-    table: "text_answers",
-    methods: ["POST"],
-    select: ["id"],
-    writable: ["mobile", "texts_off", "source"],
-    writableValues: { source: ["prefs"] },
     textConsent: { column: "texts_off", phone: "mobile", class: "service", means: "no", wording: textWording() },
-    claimedBy: { table: "patients", column: "patient_id" },
-    level: "verified",
     sensitive: false,
-    reason: "the reply is only the new answer's key",
+    reason: "the reply is only the patient's own key",
     requireSetting: [setting("online_booking_on")],
   },
 ];

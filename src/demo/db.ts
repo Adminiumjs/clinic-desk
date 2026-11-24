@@ -12,7 +12,7 @@
 import { HELD, type Appointment, type Id, type TableRef, type Tables } from "../data/types.ts";
 import { venueDay } from "../data/venueTime.ts";
 import { checkBooking, type Practice } from "./booking.ts";
-import { textStanding } from "../lib/texts.ts";
+import { demoMayText } from "./texts.ts";
 
 export type Rows = { [R in TableRef]: Tables[R][] };
 type Row = Record<string, unknown>;
@@ -39,17 +39,16 @@ export class DemoRefusal extends Error {
 
 /** What a column starts as when a create leaves it out (the manifest's defaults). */
 const DEFAULTS: Partial<Record<TableRef, Row>> = {
-  appointments: { status: "booked", channel: "desk", late_cancel: false, waived: 0, paid: 0, refunded: 0, paid_online: 0, check_status: null },
+  appointments: { status: "booked", channel: "desk", late_cancel: false, waived: 0, paid: 0, refunded: 0, paid_online: 0, check_status: null, texts_ok: false },
   payments: { method: "card", voided: false, payment_ref: null, provider: null, currency: null, refunded: 0 },
   appointment_supplies: { kit_id: null, qty: 1, not_used_at: null, batch_id: null, place_id: null, changed_by: null, changed_at: null },
-  registrations: { status: "new" },
+  registrations: { status: "new", texts_ok: false },
   recalls: { status: "due" },
   waiting_list: { status: "waiting", channel: "desk", part_of_day: "any" },
   messages: { status: "queued" },
   closures: { active: true },
-  patients: { remind_email: true, remind_lead_hours: 24, status: "active" },
+  patients: { remind_email: true, remind_lead_hours: 24, remind_text: false, texts_off: false, status: "active" },
   day_closes: { no_shows_marked: 0, cash_expected: 0 },
-  text_answers: { patient_id: null, name: null, texts_ok: false, texts_off: false, about_ref: null },
 };
 
 /** Columns stamped with the moment a status becomes a value. */
@@ -78,7 +77,6 @@ const MADE_AT: Partial<Record<TableRef, string[]>> = {
   appointment_supplies: ["recorded_at"],
   write_offs: ["written_at"],
   day_closes: ["closed_at"],
-  text_answers: ["created_at"],
 };
 
 /** What a supply line hands to the stock list (closed once its visit is seen), and what a change of it stamps. */
@@ -111,7 +109,6 @@ export function createDemoDb(start: Rows, now: () => number, zone: string, rando
   const rows = structuredClone(start) as Rows;
   // A table the sample holds no rows of is still a table.
   (rows as Partial<Rows>).appointment_supplies ??= [];
-  (rows as Partial<Rows>).text_answers ??= [];
   const listeners = new Set<(ref: TableRef, change: DemoChange) => void>();
   const tell = (ref: TableRef, kind: DemoChange["kind"], id: Id) => listeners.forEach((l) => l(ref, { kind, id }));
   const table = <R extends TableRef>(ref: R) => rows[ref] as unknown as Row[];
@@ -391,8 +388,8 @@ export function scanReminders(db: DemoDb): number {
 
 /**
  * The same scan for the reminder text: while the practice sends texts, to a
- * patient whose last answer for the number on file is a yes (or a first visit
- * whose box was ticked), at the same lead, whatever they chose for email. The
+ * number whose standing is a yes (the patient's, or a first visit's typed one),
+ * at the same lead, whatever they chose for email. The
  * demo has no text provider, so nothing is sent: it is logged as gone, as on
  * a practice whose provider took it.
  */
@@ -407,11 +404,7 @@ function scanTextReminders(db: DemoDb): number {
     if (start <= now) continue;
     const patient = visit.patient_id === null ? undefined : db.rows.patients.find((p) => p.id === visit.patient_id);
     const mobile = patient?.mobile ?? visit.new_mobile;
-    const agreed =
-      patient !== undefined
-        ? textStanding({ patient, answers: db.rows.text_answers, messages: db.rows.messages, textsOn: true }).kind === "yes"
-        : db.rows.text_answers.some((a) => a.about_ref === visit.ref && a.texts_ok);
-    if (mobile === null || !agreed) continue;
+    if (mobile === null || !demoMayText(db, mobile)) continue;
     const lead = Math.min(patient?.remind_lead_hours ?? settings.default_lead_hours, LONGEST_LEAD_HOURS);
     if (start - lead * 3_600_000 > now) continue;
     const done = db.rows.messages.some((m) => m.kind === "reminder_text" && m.appointment_id === visit.id && m.due_at !== null && Math.abs(Date.parse(m.due_at) - start) < 1000);
@@ -419,7 +412,7 @@ function scanTextReminders(db: DemoDb): number {
     const at = new Date(now).toISOString();
     db.insert(
       "messages",
-      { kind: "reminder_text", patient_id: patient?.id ?? null, appointment_id: visit.id, to_address: mobile, language: patient?.language ?? visit.language, status: "sent", due_at: visit.starts_at, sent_at: at },
+      { kind: "reminder_text", patient_id: patient?.id ?? null, appointment_id: visit.id, to_address: mobile, language: patient?.language ?? visit.language, status: "sent", text_reason: "sent", due_at: visit.starts_at, sent_at: at },
       { origin: "desk", name: null },
     );
     queued += 1;

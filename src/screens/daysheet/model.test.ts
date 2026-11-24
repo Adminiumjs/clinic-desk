@@ -69,6 +69,7 @@ function visit(at: string, status: AppointmentStatus, extra: Partial<Appointment
     new_born_on: null,
     new_mobile: null,
     new_email: null,
+    texts_ok: false,
     clinician_id: 1,
     visit_type_id: 1,
     starts_at: at,

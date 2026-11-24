@@ -455,7 +455,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
             return res;
           };
           const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asBrowser });
-          return publicPatientsPort(client!, config.tables ?? {});
+          return publicPatientsPort(client!, config.tables ?? {}, { baseUrl: config.baseUrl, publishableKey: config.publishableKey, fetch: asBrowser });
         };
         /**
          * The patients' pages opened by a payments manager rehearsing the
@@ -626,37 +626,69 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(await own.myDetails()).toMatchObject({ name: patient["name"], email: CLAIM_INBOX, mobile: patient["mobile"] });
         }, 180_000);
 
-        it("takes a yes from the box for texts only while the practice sends them, after the booking it was ticked on, and keeps it as nobody's yet", async () => {
-          const yes = { mobile: "07700 900601", source: "booking" as const, name: `Ada Quill ${engine}`, aboutRef: booked.ref };
-          // The practice sends no texts yet: the door is shut, and the booking it was ticked on stands.
-          expect((await refusal(() => anon.textYes(yes))).code).toBe("PUBLIC_SWITCHED_OFF");
+        /** Where Adminium says the person on a row stands on the app's texts, as the desk's patient card asks it. */
+        const standingOn = async (ref: TableRef, row: number, column: string) => {
+          const query = new URLSearchParams({ connection: at.connectionId, table: at.tableIds[ref]!, row: String(row), column });
+          return ok(await at.staff.get<{ data: { ready: boolean; service: { state: string; answer: { source: string; how: string | null; by: { label: string } | null; wordingVersion: string | null } | null }; stopped: unknown } }>(`/api/v1/texts/consent?${query.toString()}`)).data;
+        };
+
+        it("keeps the tick of the box on a first booking and on a registration, for the number typed, and draws no box while texts are not set up", async () => {
+          // No provider on this server: the page draws no box at all.
           const settings = (await rows(at, "settings"))[0]!;
           ok(await at.staff.patch(`${data(at, "settings")}/${String(settings.id)}`, { values: { texts_on: true } }));
-          await anon.textYes(yes);
-          const answers = await rows(at, "text_answers");
-          expect(answers.map((a) => [a["patient_id"], a["mobile"], Boolean(a["texts_ok"]), Boolean(a["texts_off"]), a["source"], a["about_ref"]])).toEqual([[null, "07700 900601", true, false, "booking", booked.ref]]);
-          // Nobody's page reads the answers but their own: a stranger's port has no door to them.
-          // Without a verified session the door is not there at all.
-          expect((await refusal(() => anon.myTextAnswers())).code).toMatch(/^PUBLIC_(CLAIM_|REF_NOT_FOUND)/);
+          expect((await (await patientPort()).catalogue()).textsReady).toBe(false);
+          // The tick rides the booking itself (a page with the box): kept on the visit, for its typed mobile.
+          const time = firstFree(await anon.times({ kind: 2, date: later }), "09:00");
+          const made = await anon.book({
+            visit_type_id: 2,
+            clinician_id: null,
+            starts_at: instantOf(later, time, DEMO_ZONE),
+            reason: null,
+            desk_note: null,
+            language: "en-US",
+            newPatient: { name: `Ada Tick ${engine}`, born_on: "1990-04-13", mobile: "07700 900611", email: null, textsOk: true },
+          });
+          const visit = (await rows(at, "appointments")).find((a) => a["ref"] === made.ref)!;
+          expect([visit["texts_ok"], visit["new_mobile"]]).toEqual([true, "07700 900611"]);
+          const onVisit = await standingOn("appointments", visit.id, "new_mobile");
+          expect([onVisit.service.state, onVisit.service.answer?.source, onVisit.service.answer?.wordingVersion]).toEqual(["yes", "form", "v1 en-US"]);
+          // And a registration's, on the registration.
+          const registered = await anon.register({ name: `Bo Tick ${engine}`, born_on: "1985-09-29", mobile: "07700 900612", email: null, address: null, emergency_contact: null, language: "en-US", texts_ok: true });
+          const reg = (await rows(at, "registrations")).find((r) => r["ref"] === registered.ref)!;
+          expect([reg["texts_ok"], reg["patient_id"]]).toEqual([true, null]);
+          expect((await standingOn("registrations", reg.id, "mobile")).service.state).toBe("yes");
+          // A box left empty writes nothing.
+          const quiet = await anon.register({ name: `Cy Tick ${engine}`, born_on: "1985-09-28", mobile: "07700 900613", email: null, address: null, emergency_contact: null, language: "en-US" });
+          const plain = (await rows(at, "registrations")).find((r) => r["ref"] === quiet.ref)!;
+          expect([plain["texts_ok"], (await standingOn("registrations", plain.id, "mobile")).service.state]).toEqual([false, "not-asked"]);
           expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
         }, 120_000);
 
-        it("keeps the verified patient's own yes and no from their Reminders page, for the number on file", async () => {
-          const mobile = String(patient["mobile"]);
-          expect(await own.myTextAnswers()).toEqual([]);
-          await own.textYes({ mobile, source: "prefs" });
-          await own.textNo(mobile);
-          const said = await own.myTextAnswers();
-          expect(said.map((a) => [a.texts_ok, a.texts_off, a.source])).toEqual([
-            [true, false, "prefs"],
-            [false, true, "prefs"],
-          ]);
-          const theirs = (await rows(at, "text_answers")).filter((a) => a["patient_id"] === patient.id);
-          expect(theirs.map((a) => a["mobile"])).toEqual([mobile, mobile]);
-          // Found is not proved: a no for a number needs the emailed code, as a yes from Prefs does.
+        it("turns the verified patient's texts off and on again from Prefs: their own fresh yes replaces their own no", async () => {
+          expect((await own.myTextStanding()).service.state).toBe("not-asked");
+          await own.setTexts(false);
+          expect((await own.myTextStanding()).service.state).toBe("no");
+          await own.setTexts(true);
+          const back = await own.myTextStanding();
+          expect([back.service.state, back.stopped]).toEqual(["yes", null]);
+          // The desk sees the same, on the patient's row.
+          expect((await standingOn("patients", patient.id, "mobile")).service.state).toBe("yes");
+          // Found is not proved: Prefs' doors need the emailed code.
           const stranger = await patientPort();
-          await stranger.find(mobile, String(patient["born_on"]));
-          expect((await refusal(() => stranger.textNo(mobile))).code).toBe("PUBLIC_CLAIM_LEVEL");
+          await stranger.find(String(patient["mobile"]), String(patient["born_on"]));
+          expect((await refusal(() => stranger.setTexts(false))).code).toBe("PUBLIC_CLAIM_LEVEL");
+          expect((await refusal(() => stranger.myTextStanding())).code).toBe("PUBLIC_CLAIM_LEVEL");
+        }, 120_000);
+
+        it("records a yes the desk heard in person, with the box's words, named; and a no", async () => {
+          const someone = (await rows(at, "patients")).find((p) => p.id !== patient.id && typeof p["mobile"] === "string")!;
+          const body = { connection: at.connectionId, table: at.tableIds["patients"]!, row: String(someone.id), column: "mobile" };
+          // A yes needs the words they were given.
+          expect((await at.staff.post("/api/v1/texts/consent", { ...body, state: "yes", how: "in-person" })).status).toBe(422);
+          const yes = ok(await at.staff.post<{ data: { service: { state: string; answer: { source: string; how: string; by: { label: string } | null; wordingVersion: string } } } }>("/api/v1/texts/consent", { ...body, state: "yes", how: "in-person", wording: { text: "Text me reminders for my visits. Only the practice name, the date and the time.", version: "v1 en-US" } })).data;
+          expect([yes.service.state, yes.service.answer.source, yes.service.answer.how, yes.service.answer.wordingVersion, yes.service.answer.by !== null]).toEqual(["yes", "staff", "in-person", "v1 en-US", true]);
+          const no = ok(await at.staff.post<{ data: { service: { state: string } } }>("/api/v1/texts/consent", { ...body, state: "no", how: "phone" })).data;
+          expect(no.service.state).toBe("no");
           // Back as the sample was: no text is queued by the rest of the run.
           const settings = (await rows(at, "settings"))[0]!;
           ok(await at.staff.patch(`${data(at, "settings")}/${String(settings.id)}`, { values: { texts_on: false } }));

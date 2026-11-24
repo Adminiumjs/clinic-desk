@@ -24,10 +24,10 @@ import {
   type CodeResult,
   type DayState,
   type OwnDetails,
-  type OwnTextAnswer,
   type OwnVisit,
   type PatientsPort,
   type SlotTime,
+  type TextStanding,
 } from "./ports.ts";
 import type { TableRef } from "./types.ts";
 
@@ -52,13 +52,12 @@ interface Refs {
   register: string;
   /** The earlier-time list; null on a key that has none (the page then says it cannot join). */
   waitlist: string | null;
-  /** A yes from the box with nobody on file; null on a key that has none (an older install). */
-  textNew: string | null;
-  /** The verified patient's answers about texts, and their yes. */
-  textMine: string | null;
-  /** The verified patient's no. */
+  /** "Remind me by text" switched off: the box that means no; null on a key that has none (an older install). */
   textStop: string | null;
 }
+
+/** "Remind me by text" switched off: a change of the patient's own row that shows nothing of it but its key. */
+const isTextStop = (r: { expose: readonly string[]; writable?: readonly string[] }): boolean => !r.expose.includes("email") && (r.writable ?? []).includes("texts_off");
 
 /** Which ref is which, by what each one does. Throws naming what is missing. */
 export function refsOf(config: PublicConfig, tables: Record<string, string>): Refs {
@@ -83,7 +82,8 @@ export function refsOf(config: PublicConfig, tables: Record<string, string>): Re
     closures: pick("closures", reads("closures")),
     availability: pick("availability", of("appointments").filter(([, r]) => r.kind === "availability")),
     identity: pick("patient lookup", identity === "" ? [] : [[identity, null]]),
-    details: pick("patient details", of("patients").filter(([ref, r]) => ref !== identity && r.actions.includes("update"))),
+    // Two doors change the patient's own row: their details (they read the email) and "Remind me by text" switched off.
+    details: pick("patient details", of("patients").filter(([ref, r]) => ref !== identity && r.actions.includes("update") && !isTextStop(r))),
     // Two doors book a visit: as ever (its reply names no fee), and paying as it is booked (its reply names the fee).
     book: pick("booking", of("appointments").filter(([, r]) => r.actions.includes("create") && !r.expose.includes("fee"))),
     payBook: of("appointments").find(([, r]) => r.actions.includes("create") && r.expose.includes("fee"))?.[0] ?? null,
@@ -93,11 +93,7 @@ export function refsOf(config: PublicConfig, tables: Record<string, string>): Re
     visits: pick("own visits", of("appointments").filter(([, r]) => r.actions.includes("update") && r.expose.includes("late_cancel"))),
     register: pick("registration", of("registrations").filter(([, r]) => r.actions.includes("create"))),
     waitlist: of("waiting_list").find(([, r]) => r.actions.includes("create"))?.[0] ?? null,
-    // Three doors write an answer about texts: a yes with nobody on file (it takes the name typed), the patient's own
-    // yes (it also reads their answers), and their no.
-    textNew: of("text_answers").find(([, r]) => r.actions.includes("create") && r.writable.includes("name"))?.[0] ?? null,
-    textMine: of("text_answers").find(([, r]) => r.actions.includes("read") && r.writable.includes("texts_ok"))?.[0] ?? null,
-    textStop: of("text_answers").find(([, r]) => r.actions.includes("create") && r.writable.includes("texts_off"))?.[0] ?? null,
+    textStop: of("patients").find(([ref, r]) => ref !== identity && r.actions.includes("update") && isTextStop(r))?.[0] ?? null,
   };
 }
 
@@ -125,9 +121,49 @@ const ownDetails = (raw: Record<string, unknown>): OwnDetails => {
   return { name: row.name, email: row.email ?? null, mobile: row.mobile, remind_email: row.remind_email, remind_lead_hours: row.remind_lead_hours };
 };
 
-export async function publicPatientsPort(client: PublicClient, tables: Record<string, string>): Promise<PatientsPort> {
+/**
+ * Adminium's texts reads for the patients' pages (`client.texts`, from the
+ * public client that ships with Adminium 0.3.76). An older client in hand
+ * lacks them, so the same two routes are asked directly, with the page's key
+ * and its session, as the client would.
+ */
+interface TextsReads {
+  ready(): Promise<boolean>;
+  standing(): Promise<TextStanding>;
+}
+
+export interface DirectTexts {
+  baseUrl: string;
+  publishableKey: string;
+  fetch?: typeof fetch;
+}
+
+function textsReads(client: PublicClient, direct: DirectTexts | undefined): TextsReads | null {
+  const own = (client as unknown as { texts?: { ready(): Promise<boolean>; standing(): Promise<TextStanding & { marketing?: unknown }> } }).texts;
+  if (own !== undefined) return { ready: () => own.ready(), standing: async () => standingOf(await own.standing()) };
+  if (direct === undefined) return null;
+  const ask = async <T,>(path: string): Promise<T> => {
+    const token = client.session()?.token;
+    const res = await (direct.fetch ?? fetch)(`${direct.baseUrl}${path}`, {
+      headers: { authorization: `Bearer ${direct.publishableKey}`, ...(token === undefined ? {} : { "x-adminium-public-session": token }) },
+    });
+    const body = (await res.json().catch(() => null)) as { data?: T; error?: { code?: string; message?: string } } | null;
+    if (!res.ok || body?.data === undefined) throw new PortError(body?.error?.code ?? "PUBLIC_NETWORK_UNAVAILABLE", body?.error?.message ?? `HTTP ${String(res.status)}`);
+    return body.data;
+  };
+  return {
+    ready: async () => (await ask<{ ready: boolean }>("/api/v1/public/texts")).ready === true,
+    standing: async () => standingOf(await ask<TextStanding>("/api/v1/public/texts/standing")),
+  };
+}
+
+/** The service purpose and the stop, as the page reads them: the practice sends no offers. */
+const standingOf = (raw: TextStanding): TextStanding => ({ ready: raw.ready === true, masked: raw.masked ?? null, service: raw.service, stopped: raw.stopped ?? null });
+
+export async function publicPatientsPort(client: PublicClient, tables: Record<string, string>, direct?: DirectTexts): Promise<PatientsPort> {
   const config = await guard(() => client.config());
   const refs = refsOf(config, tables);
+  const texts = textsReads(client, direct);
   const zone = config.timezone;
   /** The catalogue is read once a visit to the page. */
   let catalogue: Promise<Catalogue> | null = null;
@@ -171,7 +207,10 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
             for (const [column, value] of Object.entries(flags)) if (out[column] === undefined) out[column] = value;
             return out as T;
           });
+        // Whether a text can go at all: asked only of a practice that sends them, and a failed ask draws no box.
+        const textsReady = settings[0]?.texts_on === true && texts !== null ? await texts.ready().catch(() => false) : false;
         return {
+          textsReady,
           settings: settings[0] ?? null,
           hours,
           clinicians: served(clinicians, { active: true, bookable_online: true }),
@@ -267,6 +306,8 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
           values["new_born_on"] = visit.newPatient.born_on;
           values["new_mobile"] = visit.newPatient.mobile;
           values["new_email"] = visit.newPatient.email;
+          // The box for texts goes only when ticked: an unticked box writes nothing.
+          if (visit.newPatient.textsOk === true) values["texts_ok"] = true;
         }
         const row = normalise("appointments", await client.create<Record<string, unknown>>(refs.book, values));
         return { ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status };
@@ -278,7 +319,8 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
 
     register: (person) =>
       guard(async () => {
-        const row = await client.create<{ ref?: string }>(refs.register, { ...person });
+        const { texts_ok, ...rest } = person;
+        const row = await client.create<{ ref?: string }>(refs.register, texts_ok === true ? { ...rest, texts_ok: true } : rest);
         return { ref: row.ref ?? "" };
       }),
 
@@ -292,31 +334,26 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
     signOut: () => guard(() => client.signOut()),
 
     // ── visit texts ──
-    myTextAnswers: () =>
-      guard(async (): Promise<OwnTextAnswer[]> => {
-        if (refs.textMine === null) return [];
-        const rows = normaliseAll("text_answers", (await client.list<Record<string, unknown>>(refs.textMine, { limit: 200 })).data);
-        return rows
-          .map((row) => ({ id: row.id, texts_ok: row.texts_ok === true, texts_off: row.texts_off === true, source: row.source, created_at: row.created_at ?? null }))
-          .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id - b.id);
+    myTextStanding: () =>
+      guard(async () => {
+        if (texts === null) throw new PortError("PUBLIC_SETUP", "this page cannot ask where a patient stands on texts");
+        return texts.standing();
       }),
 
-    textYes: (answer) =>
+    setTexts: (on) =>
       guard(async () => {
-        const ref = answer.source === "prefs" ? refs.textMine : refs.textNew;
-        if (ref === null) throw new PortError("PUBLIC_SETUP", "this page's key takes no answer about texts");
-        const values: Record<string, unknown> = { mobile: answer.mobile, texts_ok: true, source: answer.source };
-        if (answer.source !== "prefs") {
-          values["name"] = answer.name ?? null;
-          values["about_ref"] = answer.aboutRef ?? null;
+        const found = await client.list<Record<string, unknown>>(refs.details, { limit: 1 });
+        const id = String(found.data[0]?.["id"] ?? "");
+        if (on) {
+          // Their box, ticked afresh: unticked first when a past yes left it ticked, so the tick is a new answer.
+          await client.update(refs.details, id, { remind_text: false, texts_off: false });
+          await client.update(refs.details, id, { remind_text: true });
+          return;
         }
-        await client.create(ref, values);
-      }),
-
-    textNo: (mobile) =>
-      guard(async () => {
-        if (refs.textStop === null) throw new PortError("PUBLIC_SETUP", "this page's key takes no answer about texts");
-        await client.create(refs.textStop, { mobile, texts_off: true, source: "prefs" });
+        if (refs.textStop === null) throw new PortError("PUBLIC_SETUP", "this page's key takes no stop for texts");
+        // Their no: the box that means no, ticked afresh.
+        await client.update(refs.textStop, id, { remind_text: false, texts_off: false });
+        await client.update(refs.textStop, id, { texts_off: true });
       }),
 
     // ── paying online ──

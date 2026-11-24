@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, History, MessageSquare, MessageSquareOff, Receipt, ShieldAlert } from "lucide-react";
 
-import type { PatientPage as Page } from "../../data/ports.ts";
+import type { PatientPage as Page, TextStanding } from "../../data/ports.ts";
 import type { Appointment, Id, Recall } from "../../data/types.ts";
 import { IN_THE_BUILDING } from "../../data/types.ts";
 import { addDays } from "../../data/venueTime.ts";
@@ -19,12 +19,13 @@ import { today } from "../../lib/clock.ts";
 import { ageOn, dayOf, daysBetween, dayShort, time, num } from "../../lib/format.ts";
 import { clinicianOf, typeOf } from "../../lib/desk.ts";
 import { useNow } from "../../lib/useNow.ts";
-import { textStanding, type TextStandingKind } from "../../lib/texts.ts";
+import { texts } from "../../i18n/strings/texts.ts";
+import { TEXT_BOX_VERSION } from "../../manifest/texts.ts";
 import { HOSTED } from "../../surface.ts";
 import { isEmbedded } from "../../embed.ts";
 import { deskReads, deskVisits, upsert, useCan, useDesk } from "../../state/desk.ts";
 import { go, openPanel, openSheet, toast, useUi } from "../../state/ui.ts";
-import { Btn, Dot, Skeleton, Tile, btnGhostSm, mono, monoPill, pill, useDark } from "../../components/ui.tsx";
+import { Btn, Chip, Dot, Skeleton, Tile, btnGhostSm, mono, monoPill, pill, useDark } from "../../components/ui.tsx";
 import { tint } from "../../lib/color.ts";
 import { amountText } from "../../sheets/deskwork/money.ts";
 import { counted, dayMonthNear, dayYear, relativeDay } from "../deskwork/dates.ts";
@@ -375,40 +376,84 @@ function nextRecall(id: Id, read: readonly Recall[], held: Record<Id, Recall>): 
   return [...byId.values()].filter((r) => r.status === "due" || r.status === "noted").sort((a, b) => a.due_on.localeCompare(b.due_on))[0];
 }
 
-const STANDING_WORDS: Record<Exclude<TextStandingKind, "yes" | "no">, "texts.standing.off" | "texts.standing.none" | "texts.standing.other" | "texts.standing.stopped"> = {
-  off: "texts.standing.off",
-  none: "texts.standing.none",
-  other: "texts.standing.other",
-  stopped: "texts.standing.stopped",
-};
+/** How the desk heard a yes or a no, in the order it asks. */
+const HOWS = ["in-person", "phone", "paper"] as const;
 
 /**
- * Where the patient stands on visit texts, for the desk: their last answer
- * for the number on file (the box in a first booking or a registration, or
- * their Reminders page), a STOP the outbox has heard of since, and the last
- * text logged for them. The desk reads it and changes none of it: a yes or a
- * no is the patient's to give, on the box. Not shown to whoever may not read
- * the answers (a clinician).
+ * Where the patient stands on visit texts, as Adminium keeps it (its text
+ * consent log and its stop list), with the last text logged for them. The
+ * desk may record a yes the patient gave in person, by phone or on paper,
+ * having read them the box's words (recorded with them and their version),
+ * or their no: Adminium names who recorded it and audits it. Nothing here
+ * lifts a STOP: only the patient's own START does. Not shown to whoever may
+ * not change a patient (a clinician).
  */
 function TextsCard({ page }: { page: Page }) {
-  const { t } = useI18n();
-  const readable = useCan("text_answers", "read");
+  const { t, locale } = useI18n();
+  const mayChange = useCan("patients", "update");
   const settings = useDesk((s) => s.settings);
   const patient = useDesk((s) => s.patients[page.patient.id]) ?? page.patient;
-  if (!readable) return null;
-  const standing = textStanding({ patient, answers: page.textAnswers, messages: page.texts, textsOn: settings?.texts_on === true });
-  const answerDay = standing.answer?.created_at == null ? "" : dayShort(dayOf(standing.answer.created_at));
+  const [standing, setStanding] = useState<TextStanding | null | undefined>(undefined);
+  const [asking, setAsking] = useState<null | "yes">(null);
+  const [how, setHow] = useState<(typeof HOWS)[number]>("in-person");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (!mayChange) return;
+    let live = true;
+    deskReads()
+      .textStanding(patient.id)
+      .then((found) => live && setStanding(found))
+      .catch(() => live && setStanding(null));
+    return () => {
+      live = false;
+    };
+  }, [patient.id, patient.mobile, mayChange]);
+  if (!mayChange || settings?.texts_on !== true || standing === undefined) return null;
+
+  // The box's words in the patient's language (the practice's otherwise): what they were read, and what is kept.
+  const tag = (patient.language ?? settings.language ?? locale) as keyof typeof texts;
+  const words = texts[tag] ?? texts["en-US"];
+  const said = `${words["texts.box.label"]}. ${words["texts.box.sub"]} ${words["texts.box.optional"]}`;
+  const record = async (state: "yes" | "no") => {
+    setBusy(true);
+    try {
+      const found = await deskReads().recordText(patient.id, state === "yes" ? { state, how, wording: { text: said, version: `v${String(TEXT_BOX_VERSION)} ${tag in texts ? tag : "en-US"}` } } : { state, how });
+      setStanding(found);
+      setAsking(null);
+      toast(state === "yes" ? t("texts.record.savedYes") : t("texts.record.savedNo"), { icon: state === "yes" ? "circle-check" : "bell-off", tone: "pos" });
+    } catch {
+      toast(t("texts.record.failed"), { icon: "circle-alert", tone: "danger" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const service = standing?.service ?? null;
+  const day = (at: number) => dayShort(dayOf(new Date(at).toISOString()));
   const line =
-    standing.kind === "yes"
-      ? t("texts.standing.yes", { day: answerDay, source: t(`texts.source.${standing.answer?.source ?? "booking"}`) })
-      : standing.kind === "no"
-        ? t("texts.standing.no", { day: answerDay })
-        : t(STANDING_WORDS[standing.kind]);
-  const last = standing.last;
+    standing === null
+      ? t("texts.standing.notReady")
+      : !standing.ready
+        ? t("texts.standing.notReady")
+        : standing.stopped !== null
+          ? standing.stopped.liftBy === "start"
+            ? t("texts.standing.stoppedStart", { day: day(standing.stopped.since) })
+            : t("texts.standing.stoppedOther", { day: day(standing.stopped.since) })
+          : service?.state === "yes"
+            ? service.answer?.by != null
+              ? t("texts.standing.yesBy", { day: day(service.answer.at), name: service.answer.by.label })
+              : t("texts.standing.yes", { day: service.answer === null ? "" : day(service.answer.at) })
+            : service?.state === "no"
+              ? t("texts.standing.no", { day: service.answer === null ? "" : day(service.answer.at) })
+              : service?.state === "no-phone"
+                ? t("texts.standing.noPhone")
+                : t("texts.standing.notAsked");
+  const last = page.texts[0] ?? null;
   const lastWhen = last === null ? null : (last.sent_at ?? last.created_at);
   const lastState = last === null ? null : last.status === "sent" ? t("texts.state.sent") : last.status === "queued" ? t("texts.state.queued") : t("texts.state.failed");
-  const on = standing.kind === "yes";
+  const on = service?.state === "yes" && standing?.stopped === null;
   const Icon = on ? MessageSquare : MessageSquareOff;
+  const canRecord = standing !== null && standing.stopped === null && service?.state !== "no-phone";
   return (
     <section aria-labelledby="pd-texts" data-part="patient-texts" style={asideCard}>
       <h2 id="pd-texts" style={{ ...kickerStyle, margin: 0 }}>
@@ -418,11 +463,51 @@ function TextsCard({ page }: { page: Page }) {
         <span aria-hidden="true" style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: on ? "var(--pos-soft)" : "var(--surface-3)", color: on ? "var(--pos)" : "var(--fg-muted)" }}>
           <Icon size={14} />
         </span>
-        <span style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.5, color: "var(--fg)", textWrap: "pretty" }}>{line}</span>
+        <span role="status" style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.5, color: "var(--fg)", textWrap: "pretty" }}>
+          {line}
+        </span>
       </div>
       {last !== null && lastWhen !== null && lastState !== null && (
         <div style={{ marginBlockStart: 7, fontSize: 11.5, fontWeight: 600, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>
-          {t("texts.standing.last", { kind: t(`outbox.kind.${last.kind}`), state: lastState, day: dayShort(dayOf(lastWhen)) })}
+          {t("texts.standing.last", { kind: t(last.kind === "missed_text" ? "outbox.kind.missed_text" : "outbox.kind.reminder_text"), state: lastState, day: dayShort(dayOf(lastWhen)) })}
+        </div>
+      )}
+      {canRecord && asking === null && (
+        <div style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 11 }}>
+          {!on && (
+            <button type="button" className="rh-btn" onClick={() => setAsking("yes")} style={{ ...btnGhostSm, height: 34 }}>
+              {t("texts.record.yes")}
+            </button>
+          )}
+          {on && (
+            <button type="button" className="rh-btn" disabled={busy} onClick={() => void record("no")} style={{ ...btnGhostSm, height: 34 }}>
+              {t("texts.record.no")}
+            </button>
+          )}
+        </div>
+      )}
+      {asking === "yes" && (
+        <div data-part="patient-texts-record" style={{ display: "flex", flexDirection: "column", gap: 9, marginBlockStart: 11, padding: 11, borderRadius: 12, border: "1px solid var(--border)", background: "var(--surface-2)" }}>
+          <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: "var(--fg-muted)" }}>{t("texts.record.read")}</span>
+          <blockquote lang={tag} style={{ margin: 0, paddingInlineStart: 10, borderInlineStart: "3px solid var(--accent)", fontSize: 12.5, fontWeight: 700, lineHeight: 1.5, textWrap: "pretty" }}>
+            {said}
+          </blockquote>
+          <div role="group" aria-label={t("texts.record.read")} style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {HOWS.map((h) => (
+              <Chip key={h} on={how === h} onClick={() => setHow(h)}>
+                {t(`texts.record.how.${h}`)}
+              </Chip>
+            ))}
+          </div>
+          <span style={{ fontSize: 11.5, fontWeight: 600, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("texts.record.noStart")}</span>
+          <div style={{ display: "flex", gap: 7, flexWrap: "wrap" }}>
+            <Btn kind="ghostSm" busy={busy} onClick={() => void record("yes")} style={{ height: 34 }}>
+              {t("texts.record.save")}
+            </Btn>
+            <button type="button" className="rh-gi" onClick={() => setAsking(null)} style={{ height: 34, paddingInline: 10, border: "none", background: "transparent", color: "var(--fg-muted)", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+              {t("texts.record.cancel")}
+            </button>
+          </div>
         </div>
       )}
     </section>

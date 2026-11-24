@@ -385,6 +385,11 @@ export const TABLES: Table[] = [
       text("language", 16, "Language", opt),
       bool("remind_email", "Remind me by email", true),
       picked("remind_lead_hours", "Remind (hours before)", [12, 24, 48], 24),
+      // The box for visit texts, unticked: ticked (on their Reminders page, or by the desk for a yes heard in person),
+      // Adminium keeps the yes for the number on file, with the box's words. Texts go only to a yes it holds.
+      { ref: "remind_text", type: "bool", default: false, label: l("Remind me by text") },
+      // Ticked when they switch texts off: Adminium keeps their no. Unticked again by their next yes.
+      { ref: "texts_off", type: "bool", default: false, label: l("Asked to stop texts") },
       choice("status", "Status", { active: "Active", archived: "Archived" }, { default: "active", tones: { active: "pos", archived: "neutral" } }),
       createdAt,
     ],
@@ -404,6 +409,8 @@ export const TABLES: Table[] = [
       text("address", 300, "Address", opt),
       text("emergency_contact", 200, "Someone to ring", opt),
       text("language", 16, "Language", opt),
+      // The registration's box for texts: ticked, Adminium keeps the yes for the mobile typed on it.
+      { ref: "texts_ok", type: "bool", default: false, label: l("Texts") },
       choice(
         "status",
         "Status",
@@ -455,6 +462,8 @@ export const TABLES: Table[] = [
       date("new_born_on", "First visit: date of birth", opt),
       text("new_mobile", 32, "First visit: mobile", { ...opt, rules: { validation: { format: "phone" } } }),
       text("new_email", 254, "First visit: email", { ...opt, rules: { validation: { format: "email" } } }),
+      // A first visit's box for texts: ticked, Adminium keeps the yes for the mobile typed beside it.
+      { ref: "texts_ok", type: "bool", default: false, label: l("First visit: texts") },
       fk("clinician_id", "clinicians", "Clinician", true),
       fk("visit_type_id", "visit_types", "Visit type"),
       at("starts_at", "Starts", { rules: { venueLocal: true } }),
@@ -701,6 +710,8 @@ export const TABLES: Table[] = [
         { default: "queued", tones: { queued: "info", sent: "pos", failed: "danger", skipped: "neutral" } },
       ),
       text("error", 300, "Why", opt),
+      // A text row's outcome as Adminium's code (`no-consent`, `stopped`, `not-set-up` …), beside the sentence in `error`.
+      text("text_reason", 40, "Text outcome", opt),
       at("due_at", "Due at", opt),
       at("sent_at", "Sent at", opt),
       text("created_by", 120, "Queued by", { ...opt, rules: stampWho }),
@@ -722,37 +733,6 @@ export const TABLES: Table[] = [
       text("note", 500, "A note for tomorrow", opt),
       text("closed_by", 120, "Closed by", { ...opt, rules: stampWho }),
       at("closed_at", "Closed at", { default: "now" }),
-    ],
-  },
-  /*
-   * A patient's answers about texts, each one a row: the box ticked in a first
-   * booking or a registration (nobody on file yet, so the row is the person
-   * Adminium keeps the yes for), "Remind me by text" switched on or off in
-   * their Prefs (theirs, once they have confirmed their emailed code). The
-   * consent itself is Adminium's text consent log, kept with the words shown
-   * and their version; these rows are the practice's own copy of what was
-   * asked, so the desk and the Prefs page can say where a patient stands.
-   * Every box starts unticked and nothing books or registers on it.
-   */
-  {
-    ref: "text_answers",
-    label: l("Text answer"),
-    labelPlural: l("Text answers"),
-    keyField: "name",
-    columns: [
-      id,
-      // The patient the answer is theirs: set by their own Prefs, or by the desk when it accepts the booking or registration.
-      fk("patient_id", "patients", "Patient", true),
-      text("name", 120, "Name given", { ...opt, semantic: "name" }),
-      text("mobile", 32, "Mobile", { rules: { personal: true, validation: { format: "phone" } } }),
-      // A yes to visit texts: the unticked box, ticked.
-      { ref: "texts_ok", type: "bool", default: false, label: l("Yes to texts") },
-      // A no: "Remind me by text" switched off.
-      { ref: "texts_off", type: "bool", default: false, label: l("Asked to stop") },
-      choice("source", "Where", { booking: "First booking", register: "Registration", prefs: "Reminders page" }),
-      // The booking's or registration's reference the box was ticked on, so the desk can link it when it accepts that.
-      text("about_ref", 12, "Booking or registration", opt),
-      createdAt,
     ],
   },
 ];

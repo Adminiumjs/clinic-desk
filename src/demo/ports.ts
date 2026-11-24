@@ -15,13 +15,13 @@ import {
   type DeskReads,
   type DeskSnapshot,
   type OwnDetails,
-  type OwnTextAnswer,
   type OwnVisit,
   type PatientsPort,
 } from "../data/ports.ts";
 import type { Appointment, Id, Patient, TableRef, WaitingEntry } from "../data/types.ts";
 import { addDays, venueDay, venueMidnight } from "../data/venueTime.ts";
 import { DemoRefusal, type DemoDb, type Writer } from "./db.ts";
+import { demoFormYes, demoStaffAnswer, demoStanding, recordDemoText } from "./texts.ts";
 import { days, slots } from "./booking.ts";
 
 /** The code the demo's emails would carry. */
@@ -191,13 +191,23 @@ export function demoDeskReads(db: DemoDb): DeskReads {
         visitsTotal: visits.length,
         recalls: r.recalls.filter((x) => x.patient_id === id),
         payments: r.payments.filter((p) => ids.has(p.appointment_id)),
-        textAnswers: r.text_answers.filter((a) => a.patient_id === id || (a.patient_id === null && a.mobile === patient.mobile)),
         texts: r.messages.filter((m) => m.patient_id === id && (m.kind === "reminder_text" || m.kind === "missed_text")).sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")),
       });
     },
 
-    async textAnswersAbout(ref) {
-      return plain(r.text_answers.filter((a) => a.about_ref === ref && a.patient_id === null));
+    async textsReady() {
+      return r.settings[0]?.texts_on === true;
+    },
+
+    async textStanding(patientId) {
+      const p = r.patients.find((x) => x.id === patientId);
+      return p === undefined ? null : plain(demoStanding(db, p.mobile));
+    },
+
+    async recordText(patientId, answer) {
+      const p = r.patients.find((x) => x.id === patientId);
+      if (p === undefined) throw new Error(`patient ${String(patientId)} is not there`);
+      return plain(demoStaffAnswer(db, p.mobile, answer, "Ivy Ferreira"));
     },
 
     async matches(person) {
@@ -276,6 +286,7 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
     async catalogue(): Promise<Catalogue> {
       const today = venueDay(db.now(), db.zone);
       return plain({
+        textsReady: r.settings[0]?.texts_on === true,
         settings: r.settings[0] ?? null,
         hours: r.opening_hours,
         clinicians: r.clinicians.filter((c) => c.active && c.bookable_online).sort((a, b) => a.position - b.position),
@@ -377,8 +388,11 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
           values["new_mobile"] = p?.mobile ?? null;
           values["new_email"] = p?.email ?? null;
           values["check_status"] = "to_check";
+          if (p?.textsOk === true) values["texts_ok"] = true;
         }
         const row = db.insert("appointments", values, patient);
+        // The box ticked on a first visit: the yes is kept for the number typed beside it, if the practice sends texts.
+        if (session === null && visit.newPatient?.textsOk === true && settings?.texts_on === true) demoFormYes(db, visit.newPatient.mobile, false);
         return { ref: row.ref, starts_at: row.starts_at, minutes: row.minutes, clinician_id: row.clinician_id, status: row.status };
       }),
 
@@ -401,7 +415,8 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
     register: (person) =>
       attempt(() => {
         if (onlineOff()) refuse("PUBLIC_SWITCHED_OFF", "Online booking is closed.");
-        const row = db.insert("registrations", { ...person }, patient);
+        const row = db.insert("registrations", { ...person, texts_ok: person.texts_ok === true }, patient);
+        if (person.texts_ok === true && r.settings[0]?.texts_on === true) demoFormYes(db, person.mobile, false);
         return { ref: row.ref };
       }),
 
@@ -426,34 +441,17 @@ export function demoPatientsPort(db: DemoDb): PatientsPort {
       session = null;
     },
 
-    // ── visit texts: kept in the demo's practice, and nothing is ever sent ──
-    myTextAnswers: async (): Promise<OwnTextAnswer[]> => {
-      const p = mine();
-      return plain(
-        r.text_answers
-          .filter((a) => a.patient_id === p.id)
-          .map(({ id, texts_ok, texts_off, source, created_at }) => ({ id, texts_ok, texts_off, source, created_at }))
-          .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id - b.id),
-      );
-    },
+    // ── visit texts: kept in the demo's own log, by Adminium's rules, and nothing is ever sent ──
+    myTextStanding: async () => plain(demoStanding(db, mine().mobile)),
 
-    textYes: (answer) =>
-      attempt(() => {
-        if (onlineOff()) refuse("PUBLIC_SWITCHED_OFF", "Online booking is closed.");
-        if (answer.source === "prefs") {
-          const p = mine();
-          db.insert("text_answers", { patient_id: p.id, mobile: answer.mobile, texts_ok: true, source: "prefs" }, patient);
-          return;
-        }
-        if (r.settings[0]?.texts_on !== true) refuse("PUBLIC_SWITCHED_OFF", "The practice sends no texts.");
-        db.insert("text_answers", { name: answer.name ?? null, mobile: answer.mobile, texts_ok: true, source: answer.source, about_ref: answer.aboutRef ?? null }, patient);
-      }),
-
-    textNo: (mobile) =>
+    setTexts: (on) =>
       attempt(() => {
         if (onlineOff()) refuse("PUBLIC_SWITCHED_OFF", "Online booking is closed.");
         const p = mine();
-        db.insert("text_answers", { patient_id: p.id, mobile, texts_off: true, source: "prefs" }, patient);
+        db.update("patients", p.id, on ? { remind_text: true, texts_off: false } : { remind_text: false, texts_off: true }, patient);
+        // Their own fresh yes replaces their own no (never a STOP); their no is always taken.
+        if (on) demoFormYes(db, p.mobile, true);
+        else recordDemoText(db, p.mobile, { state: "no", source: "form", how: null, by: null });
       }),
 
     // ── paying online: the demo takes payments, and no money moves ──

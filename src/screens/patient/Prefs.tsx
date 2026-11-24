@@ -13,13 +13,13 @@
 import { useEffect, useState } from "react";
 import { Check, KeyRound, Mail, RotateCw } from "lucide-react";
 
-import type { CodeSent, OwnDetails, OwnTextAnswer } from "../../data/ports.ts";
+import type { CodeSent, OwnDetails, TextStanding } from "../../data/ports.ts";
 import { PortError } from "../../data/ports.ts";
 import { useI18n } from "../../i18n/index.tsx";
 import { Btn, Chip, Switch, cardStyle, mono } from "../../components/ui.tsx";
 import { ageOn, num } from "../../lib/format.ts";
 import { checkCode, loadMyDetails, patientsPort, savePrefs, sendCode, usePatients } from "../../state/patients.ts";
-import { chinaMainland, ltr, ownTextState } from "../../lib/texts.ts";
+import { chinaMainland, ltr } from "../../lib/texts.ts";
 import { TextBox } from "./TextBox.tsx";
 import { toast } from "../../state/ui.ts";
 import { CodeBoxes, CodeStep, EMPTY_CODE, codeMessage, countdownLabel, useCountdown } from "./CodeStep.tsx";
@@ -87,7 +87,7 @@ function Found() {
       ) : details === null ? (
         <div className="rh-skel" style={{ height: 320, borderRadius: 16 }} />
       ) : (
-        <Form details={details} phone={cat.settings?.phone ?? ""} textsOn={cat.settings?.texts_on === true} />
+        <Form details={details} phone={cat.settings?.phone ?? ""} textsOn={cat.settings?.texts_on === true && cat.textsReady} />
       )}
     </div>
   );
@@ -95,27 +95,34 @@ function Found() {
 
 function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string; textsOn: boolean }) {
   const { t } = useI18n();
-  // Their own last word on texts (read once): on, off because they asked us to stop, or never asked. Null while it loads.
-  const [answers, setAnswers] = useState<OwnTextAnswer[] | null>(null);
-  const textState = answers === null ? null : ownTextState(answers);
+  // Where they stand on texts, as Adminium keeps it (read once, and again after a change). Null while it loads.
+  const [standing, setStanding] = useState<TextStanding | null>(null);
+  const textState = standing?.service.state ?? null;
   const [byText, setByText] = useState(false);
   const [boxTicked, setBoxTicked] = useState(false);
+  const readStanding = async (): Promise<void> => {
+    const found = await patientsPort().myTextStanding();
+    setStanding(found);
+    setByText(found.service.state === "yes");
+    setBoxTicked(false);
+  };
   useEffect(() => {
     let live = true;
     patientsPort()
-      .myTextAnswers()
+      .myTextStanding()
       .then((found) => {
         if (!live) return;
-        setAnswers(found);
-        setByText(ownTextState(found) === "on");
+        setStanding(found);
+        setByText(found.service.state === "yes");
       })
-      .catch(() => live && setAnswers([]));
+      .catch(() => live && setStanding(null));
     return () => {
       live = false;
     };
   }, []);
-  // Shown while the practice sends texts, or while theirs are on (so they can always switch them off).
-  const showTexts = textState !== null && (textsOn || textState === "on");
+  // Shown while the practice can send texts, or while theirs are on (so they can always switch them off).
+  const showTexts = textState !== null && textState !== "no-phone" && (textsOn || textState === "yes");
+  const stopped = standing?.stopped ?? null;
   const china = chinaMainland(details.mobile);
   const [email, setEmail] = useState(details.email ?? "");
   const [remind, setRemind] = useState(details.remind_email);
@@ -149,29 +156,27 @@ function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string;
 
   /**
    * "Remind me by text", saved with the rest. On, with the box ticked: their
-   * yes, for the number on file. Off, when it was on: their no, and texts stop.
-   * On with the box left empty changes nothing: the switch goes back, with no
-   * question asked.
+   * yes, for the number on file (it replaces their own earlier no). Off, when
+   * it was on: their no, and texts stop. On with the box left empty changes
+   * nothing: the switch goes back, with no question asked. A STOP is theirs to
+   * lift by texting START: nothing here can.
    */
   const saveTexts = async () => {
-    if (textState === null) return;
-    const wasOn = textState === "on";
+    if (textState === null || stopped !== null) return;
+    const wasOn = textState === "yes";
     try {
       if (byText && !wasOn && boxTicked && !china) {
-        await patientsPort().textYes({ mobile: details.mobile, source: "prefs" });
+        await patientsPort().setTexts(true);
         toast(t("texts.prefs.savedOn"), { icon: "message-square", tone: "pos" });
       } else if (!byText && wasOn) {
-        await patientsPort().textNo(details.mobile);
+        await patientsPort().setTexts(false);
         toast(t("texts.prefs.savedOff"), { icon: "message-square-off", tone: "pos" });
       } else {
         setByText(wasOn);
         setBoxTicked(false);
         return;
       }
-      const found = await patientsPort().myTextAnswers();
-      setAnswers(found);
-      setByText(ownTextState(found) === "on");
-      setBoxTicked(false);
+      await readStanding();
     } catch (error) {
       if (error instanceof PortError && sessionEnded(error.code)) throw error;
       toast(t("texts.prefs.notSaved", { phone }), { icon: "triangle-alert", tone: "danger" });
@@ -278,6 +283,9 @@ function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string;
         </span>
         <Switch on={remind} onChange={setRemind} label={t("prefs.remind")} />
       </div>
+      {textState === "no-phone" && textsOn && (
+        <p style={{ margin: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{t("texts.prefs.noPhone", { phone: ltr(phone) })}</p>
+      )}
       {showTexts && (
         <div data-part="prefs-texts" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
@@ -288,10 +296,17 @@ function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string;
               <span id="pr-texts-body" style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>
                 {t("texts.prefs.remindBody", { mobile: ltr(details.mobile) })}
               </span>
-              {textState === "stopped" && !byText && (
-                <span role="status" style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>
-                  {t("texts.prefs.stopped")}
+              {stopped !== null ? (
+                <span role="status" data-part="prefs-texts-stopped" style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.55, color: "var(--warn)", textWrap: "pretty" }}>
+                  {stopped.liftBy === "start" ? t("texts.prefs.stoppedStart") : stopped.liftBy === "business" ? t("texts.prefs.stoppedBusiness", { phone: ltr(phone) }) : t("texts.prefs.stoppedNever")}
                 </span>
+              ) : (
+                textState === "no" &&
+                !byText && (
+                  <span role="status" style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>
+                    {t("texts.prefs.stopped")}
+                  </span>
+                )
               )}
             </span>
             <Switch
@@ -303,10 +318,10 @@ function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string;
               }}
               label={t("texts.prefs.remind")}
               describedBy="pr-texts-body"
-              disabled={china && textState !== "on"}
+              disabled={stopped !== null || (china && textState !== "yes")}
             />
           </div>
-          {(byText && textState !== "on") || china ? <TextBox id="pr-texts-box" phone={details.mobile} checked={boxTicked} onChange={setBoxTicked} /> : null}
+          {stopped === null && ((byText && textState !== "yes") || china) ? <TextBox id="pr-texts-box" phone={details.mobile} checked={boxTicked} onChange={setBoxTicked} /> : null}
         </div>
       )}
       <div role="group" aria-labelledby="pr-when">

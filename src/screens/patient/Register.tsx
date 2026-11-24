@@ -13,7 +13,7 @@ import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
 import { Btn, cardStyle, monoPill } from "../../components/ui.tsx";
 import { num } from "../../lib/format.ts";
-import { agreeToTexts, loadCatalogue, register, usePatients } from "../../state/patients.ts";
+import { loadCatalogue, patientsPort, register, signOutPatient, usePatients } from "../../state/patients.ts";
 import { chinaMainland } from "../../lib/texts.ts";
 import { TextBox } from "./TextBox.tsx";
 import { useDemoSignal } from "../../state/demoSignal.ts";
@@ -41,8 +41,8 @@ export default function Register() {
   if (cat === null || settings === null) return null;
   // The first-visit type by position; without one, the page leaves its length out.
   const firstType = cat.visitTypes.filter((x) => x.new_patients_only && x.active && x.bookable_online).sort((a, b) => a.position - b.position)[0] ?? null;
-  // The box for visit texts shows only while the practice sends them.
-  const texts = settings.texts_on === true;
+  // The box for visit texts shows only while the practice sends them and Adminium can send one.
+  const texts = settings.texts_on === true && cat.textsReady;
   const emailOk = r.email.trim() === "" || isEmail(r.email);
   const ok = personReady({ name: r.name, bornOn: r.bornOn, mobile: r.mobile }, today) && emailOk;
 
@@ -51,6 +51,8 @@ export default function Register() {
     setBusy(true);
     setProblem(null);
     try {
+      // A registration is a new person's: never sent with a session held (it would be linked to whoever was found).
+      if (patientsPort().level() !== null) await signOutPatient();
       const done = await register({
         name: r.name.trim(),
         born_on: r.bornOn.trim(),
@@ -59,9 +61,9 @@ export default function Register() {
         address: r.address.trim() === "" ? null : r.address.trim(),
         emergency_contact: r.contact.trim() === "" ? null : r.contact.trim(),
         language: locale(),
+        // The box for texts rides the registration itself: an unticked box sends nothing.
+        texts_ok: texts && r.textsOk && !chinaMainland(r.mobile),
       });
-      // The box for texts, ticked: its yes goes once the registration is made, and the registration never waits on it.
-      if (texts && r.textsOk && !chinaMainland(r.mobile)) void agreeToTexts({ mobile: r.mobile.trim(), source: "register", name: r.name.trim(), aboutRef: done.ref });
       setRegistering({ done: done.ref });
       toast(t("register.toast", { ref: done.ref }), { icon: "user-plus", tone: "pos" });
     } catch (error) {

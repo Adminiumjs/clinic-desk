@@ -40,8 +40,6 @@ import type {
   Settings,
   TableRef,
   Tables,
-  TextAnswer,
-  TextSource,
   VisitType,
   WaitingEntry,
   WriteOff,
@@ -127,8 +125,6 @@ export interface PatientPage {
   visitsTotal: number;
   recalls: Recall[];
   payments: Payment[];
-  /** Their answers about texts: their own, and any given on the box for the number on file before they were. */
-  textAnswers: TextAnswer[];
   /** The texts the outbox logged for them, newest first. */
   texts: Message[];
 }
@@ -174,8 +170,16 @@ export interface DeskReads {
   matches(person: { name: string; born_on: Day; mobile: string }): Promise<{ both: Patient[]; name: Patient[]; mobile: Patient[] }>;
   times(query: SlotQuery & { date: Day }): Promise<SlotTime[]>;
   days(query: SlotQuery & { from: Day; days: number }): Promise<DayState[]>;
-  /** The answers about texts given on the box of a booking or a registration (its reference), with nobody linked yet. */
-  textAnswersAbout(ref: string): Promise<TextAnswer[]>;
+  /** Whether a text can go at all (a provider and a sender set up in Adminium, texts not switched off). */
+  textsReady(): Promise<boolean>;
+  /** Where a patient stands on the practice's texts, as Adminium keeps it; null where nobody can tell (no Adminium). */
+  textStanding(patientId: Id): Promise<TextStanding | null>;
+  /**
+   * The desk records a patient's yes (with the box's words they were given) or
+   * their no, heard in person, by phone or on paper. Named and audited by
+   * Adminium; a yes never lifts a STOP.
+   */
+  recordText(patientId: Id, answer: StaffTextAnswer): Promise<TextStanding | null>;
   /** A patient's code lock: ten wrong codes in a day. */
   codeLock(patientId: Id): Promise<{ locked: boolean; failures: number }>;
   clearCodeLock(patientId: Id): Promise<void>;
@@ -196,6 +200,8 @@ export interface Catalogue {
   faqs: Faq[];
   /** Closed days from today, with the note for patients. */
   closures: Closure[];
+  /** Whether a text can go at all: the box for texts is drawn only then (and only while the practice sends them). */
+  textsReady: boolean;
 }
 
 export type Level = "lookup" | "verified";
@@ -271,20 +277,35 @@ export interface NewVisit {
   desk_note: string | null;
   language: string;
   /** A first visit by someone not on file. */
-  newPatient?: { name: string; born_on: Day; mobile: string; email: string | null };
+  newPatient?: { name: string; born_on: Day; mobile: string; email: string | null; textsOk?: boolean };
 }
 
-/** A patient's own answer about texts, as their Prefs page reads it. */
-export type OwnTextAnswer = Pick<TextAnswer, "id" | "texts_ok" | "texts_off" | "source" | "created_at">;
+/** One purpose of the practice's texts, as Adminium says a person stands on it. */
+export interface TextPurpose {
+  state: "yes" | "no" | "not-asked" | "stopped" | "no-phone";
+  /** The answer that makes it so: when, where from (`form`, `staff`, `person`, `reply`, `provider`), how, by whom. */
+  answer: { at: number; source: string; how: string | null; by: { id: string; label: string } | null; wordingVersion: string | null } | null;
+}
 
-/** A yes from the box: with nobody on file (a first booking, a registration), or the verified patient's own (Prefs). */
-export interface TextYes {
-  mobile: string;
-  source: TextSource;
-  /** The name typed beside it, when nobody is on file. */
-  name?: string | null;
-  /** The booking's or registration's reference, so the desk can link it when it accepts that. */
-  aboutRef?: string | null;
+/**
+ * Where a person stands on the practice's texts (Adminium's text consent log
+ * and its stop list). `stopped` is set while their number is on the stop
+ * list: no yes lifts it. `liftBy`: `start` (they text START to the number
+ * the texts come from), `business` (they ask the practice), `never`.
+ */
+export interface TextStanding {
+  ready: boolean;
+  /** Their number as `+44 ••• 142`; null when their row holds none. */
+  masked: string | null;
+  service: TextPurpose;
+  stopped: { since: number; reason: string; liftBy: "start" | "business" | "never" } | null;
+}
+
+/** A yes or a no the desk heard from the patient. A yes carries the words they were given, and their version. */
+export interface StaffTextAnswer {
+  state: "yes" | "no";
+  how: "in-person" | "phone" | "paper" | "email";
+  wording?: { text: string; version: string };
 }
 
 export interface NewRegistration {
@@ -295,6 +316,8 @@ export interface NewRegistration {
   address: string | null;
   emergency_contact: string | null;
   language: string;
+  /** The box for texts, ticked. */
+  texts_ok?: boolean;
 }
 
 /** What someone joining the earlier-time list asks for. */
@@ -357,16 +380,14 @@ export interface PatientsPort {
   signOut(): Promise<void>;
 
   // ── visit texts ──
-  /** The verified patient's answers about texts, oldest first. */
-  myTextAnswers(): Promise<OwnTextAnswer[]>;
+  /** The verified patient's own standing on the practice's texts (Adminium's). */
+  myTextStanding(): Promise<TextStanding>;
   /**
-   * A yes from the unticked box, ticked. Sent after the booking or the
-   * registration is made, never as a condition of it: a refusal here costs
-   * the yes, and nothing else.
+   * "Remind me by text": on is the box ticked on their own row (their yes, for
+   * the number on file; it replaces their own earlier no, never a STOP); off
+   * is the box that means no.
    */
-  textYes(answer: TextYes): Promise<void>;
-  /** The verified patient's no, for the number on file: texts stop. */
-  textNo(mobile: string): Promise<void>;
+  setTexts(on: boolean): Promise<void>;
 
   // ── paying online ──
   /** Whether "Pay now" may be offered: false on a practice that takes no payments, and the pages read as ever. */

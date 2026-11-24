@@ -164,6 +164,10 @@ export interface Patient {
   language: string | null;
   remind_email: boolean;
   remind_lead_hours: number;
+  /** The box for texts on their row: ticking it is a yes Adminium keeps; the standing itself is Adminium's. */
+  remind_text: boolean;
+  /** The box that means "no": ticked when they switch texts off. */
+  texts_off: boolean;
   status: "active" | "archived";
   created_at: Instant | null;
 }
@@ -180,6 +184,8 @@ export interface Registration {
   address: string | null;
   emergency_contact: string | null;
   language: string | null;
+  /** Whether the box for texts was ticked as they registered. */
+  texts_ok: boolean;
   status: RegistrationStatus;
   patient_id: Id | null;
   outcome: string | null;
@@ -224,6 +230,8 @@ export interface Appointment {
   new_born_on: Day | null;
   new_mobile: string | null;
   new_email: string | null;
+  /** A first visit's box for texts, ticked. */
+  texts_ok: boolean;
   clinician_id: Id | null;
   visit_type_id: Id;
   starts_at: Instant;
@@ -383,6 +391,8 @@ export interface Message {
   language: string | null;
   status: MessageStatus;
   error: string | null;
+  /** A text row's outcome as Adminium's code (`no-consent`, `stopped`, `not-set-up` …); null for an email. */
+  text_reason: string | null;
   due_at: Instant | null;
   sent_at: Instant | null;
   created_by: string | null;
@@ -399,26 +409,6 @@ export interface DayClose {
   note: string | null;
   closed_by: string | null;
   closed_at: Instant;
-}
-
-/** Where a patient answered about texts. */
-export type TextSource = "booking" | "register" | "prefs";
-
-/**
- * A patient's answer about texts: a yes (the box ticked) or a no (switched
- * off in their Prefs). Adminium keeps the consent itself, in its text consent
- * log; this is the practice's copy, for the desk and the Prefs page.
- */
-export interface TextAnswer {
-  id: Id;
-  patient_id: Id | null;
-  name: string | null;
-  mobile: string;
-  texts_ok: boolean;
-  texts_off: boolean;
-  source: TextSource;
-  about_ref: string | null;
-  created_at: Instant | null;
 }
 
 /** Every table, by its short name, with the row it holds. */
@@ -442,7 +432,6 @@ export interface Tables {
   waiting_list: WaitingEntry;
   messages: Message;
   day_closes: DayClose;
-  text_answers: TextAnswer;
 }
 export type TableRef = keyof Tables;
 

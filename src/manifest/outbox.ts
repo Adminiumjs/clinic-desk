@@ -62,6 +62,8 @@ export const OUTBOX = {
     due: "due_at",
     sentAt: "sent_at",
     error: "error",
+    // A text row's outcome as Adminium's code: what the desk reads, never the English sentence.
+    textReason: "text_reason",
   },
   links: {
     patient: "patient_id",
@@ -84,7 +86,9 @@ export const OUTBOX = {
   },
   // `phone`: the notice to a patient's old address after an email change ends
   // "If this wasn't you, ring us on …" with the desk's number.
-  settings: { table: "settings", enabled: "reminders_on", name: "practice_name", phone: "phone" },
+  // `textName`: the name Adminium's own texts give the practice (the "not read" answer, a STOP's confirmation) — the
+  // plain one a sensitive practice chose, never the name its emails are signed with.
+  settings: { table: "settings", enabled: "reminders_on", name: "practice_name", phone: "phone", textName: "text_name" },
   pages: { manage: "/my-visits", booking: "/" },
   kinds: {
     confirmation: "clinic-confirmation",

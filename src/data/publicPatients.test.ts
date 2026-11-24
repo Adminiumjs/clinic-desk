@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import type { PublicClient } from "@adminiumjs/public-client";
 
-import { publicPatientsPort } from "./publicPatients.ts";
+import { publicPatientsPort, refsOf } from "./publicPatients.ts";
 import { TABLE_OF_REF } from "./tableOfRef.ts";
 
 const ref = (actions: string[], expose: string[] = [], kind?: string) => ({ actions, expose, ...(kind === undefined ? {} : { kind }) });
@@ -91,5 +91,31 @@ describe("the patients' pages over the public API", () => {
     expect(moved).toMatchObject({ id: 8, ref: "RH-0008", clinician_id: 1, visit_type_id: 3, minutes: 15, status: "booked", reason: "Check-up", starts_at: "2026-08-05T10:00:00.000Z" });
     const cancelled = await port.cancel(8);
     expect(cancelled).toMatchObject({ id: 8, ref: "RH-0008", minutes: 15, status: "cancelled", starts_at: "2026-08-05T10:00:00.000Z" });
+  });
+
+  it("tells the patient's details door from \"Remind me by text\" switched off, whichever comes first", () => {
+    const config = {
+      timezone: "Europe/London",
+      claim: { ref: "clinic_patients_claim" },
+      refs: {
+        clinic_settings: ref(["read"]),
+        clinic_opening_hours: ref(["read"]),
+        clinic_clinicians: ref(["read"], ["bio"]),
+        clinic_clinicians_names: ref(["read"]),
+        clinic_visit_types: ref(["read"]),
+        clinic_clinician_visit_types: ref(["read"]),
+        clinic_faqs: ref(["read"]),
+        clinic_closures: ref(["read"]),
+        clinic_appointments_availability: ref(["read"], [], "availability"),
+        clinic_patients_claim: ref(["read"]),
+        clinic_patients_texts: { actions: ["update"], expose: ["id"], writable: ["remind_text", "texts_off"] },
+        clinic_patients_verified: { actions: ["read", "update"], expose: ["id", "email", "mobile"], writable: ["remind_email", "remind_text", "texts_off"] },
+        clinic_appointments_claimed: ref(["create"]),
+        clinic_appointments_verified: ref(["read", "update"], ["late_cancel"]),
+        clinic_registrations: ref(["create"]),
+      },
+    };
+    const refs = refsOf(config as never, TABLE_OF_REF);
+    expect([refs.details, refs.textStop]).toEqual(["clinic_patients_verified", "clinic_patients_texts"]);
   });
 });

@@ -58,7 +58,6 @@ const TEXT_WHY: Record<TextReason, MessageKey> = {
   empty: "outbox.why.textEmpty",
   waiting: "outbox.why.textWaiting",
   limit: "outbox.why.textLimit",
-  off: "outbox.why.textOff",
 };
 
 /** A visit the desk may still remind: booked, and not started. */
@@ -246,9 +245,9 @@ function Row({
   const text = isTextKind(row.kind);
   const to = row.upcoming !== null ? row.upcoming.to : (m?.to_address ?? null);
   const why = m === null ? null : reasonKey(m.error);
-  // A text's reason is Adminium's fixed sentence; it holds no number and no word of the text.
-  const textWhy = !text || m === null ? null : textReason(m.error);
-  const textWords = textWhy === null ? "" : t(TEXT_WHY[textWhy]);
+  // A text's outcome is Adminium's code; with none the desk has words for, its fixed sentence (no number, no word of the text).
+  const textWhy = !text || m === null ? null : textReason(m.text_reason);
+  const textWords = textWhy !== null ? t(TEXT_WHY[textWhy]) : text && m !== null && row.state === "failed" ? (m.error ?? "").trim() : "";
   const noAddress = to === null || to.trim() === "";
   const line = lineFor(row, visit, desk, t);
 

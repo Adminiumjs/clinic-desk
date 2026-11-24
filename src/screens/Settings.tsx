@@ -16,7 +16,7 @@ import { today } from "../lib/clock.ts";
 import { visitsOn } from "../lib/desk.ts";
 import { useNow } from "../lib/useNow.ts";
 import { saveSettings } from "../state/actions.ts";
-import { useCan, useDesk } from "../state/desk.ts";
+import { deskReads, useCan, useDesk } from "../state/desk.ts";
 import { useDeskPay } from "../state/deskPay.ts";
 import { SuppliesGone } from "../data/supplies.ts";
 import { SUPPLIES } from "../lib/features.ts";
@@ -247,6 +247,18 @@ function TextsPart({ settings, manager, saving, save }: { settings: Row; manager
   const nameId = useId();
   const helpId = useId();
   const [name, setName] = useState(settings.text_name ?? settings.practice_name);
+  // Whether Adminium can send a text at all (a provider and a sender set up in Studio → Texts).
+  const [ready, setReady] = useState<boolean | null>(null);
+  useEffect(() => {
+    let live = true;
+    deskReads()
+      .textsReady()
+      .then((answer) => live && setReady(answer))
+      .catch(() => live && setReady(false));
+    return () => {
+      live = false;
+    };
+  }, []);
   useEffect(() => setName(settings.text_name ?? settings.practice_name), [settings.text_name, settings.practice_name]);
   const typed = name.trim();
   const saved = (settings.text_name ?? "").trim();
@@ -297,6 +309,11 @@ function TextsPart({ settings, manager, saving, save }: { settings: Row; manager
         </form>
         {saved === "" && <p style={{ margin: "8px 0 0", fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: "var(--warn)" }}>{t("texts.settings.empty")}</p>}
       </div>
+      {ready === false && (
+        <p role="note" data-part="settings-texts-not-ready" style={{ margin: 0, fontSize: 12, fontWeight: 700, lineHeight: 1.55, color: "var(--warn)", textWrap: "pretty" }}>
+          {t("texts.settings.notReady")}
+        </p>
+      )}
       <p style={{ margin: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("texts.settings.replies")}</p>
     </div>
   );

@@ -16,7 +16,7 @@ import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
 import { Btn, cardStyle, mono, pill, segWide } from "../../components/ui.tsx";
 import { dayShort, money, num } from "../../lib/format.ts";
-import { agreeToTexts, bookVisit, findMe, loadCatalogue, patientsPort, signOutPatient, usePatients } from "../../state/patients.ts";
+import { bookVisit, findMe, loadCatalogue, patientsPort, signOutPatient, usePatients } from "../../state/patients.ts";
 import { chinaMainland } from "../../lib/texts.ts";
 import { useDemoSignal } from "../../state/demoSignal.ts";
 import { go } from "../../state/ui.ts";
@@ -81,8 +81,8 @@ export default function Details() {
   const shownFound = returning && b.foundName !== null && found !== null ? b.foundName : null;
   const picked = type !== null && day !== null && time !== null;
 
-  // The box for visit texts shows only while the practice sends them.
-  const texts = settings.texts_on === true;
+  // The box for visit texts shows only while the practice sends them and Adminium can send one.
+  const texts = settings.texts_on === true && cat.textsReady;
   const fee = type?.fee ?? 0;
   // Only someone already on file pays as they book (a first visit waits for the desk's check), and only a visit with a fee.
   const payAhead = paying.online === true && settings.pay_ahead === true && returning && fee > 0 && moving === null;
@@ -168,7 +168,8 @@ export default function Details() {
         reason: b.reason.trim() === "" ? null : b.reason.trim(),
         desk_note: b.deskNote.trim() === "" ? null : b.deskNote.trim(),
         language: locale(),
-        ...(returning ? {} : { newPatient: { name: b.name.trim(), born_on: b.bornOn.trim(), mobile: b.mobile.trim(), email: b.email.trim() === "" ? null : b.email.trim() } }),
+        // The box for texts rides the booking itself: an unticked box sends nothing, and nothing waits on it.
+        ...(returning ? {} : { newPatient: { name: b.name.trim(), born_on: b.bornOn.trim(), mobile: b.mobile.trim(), email: b.email.trim() === "" ? null : b.email.trim(), textsOk: texts && b.textsOk && !chinaMainland(b.mobile) } }),
       };
       if (payNow) {
         // Made waiting for its payment, its time held; then off to the pay page.
@@ -197,11 +198,7 @@ export default function Details() {
         if ((await bookAndPay(made, shown)) === "desk") confirmBooked({ ...shown.booked, status: "booked" }, { payNotOpen: true });
         return;
       }
-      const made = await bookVisit(visit, { firstName: firstName(returning ? (found?.name ?? "") : b.name), email: returning ? null : visit.newPatient?.email ?? null });
-      // The box for texts, ticked: its yes goes once the visit is booked, and the booking never waits on it.
-      if (!returning && texts && b.textsOk && visit.newPatient !== undefined && !chinaMainland(visit.newPatient.mobile)) {
-        void agreeToTexts({ mobile: visit.newPatient.mobile, source: "booking", name: visit.newPatient.name, aboutRef: made.ref });
-      }
+      await bookVisit(visit, { firstName: firstName(returning ? (found?.name ?? "") : b.name), email: returning ? null : visit.newPatient?.email ?? null });
       resetBooking();
       usePatients.setState({ time: null });
       go("confirm");

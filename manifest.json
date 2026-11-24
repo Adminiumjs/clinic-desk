@@ -2270,6 +2270,36 @@
             }
           },
           {
+            "ref": "remind_text",
+            "type": "bool",
+            "default": false,
+            "label": {
+              "en-US": "Remind me by text",
+              "de-DE": "Per SMS erinnern",
+              "fr-FR": "Me rappeler par SMS",
+              "da-DK": "Påmind mig på sms",
+              "cs-CZ": "Připomenout SMS",
+              "ar-EG": "ذكّرني برسالة نصية",
+              "zh-CN": "通过短信提醒我",
+              "zh-TW": "以簡訊提醒我"
+            }
+          },
+          {
+            "ref": "texts_off",
+            "type": "bool",
+            "default": false,
+            "label": {
+              "en-US": "Asked to stop texts",
+              "de-DE": "SMS abbestellt",
+              "fr-FR": "A demandé l’arrêt des SMS",
+              "da-DK": "Bad om stop for sms’er",
+              "cs-CZ": "Odhlášeno ze SMS",
+              "ar-EG": "طلب إيقاف الرسائل",
+              "zh-CN": "要求停止短信",
+              "zh-TW": "要求停止簡訊"
+            }
+          },
+          {
             "ref": "status",
             "type": "enum",
             "enum": [
@@ -2505,6 +2535,21 @@
               "zh-TW": "語言"
             },
             "nullable": true
+          },
+          {
+            "ref": "texts_ok",
+            "type": "bool",
+            "default": false,
+            "label": {
+              "en-US": "Texts",
+              "de-DE": "SMS",
+              "fr-FR": "SMS",
+              "da-DK": "Sms’er",
+              "cs-CZ": "SMS",
+              "ar-EG": "الرسائل النصية",
+              "zh-CN": "短信",
+              "zh-TW": "簡訊"
+            }
           },
           {
             "ref": "status",
@@ -3007,6 +3052,21 @@
               "validation": {
                 "format": "email"
               }
+            }
+          },
+          {
+            "ref": "texts_ok",
+            "type": "bool",
+            "default": false,
+            "label": {
+              "en-US": "First visit: texts",
+              "de-DE": "Erster Besuch: SMS",
+              "fr-FR": "Première visite : SMS",
+              "da-DK": "Første besøg: sms",
+              "cs-CZ": "První návštěva: SMS",
+              "ar-EG": "الزيارة الأولى: الرسائل النصية",
+              "zh-CN": "首次就诊：短信",
+              "zh-TW": "首次看診：簡訊"
             }
           },
           {
@@ -5809,6 +5869,22 @@
             "nullable": true
           },
           {
+            "ref": "text_reason",
+            "type": "text",
+            "maxLength": 40,
+            "label": {
+              "en-US": "Text outcome",
+              "de-DE": "SMS-Ergebnis",
+              "fr-FR": "Résultat du SMS",
+              "da-DK": "Sms-resultat",
+              "cs-CZ": "Výsledek SMS",
+              "ar-EG": "نتيجة الرسالة",
+              "zh-CN": "短信结果",
+              "zh-TW": "簡訊結果"
+            },
+            "nullable": true
+          },
+          {
             "ref": "due_at",
             "type": "timestamptz",
             "label": {
@@ -6036,208 +6112,6 @@
               "zh-TW": "日結時間"
             },
             "default": "now"
-          }
-        ]
-      },
-      {
-        "ref": "text_answers",
-        "label": {
-          "en-US": "Text answer",
-          "de-DE": "Antwort zu SMS",
-          "fr-FR": "Réponse sur les SMS",
-          "da-DK": "Svar om sms",
-          "cs-CZ": "Odpověď k SMS",
-          "ar-EG": "إجابة عن الرسائل النصية",
-          "zh-CN": "短信意愿",
-          "zh-TW": "簡訊意願"
-        },
-        "labelPlural": {
-          "en-US": "Text answers",
-          "de-DE": "Antworten zu SMS",
-          "fr-FR": "Réponses sur les SMS",
-          "da-DK": "Svar om sms’er",
-          "cs-CZ": "Odpovědi k SMS",
-          "ar-EG": "إجابات عن الرسائل النصية",
-          "zh-CN": "短信意愿记录",
-          "zh-TW": "簡訊意願紀錄"
-        },
-        "keyField": "name",
-        "columns": [
-          {
-            "ref": "id",
-            "type": "int",
-            "role": "pk"
-          },
-          {
-            "ref": "patient_id",
-            "type": "fk",
-            "references": "patients",
-            "label": {
-              "en-US": "Patient",
-              "de-DE": "Patient",
-              "fr-FR": "Patient",
-              "da-DK": "Patient",
-              "cs-CZ": "Pacient",
-              "ar-EG": "المريض",
-              "zh-CN": "患者",
-              "zh-TW": "病患"
-            },
-            "nullable": true
-          },
-          {
-            "ref": "name",
-            "type": "text",
-            "maxLength": 120,
-            "label": {
-              "en-US": "Name given",
-              "de-DE": "Angegebener Name",
-              "fr-FR": "Nom donné",
-              "da-DK": "Oplyst navn",
-              "cs-CZ": "Uvedené jméno",
-              "ar-EG": "الاسم المُعطى",
-              "zh-CN": "填写的姓名",
-              "zh-TW": "填寫的姓名"
-            },
-            "nullable": true,
-            "semantic": "name"
-          },
-          {
-            "ref": "mobile",
-            "type": "text",
-            "maxLength": 32,
-            "label": {
-              "en-US": "Mobile",
-              "de-DE": "Mobilnummer",
-              "fr-FR": "Mobile",
-              "da-DK": "Mobil",
-              "cs-CZ": "Mobil",
-              "ar-EG": "رقم المحمول",
-              "zh-CN": "手机",
-              "zh-TW": "手機"
-            },
-            "rules": {
-              "personal": true,
-              "validation": {
-                "format": "phone"
-              }
-            }
-          },
-          {
-            "ref": "texts_ok",
-            "type": "bool",
-            "default": false,
-            "label": {
-              "en-US": "Yes to texts",
-              "de-DE": "Ja zu SMS",
-              "fr-FR": "Accepte les SMS",
-              "da-DK": "Ja til sms’er",
-              "cs-CZ": "Souhlas se SMS",
-              "ar-EG": "موافقة على الرسائل",
-              "zh-CN": "同意接收短信",
-              "zh-TW": "同意接收簡訊"
-            }
-          },
-          {
-            "ref": "texts_off",
-            "type": "bool",
-            "default": false,
-            "label": {
-              "en-US": "Asked to stop",
-              "de-DE": "Abbestellt",
-              "fr-FR": "Demande d’arrêt",
-              "da-DK": "Bad om stop",
-              "cs-CZ": "Odhlášeno",
-              "ar-EG": "طلب الإيقاف",
-              "zh-CN": "要求停止",
-              "zh-TW": "要求停止"
-            }
-          },
-          {
-            "ref": "source",
-            "type": "enum",
-            "enum": [
-              "booking",
-              "register",
-              "prefs"
-            ],
-            "label": {
-              "en-US": "Where",
-              "de-DE": "Wo",
-              "fr-FR": "Où",
-              "da-DK": "Hvor",
-              "cs-CZ": "Kde",
-              "ar-EG": "أين",
-              "zh-CN": "来源",
-              "zh-TW": "來源"
-            },
-            "rules": {
-              "enumLabels": {
-                "labels": {
-                  "booking": {
-                    "en-US": "First booking",
-                    "de-DE": "Erste Buchung",
-                    "fr-FR": "Première réservation",
-                    "da-DK": "Første booking",
-                    "cs-CZ": "První rezervace",
-                    "ar-EG": "الحجز الأول",
-                    "zh-CN": "首次预约",
-                    "zh-TW": "首次預約"
-                  },
-                  "register": {
-                    "en-US": "Registration",
-                    "de-DE": "Anmeldung",
-                    "fr-FR": "Inscription",
-                    "da-DK": "Tilmelding",
-                    "cs-CZ": "Registrace",
-                    "ar-EG": "طلب التسجيل",
-                    "zh-CN": "登记",
-                    "zh-TW": "登記"
-                  },
-                  "prefs": {
-                    "en-US": "Reminders page",
-                    "de-DE": "Erinnerungsseite",
-                    "fr-FR": "Page des rappels",
-                    "da-DK": "Påmindelsessiden",
-                    "cs-CZ": "Stránka připomínek",
-                    "ar-EG": "صفحة التذكيرات",
-                    "zh-CN": "提醒页面",
-                    "zh-TW": "提醒頁面"
-                  }
-                }
-              }
-            }
-          },
-          {
-            "ref": "about_ref",
-            "type": "text",
-            "maxLength": 12,
-            "label": {
-              "en-US": "Booking or registration",
-              "de-DE": "Buchung oder Registrierung",
-              "fr-FR": "Réservation ou inscription",
-              "da-DK": "Booking eller tilmelding",
-              "cs-CZ": "Rezervace nebo registrace",
-              "ar-EG": "الحجز أو التسجيل",
-              "zh-CN": "预约或登记",
-              "zh-TW": "預約或登記"
-            },
-            "nullable": true
-          },
-          {
-            "ref": "created_at",
-            "type": "timestamptz",
-            "role": "created_at",
-            "default": "now",
-            "label": {
-              "en-US": "Created",
-              "de-DE": "Erstellt",
-              "fr-FR": "Créé le",
-              "da-DK": "Oprettet",
-              "cs-CZ": "Vytvořeno",
-              "ar-EG": "تاريخ الإنشاء",
-              "zh-CN": "创建时间",
-              "zh-TW": "建立時間"
-            }
           }
         ]
       }
@@ -8722,7 +8596,6 @@
         "table:@waiting_list:read",
         "table:@messages:read",
         "table:@day_closes:read",
-        "table:@text_answers:read",
         "table:@patients:create",
         "table:@patients:update",
         "table:@registrations:create",
@@ -8742,7 +8615,6 @@
         "table:@check_notes:create",
         "table:@check_notes:update",
         "table:@payments:create",
-        "table:@text_answers:update",
         "page:@clinic-overview:view",
         "page:@clinic-appointments:view",
         "page:@clinic-patients:view",
@@ -8755,16 +8627,8 @@
         "table:@registrations:read_pii",
         "table:@appointments:read_pii",
         "table:@messages:read_pii",
-        "table:@text_answers:read_pii",
         "addOn:holiday-calendars:settings"
       ],
-      "limits": {
-        "text_answers": {
-          "writable": [
-            "patient_id"
-          ]
-        }
-      },
       "tables": [
         {
           "addOn": "inventory",
@@ -9143,8 +9007,6 @@
         "table:@day_closes:create",
         "table:@day_closes:update",
         "table:@day_closes:delete",
-        "table:@text_answers:read",
-        "table:@text_answers:update",
         "page:@clinic-overview:view",
         "page:@clinic-overview:edit",
         "page:@clinic-appointments:view",
@@ -9179,17 +9041,9 @@
         "table:@registrations:read_pii",
         "table:@appointments:read_pii",
         "table:@messages:read_pii",
-        "table:@text_answers:read_pii",
         "addOn:holiday-calendars:settings",
         "payments:@:refund"
       ],
-      "limits": {
-        "text_answers": {
-          "writable": [
-            "patient_id"
-          ]
-        }
-      },
       "tables": [
         {
           "addOn": "inventory",
@@ -9569,8 +9423,28 @@
       ],
       "writable": [
         "remind_email",
-        "remind_lead_hours"
+        "remind_lead_hours",
+        "remind_text",
+        "texts_off"
       ],
+      "textConsent": {
+        "column": "remind_text",
+        "phone": "mobile",
+        "class": "service",
+        "wording": {
+          "version": 1,
+          "text": {
+            "en-US": "Text me reminders for my visits. Only the practice name, the date and the time. Optional. You can stop at any time; each text tells you how.",
+            "de-DE": "Erinnerungen an meine Termine per SMS. Nur Praxisname, Datum und Uhrzeit. Freiwillig. Sie können jederzeit abbestellen; jede SMS sagt Ihnen, wie.",
+            "fr-FR": "M’envoyer des rappels de mes rendez-vous par SMS. Seulement le nom du cabinet, la date et l’heure. Facultatif. Vous pouvez arrêter à tout moment ; chaque SMS vous dit comment.",
+            "da-DK": "Send mig påmindelser om mine tider på sms. Kun klinikkens navn, datoen og klokkeslættet. Frivilligt. Du kan stoppe når som helst; hver sms fortæller dig hvordan.",
+            "cs-CZ": "Posílat mi připomínky termínů SMS. Jen název ordinace, datum a čas. Nepovinné. Můžete kdykoli přestat; každá SMS vám řekne jak.",
+            "ar-EG": "أرسلوا لي تذكيرات بمواعيدي عبر الرسائل النصية. اسم العيادة والتاريخ والوقت فقط. اختياري. يمكنك الإيقاف في أي وقت، وكل رسالة توضح لك الطريقة.",
+            "zh-CN": "通过短信提醒我就诊时间. 仅包含诊所名称、日期和时间。 可选。您可随时退订，每条短信都会说明退订方式。",
+            "zh-TW": "以簡訊提醒我看診時間. 僅包含診所名稱、日期與時間。 可選。您可隨時退訂，每則簡訊都會說明退訂方式。"
+          }
+        }
+      },
       "claimedBy": {
         "table": "patients",
         "column": "id"
@@ -9606,8 +9480,27 @@
         "new_born_on",
         "new_mobile",
         "new_email",
-        "language"
+        "language",
+        "texts_ok"
       ],
+      "textConsent": {
+        "column": "texts_ok",
+        "phone": "new_mobile",
+        "class": "service",
+        "wording": {
+          "version": 1,
+          "text": {
+            "en-US": "Text me reminders for my visits. Only the practice name, the date and the time. Optional. You can stop at any time; each text tells you how.",
+            "de-DE": "Erinnerungen an meine Termine per SMS. Nur Praxisname, Datum und Uhrzeit. Freiwillig. Sie können jederzeit abbestellen; jede SMS sagt Ihnen, wie.",
+            "fr-FR": "M’envoyer des rappels de mes rendez-vous par SMS. Seulement le nom du cabinet, la date et l’heure. Facultatif. Vous pouvez arrêter à tout moment ; chaque SMS vous dit comment.",
+            "da-DK": "Send mig påmindelser om mine tider på sms. Kun klinikkens navn, datoen og klokkeslættet. Frivilligt. Du kan stoppe når som helst; hver sms fortæller dig hvordan.",
+            "cs-CZ": "Posílat mi připomínky termínů SMS. Jen název ordinace, datum a čas. Nepovinné. Můžete kdykoli přestat; každá SMS vám řekne jak.",
+            "ar-EG": "أرسلوا لي تذكيرات بمواعيدي عبر الرسائل النصية. اسم العيادة والتاريخ والوقت فقط. اختياري. يمكنك الإيقاف في أي وقت، وكل رسالة توضح لك الطريقة.",
+            "zh-CN": "通过短信提醒我就诊时间. 仅包含诊所名称、日期和时间。 可选。您可随时退订，每条短信都会说明退订方式。",
+            "zh-TW": "以簡訊提醒我看診時間. 僅包含診所名稱、日期與時間。 可選。您可隨時退訂，每則簡訊都會說明退訂方式。"
+          }
+        }
+      },
       "defaults": {
         "status": "booked",
         "channel": "online",
@@ -9772,8 +9665,34 @@
         "email",
         "address",
         "emergency_contact",
-        "language"
+        "language",
+        "texts_ok"
       ],
+      "claimedBy": {
+        "table": "patients",
+        "column": "patient_id",
+        "optional": true
+      },
+      "textConsent": {
+        "column": "texts_ok",
+        "phone": "mobile",
+        "class": "service",
+        "wording": {
+          "version": 1,
+          "text": {
+            "en-US": "Text me reminders for my visits. Only the practice name, the date and the time. Optional. You can stop at any time; each text tells you how.",
+            "de-DE": "Erinnerungen an meine Termine per SMS. Nur Praxisname, Datum und Uhrzeit. Freiwillig. Sie können jederzeit abbestellen; jede SMS sagt Ihnen, wie.",
+            "fr-FR": "M’envoyer des rappels de mes rendez-vous par SMS. Seulement le nom du cabinet, la date et l’heure. Facultatif. Vous pouvez arrêter à tout moment ; chaque SMS vous dit comment.",
+            "da-DK": "Send mig påmindelser om mine tider på sms. Kun klinikkens navn, datoen og klokkeslættet. Frivilligt. Du kan stoppe når som helst; hver sms fortæller dig hvordan.",
+            "cs-CZ": "Posílat mi připomínky termínů SMS. Jen název ordinace, datum a čas. Nepovinné. Můžete kdykoli přestat; každá SMS vám řekne jak.",
+            "ar-EG": "أرسلوا لي تذكيرات بمواعيدي عبر الرسائل النصية. اسم العيادة والتاريخ والوقت فقط. اختياري. يمكنك الإيقاف في أي وقت، وكل رسالة توضح لك الطريقة.",
+            "zh-CN": "通过短信提醒我就诊时间. 仅包含诊所名称、日期和时间。 可选。您可随时退订，每条短信都会说明退订方式。",
+            "zh-TW": "以簡訊提醒我看診時間. 僅包含診所名稱、日期與時間。 可選。您可隨時退訂，每則簡訊都會說明退訂方式。"
+          }
+        }
+      },
+      "sensitive": false,
+      "reason": "the reply is only the registration's reference",
       "humanCheck": true,
       "anonymous": {
         "perValue": {
@@ -10040,141 +9959,22 @@
       ]
     },
     {
-      "table": "text_answers",
+      "table": "patients",
       "methods": [
-        "POST"
+        "PATCH"
       ],
       "select": [
         "id"
       ],
       "writable": [
-        "name",
-        "mobile",
-        "texts_ok",
-        "source",
-        "about_ref"
+        "remind_text",
+        "texts_off"
       ],
-      "writableValues": {
-        "source": [
-          "booking",
-          "register"
-        ]
-      },
-      "textConsent": {
-        "column": "texts_ok",
-        "phone": "mobile",
-        "class": "service",
-        "wording": {
-          "version": 1,
-          "text": {
-            "en-US": "Text me reminders for my visits. Only the practice name, the date and the time. Optional. You can stop at any time; each text tells you how.",
-            "de-DE": "Erinnerungen an meine Termine per SMS. Nur Praxisname, Datum und Uhrzeit. Freiwillig. Sie können jederzeit abbestellen; jede SMS sagt Ihnen, wie.",
-            "fr-FR": "M’envoyer des rappels de mes rendez-vous par SMS. Seulement le nom du cabinet, la date et l’heure. Facultatif. Vous pouvez arrêter à tout moment ; chaque SMS vous dit comment.",
-            "da-DK": "Send mig påmindelser om mine tider på sms. Kun klinikkens navn, datoen og klokkeslættet. Frivilligt. Du kan stoppe når som helst; hver sms fortæller dig hvordan.",
-            "cs-CZ": "Posílat mi připomínky termínů SMS. Jen název ordinace, datum a čas. Nepovinné. Můžete kdykoli přestat; každá SMS vám řekne jak.",
-            "ar-EG": "أرسلوا لي تذكيرات بمواعيدي عبر الرسائل النصية. اسم العيادة والتاريخ والوقت فقط. اختياري. يمكنك الإيقاف في أي وقت، وكل رسالة توضح لك الطريقة.",
-            "zh-CN": "通过短信提醒我就诊时间. 仅包含诊所名称、日期和时间。 可选。您可随时退订，每条短信都会说明退订方式。",
-            "zh-TW": "以簡訊提醒我看診時間. 僅包含診所名稱、日期與時間。 可選。您可隨時退訂，每則簡訊都會說明退訂方式。"
-          }
-        }
-      },
-      "sensitive": false,
-      "reason": "the reply is only the new answer's key",
-      "anonymous": {
-        "perValue": {
-          "columns": [
-            "mobile"
-          ],
-          "n": 3
-        },
-        "perKeyHour": 20,
-        "plainText": [
-          "name"
-        ]
-      },
-      "requireSetting": [
-        {
-          "table": "settings",
-          "column": "online_booking_on"
-        },
-        {
-          "table": "settings",
-          "column": "texts_on"
-        }
-      ]
-    },
-    {
-      "table": "text_answers",
-      "methods": [
-        "GET",
-        "POST"
-      ],
-      "select": [
-        "id",
-        "texts_ok",
-        "texts_off",
-        "source",
-        "created_at"
-      ],
-      "writable": [
-        "mobile",
-        "texts_ok",
-        "source"
-      ],
-      "writableValues": {
-        "source": [
-          "prefs"
-        ]
-      },
-      "textConsent": {
-        "column": "texts_ok",
-        "phone": "mobile",
-        "class": "service",
-        "wording": {
-          "version": 1,
-          "text": {
-            "en-US": "Text me reminders for my visits. Only the practice name, the date and the time. Optional. You can stop at any time; each text tells you how.",
-            "de-DE": "Erinnerungen an meine Termine per SMS. Nur Praxisname, Datum und Uhrzeit. Freiwillig. Sie können jederzeit abbestellen; jede SMS sagt Ihnen, wie.",
-            "fr-FR": "M’envoyer des rappels de mes rendez-vous par SMS. Seulement le nom du cabinet, la date et l’heure. Facultatif. Vous pouvez arrêter à tout moment ; chaque SMS vous dit comment.",
-            "da-DK": "Send mig påmindelser om mine tider på sms. Kun klinikkens navn, datoen og klokkeslættet. Frivilligt. Du kan stoppe når som helst; hver sms fortæller dig hvordan.",
-            "cs-CZ": "Posílat mi připomínky termínů SMS. Jen název ordinace, datum a čas. Nepovinné. Můžete kdykoli přestat; každá SMS vám řekne jak.",
-            "ar-EG": "أرسلوا لي تذكيرات بمواعيدي عبر الرسائل النصية. اسم العيادة والتاريخ والوقت فقط. اختياري. يمكنك الإيقاف في أي وقت، وكل رسالة توضح لك الطريقة.",
-            "zh-CN": "通过短信提醒我就诊时间. 仅包含诊所名称、日期和时间。 可选。您可随时退订，每条短信都会说明退订方式。",
-            "zh-TW": "以簡訊提醒我看診時間. 僅包含診所名稱、日期與時間。 可選。您可隨時退訂，每則簡訊都會說明退訂方式。"
-          }
-        }
-      },
       "claimedBy": {
         "table": "patients",
-        "column": "patient_id"
+        "column": "id"
       },
       "level": "verified",
-      "sensitive": true,
-      "requireSetting": [
-        {
-          "table": "settings",
-          "column": "online_booking_on"
-        }
-      ]
-    },
-    {
-      "table": "text_answers",
-      "methods": [
-        "POST"
-      ],
-      "select": [
-        "id"
-      ],
-      "writable": [
-        "mobile",
-        "texts_off",
-        "source"
-      ],
-      "writableValues": {
-        "source": [
-          "prefs"
-        ]
-      },
       "textConsent": {
         "column": "texts_off",
         "phone": "mobile",
@@ -10194,13 +9994,8 @@
           }
         }
       },
-      "claimedBy": {
-        "table": "patients",
-        "column": "patient_id"
-      },
-      "level": "verified",
       "sensitive": false,
-      "reason": "the reply is only the new answer's key",
+      "reason": "the reply is only the patient's own key",
       "requireSetting": [
         {
           "table": "settings",
@@ -10260,26 +10055,8 @@
           "column": "receipt_email",
           "holds": "email",
           "via": "patient_id"
-        },
-        {
-          "table": "text_answers",
-          "column": "mobile",
-          "holds": "phone",
-          "via": "patient_id"
-        },
-        {
-          "table": "text_answers",
-          "column": "name",
-          "holds": "name",
-          "via": "patient_id"
         }
       ]
-    },
-    {
-      "table": "text_answers",
-      "kind": "people",
-      "name": "name",
-      "phone": "mobile"
     }
   ],
   "outbox": {
@@ -10291,7 +10068,8 @@
       "language": "language",
       "due": "due_at",
       "sentAt": "sent_at",
-      "error": "error"
+      "error": "error",
+      "textReason": "text_reason"
     },
     "links": {
       "patient": "patient_id",
@@ -10320,7 +10098,8 @@
       "table": "settings",
       "enabled": "reminders_on",
       "name": "practice_name",
-      "phone": "phone"
+      "phone": "phone",
+      "textName": "text_name"
     },
     "pages": {
       "manage": "/my-visits",

@@ -43,12 +43,6 @@ export const PEOPLE = [
       { table: "appointments", column: "new_email", holds: "email", via: "patient_id" },
       { table: "appointments", column: "new_mobile", holds: "phone", via: "patient_id" },
       { table: "appointments", column: "receipt_email", holds: "email", via: "patient_id" },
-      { table: "text_answers", column: "mobile", holds: "phone", via: "patient_id" },
-      { table: "text_answers", column: "name", holds: "name", via: "patient_id" },
     ],
   },
-  // An answer about texts given before anyone is on file (a first booking, a registration): the yes is
-  // kept for this row and its number, which is how Adminium counts it for the practice's texts to that
-  // number. Found and erased by the number like any patient's.
-  { table: "text_answers", kind: "people", name: "name", phone: "mobile" },
 ];

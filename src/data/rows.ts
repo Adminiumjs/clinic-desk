@@ -44,10 +44,11 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
   clinician_hours: { id: "int", clinician_id: "int" },
   closures: { id: "int", clinician_id: "int", from_date: "day", to_date: "day", active: "bool", created_at: "instant" },
   faqs: { id: "int", position: "int", active: "bool" },
-  patients: { id: "int", born_on: "day", remind_email: "bool", remind_lead_hours: "int", created_at: "instant" },
-  registrations: { id: "int", born_on: "day", patient_id: "int", handled_at: "instant", created_at: "instant" },
+  patients: { id: "int", born_on: "day", remind_email: "bool", remind_lead_hours: "int", remind_text: "bool", texts_off: "bool", created_at: "instant" },
+  registrations: { id: "int", born_on: "day", patient_id: "int", texts_ok: "bool", handled_at: "instant", created_at: "instant" },
   appointments: {
     id: "int",
+    texts_ok: "bool",
     patient_id: "int",
     new_born_on: "day",
     clinician_id: "int",
@@ -97,7 +98,6 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     created_at: "instant",
   },
   day_closes: { id: "int", day: "day", no_shows_marked: "int", cash_expected: "money", cash_counted: "money", closed_at: "instant" },
-  text_answers: { id: "int", patient_id: "int", texts_ok: "bool", texts_off: "bool", created_at: "instant" },
 };
 
 /** Totals a row always has, even before the server has settled them. */

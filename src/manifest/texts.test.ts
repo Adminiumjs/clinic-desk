@@ -18,13 +18,13 @@ import { TEXT_BOX_VERSION, TEXT_WORDS, boxWording } from "./texts.ts";
 
 type Json = Record<string, unknown>;
 type Column = Json & { ref: string; type: string; default?: unknown; nullable?: boolean; rules?: Json };
-type Entry = Json & { table: string; methods: string[]; writable?: string[]; writableValues?: Json; defaults?: Json; claimedBy?: Json; level?: string; textConsent?: Json & { column: string; phone: string; class: string; means?: string; wording: { version: number; text: Record<string, string> } } };
+type Entry = Json & { table: string; methods: string[]; writable?: string[]; writableValues?: Json; defaults?: Json; claimedBy?: Json & { optional?: boolean }; level?: string; textConsent?: Json & { column: string; phone: string; class: string; means?: string; wording: { version: number; text: Record<string, string> } } };
 
 const manifest = buildManifest() as Json & {
   textTemplates: { key: string; name: Record<string, string>; locales: Record<string, { body: string }> }[];
   textReplies: string;
   publicAccess: Entry[];
-  outbox: Json & { recipient: Json & { fallback: Json }; kinds: Record<string, string>; channels: Record<string, string>; classes: Record<string, string>; producers: Json[] };
+  outbox: Json & { recipient: Json & { fallback: Json }; columns: Record<string, string>; settings: Record<string, string>; kinds: Record<string, string>; channels: Record<string, string>; classes: Record<string, string>; producers: Json[] };
   requiredSchema: { tables: (Json & { ref: string; columns: Column[] })[] };
 };
 const column = (table: string, ref: string) => manifest.requiredSchema.tables.find((t) => t.ref === table)!.columns.find((c) => c.ref === ref)!;
@@ -132,32 +132,54 @@ describe("the practice's texts", () => {
   it("are not answered: replies are off, so a patient who writes a symptom is told once that the number is not read", () => {
     expect(manifest.textReplies).toBe("off");
   });
+
+  it("give Adminium's own texts the practice's name for texts, never the name its emails are signed with", () => {
+    // The "not read" answer and a STOP's confirmation take `settings.textName`: a sensitive practice's plain name.
+    expect(manifest.outbox.settings["textName"]).toBe("text_name");
+    expect(manifest.outbox.settings["name"]).toBe("practice_name");
+    expect(column("settings", "text_name")).toMatchObject({ type: "text" });
+    // And the texts themselves read the same column.
+    for (const template of manifest.textTemplates) for (const { body } of Object.values(template.locales)) expect(body.startsWith("{{practice.text_name}}")).toBe(true);
+    expect(JSON.stringify(manifest.textTemplates)).not.toContain("practice_name");
+  });
+
+  it("say how each text row ended as Adminium's code, which the desk reads instead of the sentence", () => {
+    expect(manifest.outbox.columns["textReason"]).toBe("text_reason");
+    expect(column("messages", "text_reason")).toMatchObject({ type: "text", maxLength: 40, nullable: true });
+  });
 });
 
 describe("the box for texts", () => {
   const boxes = manifest.publicAccess.filter((e) => e.textConsent !== undefined);
 
-  it("is on three doors: a first booking or a registration with nobody on file, and the patient's own Prefs, on and off", () => {
-    expect(boxes.map((e) => [e.table, e.methods, e.textConsent!.means ?? "yes", e.claimedBy === undefined ? "nobody" : e.level])).toEqual([
-      ["text_answers", ["POST"], "yes", "nobody"],
-      ["text_answers", ["GET", "POST"], "yes", "verified"],
-      ["text_answers", ["POST"], "no", "verified"],
+  it("rides the row it is ticked on: a first booking, a registration, and the patient's own row in Prefs (on and off)", () => {
+    expect(boxes.map((e) => [e.table, e.methods, e.textConsent!.column, e.textConsent!.phone, e.textConsent!.means ?? "yes", e.level ?? (e.claimedBy?.optional === true ? "nobody yet" : "found")])).toEqual([
+      ["patients", ["GET", "PATCH"], "remind_text", "mobile", "yes", "verified"],
+      ["appointments", ["POST"], "texts_ok", "new_mobile", "yes", "nobody yet"],
+      ["registrations", ["POST"], "texts_ok", "mobile", "yes", "nobody yet"],
+      ["patients", ["PATCH"], "texts_off", "mobile", "no", "verified"],
     ]);
     // A stranger can say yes for a number, never no: nobody can stop someone else's texts from the patients' pages.
     expect(boxes.filter((e) => e.textConsent!.means === "no").every((e) => e.claimedBy !== undefined && e.level === "verified")).toBe(true);
+    // The number on file is the desk's to change: Prefs ticks a box, it never writes the mobile.
+    for (const e of boxes.filter((x) => x.table === "patients")) expect(e.writable).not.toContain("mobile");
   });
 
   it("starts unticked, is never required, and is never the email switch", () => {
     for (const e of boxes) {
       const box = e.textConsent!;
       const col = column(e.table, box.column);
-      expect([box.column, col.type, col.default]).toEqual([box.column, "bool", false]);
+      expect([e.table, box.column, col.type, col.default]).toEqual([e.table, box.column, "bool", false]);
       expect(col.rules?.["required"]).toBeUndefined();
       expect(e.defaults?.[box.column]).toBeUndefined();
       expect(e.writableValues?.[box.column]).toBeUndefined();
       expect(box.column).not.toBe("remind_email");
       expect(box.class).toBe("service");
     }
+  });
+
+  it("keeps no answers of its own: Adminium's text consent log is the record", () => {
+    expect(manifest.requiredSchema.tables.map((t) => t.ref)).not.toContain("text_answers");
   });
 
   it("is kept with the very words the patient saw beside it, in all eight languages, and its version", () => {

@@ -8,7 +8,7 @@
  */
 import { create } from "zustand";
 
-import type { Booked, Catalogue, CodeResult, CodeSent, Level, NewRegistration, NewVisit, OwnDetails, OwnVisit, PatientsPort, TextYes, Wish } from "../data/ports.ts";
+import type { Booked, Catalogue, CodeResult, CodeSent, Level, NewRegistration, NewVisit, OwnDetails, OwnVisit, PatientsPort, Wish } from "../data/ports.ts";
 import { PortError } from "../data/ports.ts";
 import type { Day, Hhmm, Id, Instant } from "../data/types.ts";
 
@@ -180,21 +180,6 @@ export async function cancelMine(id: Id): Promise<OwnVisit> {
 
 export async function register(person: NewRegistration): Promise<{ ref: string }> {
   return patientsPort().register(person);
-}
-
-/**
- * A yes from the box for visit texts, sent once the booking or registration
- * it was ticked on is made. Nothing waits on it: a refusal (the practice has
- * just turned texts off, a limit) costs the yes, never the booking, and no
- * text goes without one. True when it was taken.
- */
-export async function agreeToTexts(answer: TextYes): Promise<boolean> {
-  try {
-    await patientsPort().textYes(answer);
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 /**

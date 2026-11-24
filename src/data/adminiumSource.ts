@@ -14,7 +14,7 @@
 import type { SessionTransport } from "./sessionSource.ts";
 import type { ListCondition } from "./snapshotPort.ts";
 import { normalise, normaliseAll } from "./rows.ts";
-import type { DayState, DeskReads, DeskSnapshot, PatientPage, PatientSearch, Reference, RefundReason, SlotQuery, SlotTime } from "./ports.ts";
+import type { DayState, DeskReads, DeskSnapshot, PatientPage, PatientSearch, Reference, RefundReason, SlotQuery, SlotTime, TextStanding } from "./ports.ts";
 import type { Appointment, Day, Id, Instant, Patient, TableRef, Tables } from "./types.ts";
 import { addDays, venueMidnight } from "./venueTime.ts";
 
@@ -43,7 +43,6 @@ export const REQUIRED: Record<TableRef, string[]> = {
   waiting_list: ["id", "patient_id", "visit_type_id", "status"],
   messages: ["id", "kind", "status", "to_address", "sent_at", "client_key"],
   day_closes: ["id", "day", "cash_expected", "closed_at"],
-  text_answers: ["id", "patient_id", "mobile", "texts_ok", "texts_off", "source", "about_ref"],
 };
 
 /** The route's largest page. */
@@ -275,19 +274,31 @@ export function sessionDeskReads(
         count: true,
       });
       const visits = normaliseAll("appointments", visitsPage.data);
-      const [recalls, payments, ownAnswers, typedAnswers, texts] = await Promise.all([
+      const [recalls, payments, texts] = await Promise.all([
         all("recalls", { column: "patient_id", op: "eq", value: id }, "due_on.asc"),
         byIds("payments", "appointment_id", visits.map((v) => v.id)),
-        // Their answers about texts: their own, and one given on the box for their number before anyone linked it.
-        all("text_answers", { column: "patient_id", op: "eq", value: id }, "created_at.asc", 50),
-        all("text_answers", and({ column: "patient_id", op: "is_null" }, { column: "mobile", op: "eq", value: patient.mobile }), "created_at.asc", 20),
         all("messages", and({ column: "patient_id", op: "eq", value: id }, { column: "kind", op: "in", value: ["reminder_text", "missed_text"] }), "created_at.desc", 20),
       ]);
-      return { patient, visits, visitsTotal: visitsPage.total ?? visits.length, recalls, payments, textAnswers: [...ownAnswers, ...typedAnswers], texts };
+      return { patient, visits, visitsTotal: visitsPage.total ?? visits.length, recalls, payments, texts };
     },
 
-    async textAnswersAbout(ref) {
-      return all("text_answers", and({ column: "about_ref", op: "eq", value: ref }, { column: "patient_id", op: "is_null" }), "created_at.asc", 10);
+    async textsReady() {
+      try {
+        return (await transport.get<{ data: { ready: boolean } }>("/api/v1/texts/ready")).data.ready === true;
+      } catch {
+        return false;
+      }
+    },
+
+    // The patient's row and the column that holds their number name the person Adminium keeps the answers for.
+    async textStanding(patientId) {
+      const query = new URLSearchParams({ connection: await transport.connection(), table: tableOf.patients, row: String(patientId), column: "mobile" });
+      return (await transport.get<{ data: TextStanding }>(`/api/v1/texts/consent?${query.toString()}`)).data;
+    },
+
+    async recordText(patientId, answer) {
+      const body = { connection: await transport.connection(), table: tableOf.patients, row: String(patientId), column: "mobile", ...answer };
+      return (await transport.mutate<{ data: TextStanding }>("/api/v1/texts/consent", "POST", body)).data;
     },
 
     async matches(person) {

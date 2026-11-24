@@ -152,18 +152,21 @@ patients' pages show no box.
   locked phone and passes through the provider's logs, so it never names a
   clinician, a visit type, a reason or anything a stranger could read as
   medical. Adminium adds the way to stop: "Reply STOP" from a number, the
-  desk's phone from a sender name.
+  desk's phone from a sender name. Its own texts (the "not read" answer, a
+  STOP's confirmation) name the practice by *Name in texts* too.
 - **A plain name for a sensitive practice.** *Name in texts* is what the texts
   call the practice. If the practice's name says what it treats, write a
   plain one there, and give the texts the same plain sender name in Adminium.
 - **Only to patients who asked.** A first booking, the register form and the
   Reminders page each have a box of their own, unticked, never required:
-  *Text me reminders for my visits*. *Remind me by email* never turns texts on
-  or off. Adminium keeps each yes in its text consent log for that exact
-  number, with the words shown and their version; the practice keeps its own
-  copy of each answer (`text_answers`), which the desk shows on the patient's
-  page. A patient switches texts off on the Reminders page, or by replying
-  STOP. No text goes to a number in mainland China (+86).
+  *Text me reminders for my visits*. The box shows only while texts are set up
+  in Adminium. *Remind me by email* never turns texts on or off. Adminium keeps
+  each yes in its text consent log for that exact number, with the words shown
+  and their version, and the desk reads where a patient stands on their page.
+  The desk can record a yes a patient gives in person, by phone or on paper,
+  having read them the box's words. A patient switches texts off on the
+  Reminders page, or by replying STOP; after a STOP only their own START text
+  turns texts back on. No text goes to a number in mainland China (+86).
 - **Replies are not read.** A patient who answers a text gets one answer: the
   number is not read, with the desk's phone. Nothing they write is kept.
 

@@ -11,7 +11,7 @@ const clinician = (id: number, over: Partial<Clinician> = {}): Clinician => ({
   id, name: `Dr ${String(id)}`, short_name: "", role_label: "", color: "", photo: null, bio: null, bookable_online: true, active: true, position: id, staff_email: null, ...over,
 });
 const catalogue = (visitTypes: VisitType[], clinicians: Clinician[], links: [number, number][]): Catalogue => ({
-  settings: null, hours: [], clinicians, names: [], visitTypes, faqs: [], closures: [],
+  settings: null, hours: [], clinicians, names: [], visitTypes, faqs: [], closures: [], textsReady: false,
   links: links.map(([clinician_id, visit_type_id], i) => ({ id: i + 1, clinician_id, visit_type_id })),
 });
 
