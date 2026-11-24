@@ -167,12 +167,29 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
         expect([standing.ready, standing.service.state, standing.service.answer?.source, standing.stopped]).toEqual([true, "yes", "form", null]);
       }, 180_000);
 
+      it("sends the visit reminder text: only the practice's name for texts, the date and the time, and the way to stop", async () => {
+        const visits = (await rows("appointments")).filter((v) => v["status"] === "booked");
+        const visit = visits.find((v) => v["patient_id"] === patient.id) ?? visits[0]!;
+        const clinician = (await rows("clinicians")).find((c) => c.id === visit["clinician_id"]);
+        // Queued as the reminder scan queues it, for this patient and that visit.
+        ok(await staff.post(data("messages"), { values: { kind: "reminder_text", patient_id: patient.id, appointment_id: visit.id, status: "queued", language: "en-US", due_at: visit["starts_at"], client_key: `texts-${engine}-reminder` } }), 201);
+        const text = await until(async () => sent().find((m) => m.to === e164), "the reminder text at the provider");
+        expect(text.from).toBe(NUMBER);
+        expect(text.text.startsWith("RH Desk: your visit is on ")).toBe(true);
+        expect(text.text).toContain("Reply STOP to opt out.");
+        for (const never of ["Rowan Health", String(clinician?.["name"] ?? "—"), String(clinician?.["short_name"] ?? "—"), String(visit["reason"] ?? "—")]) expect(text.text).not.toContain(never);
+        // The row says how it went, as Adminium's code.
+        const row = await until(async () => (await rows("messages")).find((m) => m["client_key"] === `texts-${engine}-reminder` && m["status"] === "sent"), "the reminder row sent");
+        expect(row["text_reason"]).toBe("sent");
+      }, 180_000);
+
       it("answers a symptom texted back with the one fixed answer, by the practice's name for texts, and never says it back", async () => {
         const address = ok(await staff.get<{ data: { inbound: string | null } }>("/api/v1/sms/reply-address")).data.inbound;
         expect(address, "the reply address").not.toBeNull();
         const path = new URL(address!).pathname;
+        const before = sent().filter((m) => m.to === e164).length;
         expect(await fromProvider(path, "I have had a fever since Monday")).toBe(200);
-        const answer = await until(async () => sent().find((m) => m.to === e164), "the not-read answer");
+        const answer = await until(async () => sent().filter((m) => m.to === e164)[before], "the not-read answer");
         expect(answer.text).toContain("RH Desk");
         expect(answer.text).not.toContain("Rowan Health");
         expect(answer.text.toLowerCase()).not.toContain("fever");
@@ -188,8 +205,9 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
         const standing = await own.myTextStanding();
         expect([standing.service.state, standing.stopped?.liftBy]).toEqual(["stopped", "start"]);
         const confirmation = await until(async () => sent().slice(before).find((m) => m.to === e164), "the STOP's confirmation");
-        expect(confirmation.text).toContain("RH Desk");
+        // Adminium's confirmation names no business at all ("You are unsubscribed …"): never the name the emails are signed with.
         expect(confirmation.text).not.toContain("Rowan Health");
+        expect(confirmation.text.toLowerCase()).toContain("unsubscribed");
         // Their own fresh yes never lifts a STOP: only their START does.
         await own.setTexts(true);
         expect((await own.myTextStanding()).service.state).toBe("stopped");
