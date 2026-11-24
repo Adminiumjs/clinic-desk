@@ -399,10 +399,12 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           // An email queued while it is off fails with the reason; it never goes without its receipt.
           const before = (await sinkFor(at, INBOX)).length;
           const queued = await queueReceipt(at, payment, visit, INBOX, "22222222-2222-4222-8222-222222222222");
+          // Adminium claims a row as `sent` before it draws the receipt, and only then writes `failed`: a read in between
+          // sees the claim. So the wait is for the failure itself (a row truly sent would time out here, and the sink says so).
           const failed = await until(async () => {
             const row = await messageRow(at, queued.id);
-            return row?.["status"] === "queued" ? undefined : row;
-          }, "the receipt email to fail");
+            return row?.["status"] === "failed" ? row : undefined;
+          }, "the receipt email to fail", 60_000);
           expect(failed["status"]).toBe("failed");
           expect(String(failed["error"])).toMatch(/receipt is not available/i);
           expect((await sinkFor(at, INBOX)).length).toBe(before);
