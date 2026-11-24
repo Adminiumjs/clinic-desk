@@ -42,7 +42,9 @@ const ADMIN = { email: process.env["E2E_ADMIN_EMAIL"] ?? "e2e@adminium.local", p
 const STUB = fileURLToPath(new URL("./sms-stub.mjs", import.meta.url));
 /** The contract's own provider values: a profile and a number of the stub's, never a real account. */
 const PROFILE = "40017c8e-0000-4000-8000-c11c1c000001";
-const NUMBER = "+447700900900";
+/** libphonenumber's own example of a UK mobile, and the next one: Adminium refuses Ofcom's 07700 900 drama range as no number. */
+const NUMBER = "+447400123456";
+const PATIENT_MOBILE = "07400 123457";
 const INBOX = "texts-patient@rowan-contract.dev";
 
 type Row = Record<string, unknown> & { id: number };
@@ -144,9 +146,11 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
 
       it("keeps a verified patient's yes from their Reminders page", async () => {
         const patients = await rows("patients");
-        patient = patients.find((p) => patients.filter((q) => q["mobile"] === p["mobile"] && q["born_on"] === p["born_on"]).length === 1 && String(p["mobile"]).startsWith("07700"))!;
-        e164 = `+44${String(patient["mobile"]).replace(/\D/g, "").slice(1)}`;
-        ok(await staff.patch(`${data("patients")}/${String(patient.id)}`, { values: { email: INBOX } }));
+        patient = patients.find((p) => patients.filter((q) => q["mobile"] === p["mobile"] && q["born_on"] === p["born_on"]).length === 1)!;
+        // The sample's numbers are Ofcom's drama range, which no text can reach: the desk gives this patient a real-looking one.
+        ok(await staff.patch(`${data("patients")}/${String(patient.id)}`, { values: { email: INBOX, mobile: PATIENT_MOBILE } }));
+        patient = { ...patient, mobile: PATIENT_MOBILE };
+        e164 = "+447400123457";
         vi.useFakeTimers({ now: serverNow(), toFake: ["Date"], shouldAdvanceTime: true });
         own = await patientPort();
         expect(await own.find(String(patient["mobile"]), String(patient["born_on"]))).not.toBeNull();
@@ -178,10 +182,10 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
         const address = ok(await staff.get<{ data: { inbound: string | null } }>("/api/v1/sms/reply-address")).data.inbound!;
         const before = sent().length;
         expect(await fromProvider(new URL(address).pathname, "STOP PLEASE")).toBe(200);
-        const standing = await until(async () => {
-          const now = await own.myTextStanding();
-          return now.stopped !== null ? now : undefined;
-        }, "the STOP on the stop list");
+        // Watched as the desk sees it (a staff read), then read once as their Prefs read it.
+        const query = new URLSearchParams({ connection: connectionId, table: tableIds["patients"]!, row: String(patient.id), column: "mobile" });
+        await until(async () => (ok(await staff.get<{ data: { stopped: unknown } }>(`/api/v1/texts/consent?${query.toString()}`)).data.stopped !== null ? true : undefined), "the STOP on the stop list");
+        const standing = await own.myTextStanding();
         expect([standing.service.state, standing.stopped?.liftBy]).toEqual(["stopped", "start"]);
         const confirmation = await until(async () => sent().slice(before).find((m) => m.to === e164), "the STOP's confirmation");
         expect(confirmation.text).toContain("RH Desk");
