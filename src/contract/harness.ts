@@ -269,6 +269,8 @@ export interface BootOptions {
    * served again by every later one — of this checkout or another.
    */
   keep?: string;
+  /** Modules the server loads first (`node --import`): a provider's API answered by a stub. */
+  preload?: string[];
 }
 
 /**
@@ -293,7 +295,7 @@ export async function boot(engine: Engine, port: number, now: number, database: 
     // Its own database, so a contract never meets another run's rows.
     E2E_DATABASE: database,
     CONTRACT_NOW: String(now),
-    NODE_OPTIONS: `${process.env["NODE_OPTIONS"] ?? ""} --import=${pathToFileURL(fileURLToPath(new URL("./clock.mjs", import.meta.url))).href}`.trim(),
+    NODE_OPTIONS: [process.env["NODE_OPTIONS"] ?? "", `--import=${pathToFileURL(fileURLToPath(new URL("./clock.mjs", import.meta.url))).href}`, ...(options.preload ?? []).map((path) => `--import=${pathToFileURL(path).href}`)].join(" ").trim(),
   };
   const script = options.keep === undefined ? join(checkout, "apps", "e2e", "scripts", "e2e-server.mjs") : fileURLToPath(new URL("./studio-server.mjs", import.meta.url));
   const child: ChildProcess = spawn(process.execPath, [script], { cwd: join(checkout, "apps", "e2e"), env, stdio: ["ignore", "pipe", "pipe"] });
