@@ -284,9 +284,12 @@ export async function boot(engine: Engine, port: number, now: number, database: 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     ...(options.keep === undefined ? {} : { STUDIO_ADMINIUM: checkout, STUDIO_DIR: options.keep }),
-    // Inventory is packed from a checkout, so no catalogue vouches for its
-    // bytes: a developer's server runs it by name. Ignored in production.
-    ADMINIUM_ADD_ON_DEV_TRUST: "inventory",
+    // Every add-on the contract packs from a checkout (Inventory, Invoices &
+    // Receipts, Holiday calendars): no bundled pin or catalogue vouches for its
+    // bytes, so since Adminium 0.3.66 its server code loads only when a
+    // developer's server is told to run it by name. Without it, Invoices' receipt
+    // is never made for the app. Ignored in production.
+    ADMINIUM_ADD_ON_DEV_TRUST: "inventory,invoices,holiday-calendars",
     E2E_ENGINE: engine,
     E2E_PORT: String(port),
     E2E_SMTP_PORT: String(port + 1),
