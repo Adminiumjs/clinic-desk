@@ -36,6 +36,7 @@ describe("the practice's patients", () => {
         name: "name",
         firstName: "firstWordOfName",
         language: "language",
+        phone: "mobile",
         copies: [
           { table: "registrations", column: "name", holds: "name", via: "patient_id" },
           { table: "registrations", column: "email", holds: "email", via: "patient_id" },
@@ -45,11 +46,16 @@ describe("the practice's patients", () => {
           { table: "appointments", column: "new_mobile", holds: "phone", via: "patient_id" },
           // Where the receipt of a payment made online goes: the patient's own address, kept in step.
           { table: "appointments", column: "receipt_email", holds: "email", via: "patient_id" },
+          // Their answers about texts, once their own Prefs gave one or the desk linked one to them.
+          { table: "text_answers", column: "mobile", holds: "phone", via: "patient_id" },
+          { table: "text_answers", column: "name", holds: "name", via: "patient_id" },
         ],
       },
+      // An answer about texts given with nobody on file: the row is the person the yes is kept for.
+      { table: "text_answers", kind: "people", name: "name", phone: "mobile" },
     ]);
-    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.62, a booking door open only while payments are on).
-    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.62", "0.3.62"]);
+    // 0.3.38 first read who the patients are; the floor has since moved on (0.3.76, a patient's number and texts).
+    expect([MIN_ADMINIUM, manifest.compatibility.minAdminiumVersion]).toEqual(["0.3.76", "0.3.76"]);
   });
 
   it("have one address: the one the outbox writes to and the one their emailed code goes to", () => {
@@ -82,7 +88,12 @@ describe("the practice's patients", () => {
 
   it("keep the same personal marks they had: the allergy note and the policy number, and nothing new hidden from the desk or the clinician", () => {
     const personal = manifest.requiredSchema.tables.flatMap((t) => t.columns.filter((c) => c.rules?.["personal"] === true).map((c) => `${t.ref}.${c.ref}`));
-    expect(personal).toEqual(["patients.allergies_note", "patients.policy_ref"]);
+    // And the number a text answer is for, which the desk reads (it may see a patient's details) and a clinician never does.
+    expect(personal).toEqual(["patients.allergies_note", "patients.policy_ref", "text_answers.mobile"]);
+    const roles = (manifest as unknown as { roles: { key: string; permissions: string[] }[] }).roles;
+    const reads = (key: string) => roles.find((r) => r.key === key)!.permissions;
+    expect(["reception", "manager"].map((key) => reads(key).includes("table:@text_answers:read_pii"))).toEqual([true, true]);
+    expect(reads("clinician").some((p) => p.includes("text_answers"))).toBe(false);
   });
 });
 
@@ -99,10 +110,10 @@ describe("the tables the law keeps", () => {
     ]);
   });
 
-  it("leave a registration, which is not yet a record, the one table where an erasure blanks a patient's copies", () => {
+  it("leave a registration, which is not yet a record, and an answer about texts, the tables where an erasure blanks a patient's copies", () => {
     const keptRefs = manifest.requiredSchema.tables.filter((t) => t.keep !== undefined).map((t) => t.ref);
     const blanked = [...new Set(manifest.people[0]!.copies.map((c) => c.table))].filter((ref) => !keptRefs.includes(ref));
-    expect(blanked).toEqual(["registrations"]);
+    expect(blanked).toEqual(["registrations", "text_answers"]);
   });
 });
 

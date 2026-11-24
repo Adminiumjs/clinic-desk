@@ -253,6 +253,11 @@ export const TABLES: Table[] = [
       bool("auto_refund", "Refund cancellations automatically", true),
       // The shelf a visit's supplies come off. Empty: Inventory's own default place.
       stockLink("supplies_place_id", "places", "Where supplies are taken from"),
+      // Texts, through the business's own provider set up in Adminium: off until the practice turns them on.
+      bool("texts_on", "Send texts", false),
+      // What a text calls the practice. A practice whose name says what it treats writes a plain one here,
+      // and gives its sender the same plain name in Adminium. Empty: no text goes (it would print nothing).
+      text("text_name", 40, "Name in texts", { ...opt, rules: { personal: false } }),
     ],
   },
   {
@@ -678,6 +683,8 @@ export const TABLES: Table[] = [
         receipt: "Receipt",
         paid_ahead: "Paid ahead",
         balance: "Still to pay",
+        reminder_text: "Reminder text",
+        missed_text: "Missed visit text",
       }),
       fk("patient_id", "patients", "Patient", true),
       fk("appointment_id", "appointments", "Appointment", true),
@@ -715,6 +722,37 @@ export const TABLES: Table[] = [
       text("note", 500, "A note for tomorrow", opt),
       text("closed_by", 120, "Closed by", { ...opt, rules: stampWho }),
       at("closed_at", "Closed at", { default: "now" }),
+    ],
+  },
+  /*
+   * A patient's answers about texts, each one a row: the box ticked in a first
+   * booking or a registration (nobody on file yet, so the row is the person
+   * Adminium keeps the yes for), "Remind me by text" switched on or off in
+   * their Prefs (theirs, once they have confirmed their emailed code). The
+   * consent itself is Adminium's text consent log, kept with the words shown
+   * and their version; these rows are the practice's own copy of what was
+   * asked, so the desk and the Prefs page can say where a patient stands.
+   * Every box starts unticked and nothing books or registers on it.
+   */
+  {
+    ref: "text_answers",
+    label: l("Text answer"),
+    labelPlural: l("Text answers"),
+    keyField: "name",
+    columns: [
+      id,
+      // The patient the answer is theirs: set by their own Prefs, or by the desk when it accepts the booking or registration.
+      fk("patient_id", "patients", "Patient", true),
+      text("name", 120, "Name given", { ...opt, semantic: "name" }),
+      text("mobile", 32, "Mobile", { rules: { personal: true, validation: { format: "phone" } } }),
+      // A yes to visit texts: the unticked box, ticked.
+      { ref: "texts_ok", type: "bool", default: false, label: l("Yes to texts") },
+      // A no: "Remind me by text" switched off.
+      { ref: "texts_off", type: "bool", default: false, label: l("Asked to stop") },
+      choice("source", "Where", { booking: "First booking", register: "Registration", prefs: "Reminders page" }),
+      // The booking's or registration's reference the box was ticked on, so the desk can link it when it accepts that.
+      text("about_ref", 12, "Booking or registration", opt),
+      createdAt,
     ],
   },
 ];

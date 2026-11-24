@@ -19,6 +19,7 @@ import { PEOPLE } from "./people.ts";
 import { PUBLIC_ACCESS, PUBLIC_KEYS } from "./public.ts";
 import { ROLES } from "./roles.ts";
 import { TABLES } from "./tables.ts";
+import { TEXT_REPLIES, textTemplates } from "./texts.ts";
 
 /**
  * This release. The version moved 0.1.4 → 0.2.0 once (its tables were new),
@@ -26,9 +27,11 @@ import { TABLES } from "./tables.ts";
  * 0.3.1 changes no table: fixes in the desk's own screens. 0.3.2 changes no
  * table either: it tells Adminium who the patients are, that every email is
  * service mail, and which tables the law keeps. 0.3.3 changes no table: a
- * practice may install the desk once per database.
+ * practice may install the desk once per database. 0.4.0 adds a table and
+ * columns: visit texts, the answers patients give about them, and the name the
+ * texts use.
  */
-export const VERSION = "0.3.3";
+export const VERSION = "0.4.0";
 
 /**
  * The Adminium release that first reads everything below: booking, the
@@ -44,9 +47,11 @@ export const VERSION = "0.3.3";
  * held while a patient pays, refunds that start by themselves, and the refund
  * right a role holds (0.3.60); and, back from paying, where that payment
  * stands, read by the patient (0.3.61); and a booking door open only while the
- * practice takes payments online (0.3.62).
+ * practice takes payments online (0.3.62); and texts — text templates, an
+ * outbox kind sent as a text to the patient's mobile, a public box for a yes
+ * to texts, a person known by their number, and replies switched off (0.3.76).
  */
-export const MIN_ADMINIUM = "0.3.62";
+export const MIN_ADMINIUM = "0.3.76";
 
 const ENV = {
   VITE_ADMINIUM_API_BASE_URL: { required: false, example: "https://admin.example.com" },
@@ -65,7 +70,7 @@ export function buildManifest(): Record<string, unknown> {
     description: {
       key: "mft.clinic.desc",
       fallback:
-        "An appointment desk for a small practice: patients book online, the desk checks them in and takes payment, reminders go by email — backed by your own database.",
+        "An appointment desk for a small practice: patients book online, the desk checks them in and takes payment, reminders go by email and, for patients who ask, by text — backed by your own database.",
     },
     categories: ["operations"],
     compatibility: {
@@ -128,6 +133,8 @@ export function buildManifest(): Record<string, unknown> {
     people: PEOPLE,
     outbox: OUTBOX,
     emailTemplates: emailTemplates(),
+    textTemplates: textTemplates(),
+    textReplies: TEXT_REPLIES,
     payments: PAYMENTS,
     documents: DOCUMENTS,
     sampleData: { file: "seeds/clinic.sample.json", addOns: { inventory: { file: "seeds/clinic.inventory.sample.json" } } },

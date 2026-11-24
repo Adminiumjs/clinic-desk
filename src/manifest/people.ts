@@ -6,7 +6,7 @@
  * desk keeps; their language is the one they asked to be written to in. A
  * mail's first name is the first word of the name.
  *
- * There is no consent column. "Remind me by email" (`remind_email`) is the
+ * There is no email consent column. "Remind me by email" (`remind_email`) is the
  * patient's switch for visit reminders, which the outbox reads as its opt-in;
  * it is not a yes to a newsletter, and the practice sends none. Nor is there a
  * customer column: everyone on file is a patient the practice cares for.
@@ -33,6 +33,8 @@ export const PEOPLE = [
     name: "name",
     firstName: "firstWordOfName",
     language: "language",
+    // Their mobile, for the visit texts they agreed to, the do-not-text list and an erasure by number.
+    phone: "mobile",
     copies: [
       { table: "registrations", column: "name", holds: "name", via: "patient_id" },
       { table: "registrations", column: "email", holds: "email", via: "patient_id" },
@@ -41,6 +43,12 @@ export const PEOPLE = [
       { table: "appointments", column: "new_email", holds: "email", via: "patient_id" },
       { table: "appointments", column: "new_mobile", holds: "phone", via: "patient_id" },
       { table: "appointments", column: "receipt_email", holds: "email", via: "patient_id" },
+      { table: "text_answers", column: "mobile", holds: "phone", via: "patient_id" },
+      { table: "text_answers", column: "name", holds: "name", via: "patient_id" },
     ],
   },
+  // An answer about texts given before anyone is on file (a first booking, a registration): the yes is
+  // kept for this row and its number, which is how Adminium counts it for the practice's texts to that
+  // number. Found and erased by the number like any patient's.
+  { table: "text_answers", kind: "people", name: "name", phone: "mobile" },
 ];

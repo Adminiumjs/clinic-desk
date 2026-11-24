@@ -285,4 +285,19 @@ export const WORDS: Record<string, Translation> = {
   "Kept": { "de-DE": "Einbehalten", "fr-FR": "Conservé", "da-DK": "Beholdt", "cs-CZ": "Ponecháno", "ar-EG": "المبلغ المحتفظ به", "zh-CN": "实收", "zh-TW": "實收" },
   "Paid ahead": { "de-DE": "Im Voraus bezahlt", "fr-FR": "Payé à l’avance", "da-DK": "Betalt på forhånd", "cs-CZ": "Zaplaceno předem", "ar-EG": "مدفوعة مسبقًا", "zh-CN": "已预付", "zh-TW": "已預付" },
   "Still to pay": { "de-DE": "Noch zu zahlen", "fr-FR": "Reste à payer", "da-DK": "Mangler at betale", "cs-CZ": "Zbývá zaplatit", "ar-EG": "متبقٍّ للدفع", "zh-CN": "尚需支付", "zh-TW": "尚需支付" },
+
+  // ── visit texts ────────────────────────────────────────────────────────────
+  "Send texts": { "de-DE": "SMS senden", "fr-FR": "Envoyer des SMS", "da-DK": "Send sms’er", "cs-CZ": "Posílat SMS", "ar-EG": "إرسال رسائل نصية", "zh-CN": "发送短信", "zh-TW": "傳送簡訊" },
+  "Name in texts": { "de-DE": "Name in SMS", "fr-FR": "Nom dans les SMS", "da-DK": "Navn i sms’er", "cs-CZ": "Název v SMS", "ar-EG": "الاسم في الرسائل", "zh-CN": "短信中的名称", "zh-TW": "簡訊中的名稱" },
+  "Reminder text": { "de-DE": "Erinnerungs-SMS", "fr-FR": "SMS de rappel", "da-DK": "Påmindelses-sms", "cs-CZ": "Připomínka SMS", "ar-EG": "رسالة تذكير", "zh-CN": "提醒短信", "zh-TW": "提醒簡訊" },
+  "Missed visit text": { "de-DE": "SMS nach verpasstem Termin", "fr-FR": "SMS de rendez-vous manqué", "da-DK": "Sms om udeblivelse", "cs-CZ": "SMS po zmeškaném termínu", "ar-EG": "رسالة موعد فائت", "zh-CN": "错过预约短信", "zh-TW": "錯過預約簡訊" },
+  "Text answer": { "de-DE": "Antwort zu SMS", "fr-FR": "Réponse sur les SMS", "da-DK": "Svar om sms", "cs-CZ": "Odpověď k SMS", "ar-EG": "إجابة عن الرسائل النصية", "zh-CN": "短信意愿", "zh-TW": "簡訊意願" },
+  "Text answers": { "de-DE": "Antworten zu SMS", "fr-FR": "Réponses sur les SMS", "da-DK": "Svar om sms’er", "cs-CZ": "Odpovědi k SMS", "ar-EG": "إجابات عن الرسائل النصية", "zh-CN": "短信意愿记录", "zh-TW": "簡訊意願紀錄" },
+  "Name given": { "de-DE": "Angegebener Name", "fr-FR": "Nom donné", "da-DK": "Oplyst navn", "cs-CZ": "Uvedené jméno", "ar-EG": "الاسم المُعطى", "zh-CN": "填写的姓名", "zh-TW": "填寫的姓名" },
+  "Yes to texts": { "de-DE": "Ja zu SMS", "fr-FR": "Accepte les SMS", "da-DK": "Ja til sms’er", "cs-CZ": "Souhlas se SMS", "ar-EG": "موافقة على الرسائل", "zh-CN": "同意接收短信", "zh-TW": "同意接收簡訊" },
+  "Asked to stop": { "de-DE": "Abbestellt", "fr-FR": "Demande d’arrêt", "da-DK": "Bad om stop", "cs-CZ": "Odhlášeno", "ar-EG": "طلب الإيقاف", "zh-CN": "要求停止", "zh-TW": "要求停止" },
+  "Where": { "de-DE": "Wo", "fr-FR": "Où", "da-DK": "Hvor", "cs-CZ": "Kde", "ar-EG": "أين", "zh-CN": "来源", "zh-TW": "來源" },
+  "First booking": { "de-DE": "Erste Buchung", "fr-FR": "Première réservation", "da-DK": "Første booking", "cs-CZ": "První rezervace", "ar-EG": "الحجز الأول", "zh-CN": "首次预约", "zh-TW": "首次預約" },
+  "Reminders page": { "de-DE": "Erinnerungsseite", "fr-FR": "Page des rappels", "da-DK": "Påmindelsessiden", "cs-CZ": "Stránka připomínek", "ar-EG": "صفحة التذكيرات", "zh-CN": "提醒页面", "zh-TW": "提醒頁面" },
+  "Booking or registration": { "de-DE": "Buchung oder Registrierung", "fr-FR": "Réservation ou inscription", "da-DK": "Booking eller tilmelding", "cs-CZ": "Rezervace nebo registrace", "ar-EG": "الحجز أو التسجيل", "zh-CN": "预约或登记", "zh-TW": "預約或登記" },
 };

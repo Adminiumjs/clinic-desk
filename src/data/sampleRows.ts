@@ -64,7 +64,7 @@ type Fill = string | number | boolean | null | typeof NOW | typeof REQUIRED;
  */
 // ── written by `npm run sample` from manifest.json; do not edit by hand ──
 export const COLUMNS: Record<string, Record<string, Fill>> = {
-  settings: { practice_name: REQUIRED, mark: REQUIRED, address: REQUIRED, phone: REQUIRED, email: null, intro: null, directions: null, map_link: null, entrance_photo: null, pay_note: null, insurer_note: null, privacy_link: null, currency: "USD", language: "en-US", slot_minutes: 15, booking_days: 10, min_notice_minutes: 60, new_patients_online: true, online_booking_on: true, no_show_minutes: 15, cancel_hours: 24, reminders_on: true, default_lead_hours: 24, kiosk_on: false, pay_ahead: true, pay_hold_minutes: 15, auto_refund: true, supplies_place_id: null },
+  settings: { practice_name: REQUIRED, mark: REQUIRED, address: REQUIRED, phone: REQUIRED, email: null, intro: null, directions: null, map_link: null, entrance_photo: null, pay_note: null, insurer_note: null, privacy_link: null, currency: "USD", language: "en-US", slot_minutes: 15, booking_days: 10, min_notice_minutes: 60, new_patients_online: true, online_booking_on: true, no_show_minutes: 15, cancel_hours: 24, reminders_on: true, default_lead_hours: 24, kiosk_on: false, pay_ahead: true, pay_hold_minutes: 15, auto_refund: true, supplies_place_id: null, texts_on: false, text_name: null },
   opening_hours: { weekday: REQUIRED, open: true, opens: "08:30", closes: "17:30", break_start: null, break_end: null },
   clinicians: { name: REQUIRED, short_name: REQUIRED, role_label: REQUIRED, color: "#0369a1", photo: null, bio: null, bookable_online: true, active: true, position: 0, staff_email: null },
   visit_types: { name: REQUIRED, short_name: REQUIRED, minutes: 15, fee: 0, color: "#3b6fbd", icon: "stethoscope", bookable_online: true, new_patients_only: false, active: true, position: 0 },
@@ -83,6 +83,7 @@ export const COLUMNS: Record<string, Record<string, Fill>> = {
   waiting_list: { patient_id: REQUIRED, visit_type_id: REQUIRED, clinician_id: null, part_of_day: "any", status: "waiting", channel: "desk", booked_appointment_id: null, note: null, created_at: NOW },
   messages: { kind: REQUIRED, patient_id: null, appointment_id: null, recall_id: null, closure_id: null, payment_id: null, to_address: null, language: null, status: "queued", error: null, due_at: null, sent_at: null, created_by: null, client_key: null, created_at: NOW },
   day_closes: { day: REQUIRED, no_shows_marked: 0, cash_expected: 0, cash_counted: null, note: null, closed_by: null, closed_at: NOW },
+  text_answers: { patient_id: null, name: null, mobile: REQUIRED, texts_ok: false, texts_off: false, source: REQUIRED, about_ref: null, created_at: NOW },
 };
 // ── end of the written part ──
 

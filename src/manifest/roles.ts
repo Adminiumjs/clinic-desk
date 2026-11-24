@@ -27,7 +27,15 @@ const view = (page: string) => `page:@${page}:view`;
 const pii = (table: string) => `table:@${table}:read_pii`;
 
 /** The tables whose personal columns the desk works with: whom to ring, where to write. */
-const DESK_PII = ["patients", "registrations", "appointments", "messages"];
+const DESK_PII = ["patients", "registrations", "appointments", "messages", "text_answers"];
+
+/**
+ * A patient's answers about texts are theirs: the desk reads them, and only
+ * links one to the patient it accepted the booking or registration as. Nobody
+ * at the desk writes a yes or a no for a patient, because the consent Adminium
+ * counts is the one the patient gave on the box, kept in its own log.
+ */
+const TEXT_ANSWERS_LINK = { text_answers: { writable: ["patient_id"] } };
 
 const EVERY_TABLE = TABLES.map((t) => t.ref);
 
@@ -110,11 +118,13 @@ export const ROLES = [
       // A payment is taken at the desk, but voiding one (an update) is a
       // manager's, like a write-off: money the desk took stays taken.
       ...grant("payments", "create"),
+      ...grant("text_answers", "update"),
       ...RECEPTION_PAGES.map(view),
       ...DESK_PII.map(pii),
       // The days Holiday Calendars suggests are picked on Hours & closures, and kept in the add-on's own settings.
       HOLIDAY_SETTINGS,
     ],
+    limits: TEXT_ANSWERS_LINK,
     // Reception sees what a visit used, by name; it records none of it.
     tables: STOCK_NAMES,
   },
@@ -158,8 +168,9 @@ export const ROLES = [
     permissions: [
       "app:@:staff",
       ...EVERY_TABLE.flatMap((table) =>
-        // The outbox is the practice's log of what was sent: nobody deletes from it.
-        table === "messages" ? grant(table, "read", "create", "update") : grant(table, "read", "create", "update", "delete"),
+        // The outbox is the practice's log of what was sent: nobody deletes from it. A patient's answers about
+        // texts are theirs to give: the manager links one to its patient, as reception does, and writes none.
+        table === "messages" ? grant(table, "read", "create", "update") : table === "text_answers" ? grant(table, "read", "update") : grant(table, "read", "create", "update", "delete"),
       ),
       ...PAGE_REFS.flatMap((page) => [view(page), `page:@${page}:edit`]),
       ...DESK_PII.map(pii),
@@ -167,6 +178,7 @@ export const ROLES = [
       // Gives back what patients paid online for the practice's own visits (the install review shows it, and may untick it).
       "payments:@:refund",
     ],
+    limits: TEXT_ANSWERS_LINK,
     tables: STOCK_RECORDING,
   },
   {

@@ -36,6 +36,18 @@
  * closure that moved their visit, or a payment they made. The practice sends
  * no newsletter.
  *
+ * And two texts, to a patient who ticked the box for them (Adminium checks
+ * that yes, for that exact number, at every send), while the practice's
+ * "Visit texts" switch is on (`texts_on`):
+ *
+ *   reminder_text  at the same lead as the email reminder, whatever the
+ *                  patient chose for email: one switch never moves the other;
+ *   missed_text    when a visit is marked a no-show.
+ *
+ * They say only the practice's name, the date and the time (`texts.ts`). A
+ * patient who never ticked the box gets nothing: the row reads "Not sent:
+ * this person has not agreed to texts", which the desk shows as "No text".
+ *
  * The log is the dedupe: a kind already queued or sent for a visit is not
  * queued again, so the desk's early "Send now" is never followed by the
  * automatic one, and a moved visit gets a fresh reminder.
@@ -65,8 +77,10 @@ export const OUTBOX = {
     name: "name",
     language: "language",
     optIn: "remind_email",
+    // Texts go to the patient's mobile: the number their yes is kept for.
+    phone: "mobile",
     // A first visit is on the appointment itself until the desk accepts it.
-    fallback: { via: "appointment_id", email: "new_email", name: "new_name", language: "language" },
+    fallback: { via: "appointment_id", email: "new_email", name: "new_name", language: "language", phone: "new_mobile" },
   },
   // `phone`: the notice to a patient's old address after an email change ends
   // "If this wasn't you, ring us on …" with the desk's number.
@@ -81,7 +95,10 @@ export const OUTBOX = {
     receipt: "clinic-receipt",
     paid_ahead: "clinic-paid-ahead",
     balance: "clinic-balance",
+    reminder_text: "clinic-reminder-text",
+    missed_text: "clinic-missed-text",
   },
+  channels: { reminder_text: "sms", missed_text: "sms" },
   // About the patient's own care and money, every one: none is stopped by the do-not-email list.
   classes: {
     confirmation: "service",
@@ -92,6 +109,8 @@ export const OUTBOX = {
     receipt: "service",
     paid_ahead: "service",
     balance: "service",
+    reminder_text: "service",
+    missed_text: "service",
   },
   producers: [
     // A visit booked by the desk, or by a patient already on file. One made waiting for its
@@ -134,6 +153,25 @@ export const OUTBOX = {
       link: "appointment_id",
       gate: "enabled",
       optIn: true,
+      before: {
+        table: "appointments",
+        at: "starts_at",
+        lead: {
+          via: "patient_id",
+          table: "patients",
+          column: "remind_lead_hours",
+          fallback: { table: "settings", column: "default_lead_hours" },
+          max: 48,
+        },
+        where: { column: "status", eq: "booked" },
+      },
+    },
+    // The texts: only while the practice sends them. No `optIn`: that is the email switch, and a text needs its own yes.
+    { kind: "missed_text", link: "appointment_id", gate: { setting: { table: "settings", column: "texts_on" } }, onChange: { table: "appointments", column: "status", to: "no_show" } },
+    {
+      kind: "reminder_text",
+      link: "appointment_id",
+      gate: { setting: { table: "settings", column: "texts_on" } },
       before: {
         table: "appointments",
         at: "starts_at",

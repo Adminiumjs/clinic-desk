@@ -71,7 +71,9 @@
           "cancel_hours": 24,
           "reminders_on": true,
           "default_lead_hours": 24,
-          "kiosk_on": true
+          "kiosk_on": true,
+          "texts_on": false,
+          "text_name": "Rowan Health"
         }
       ]
     },

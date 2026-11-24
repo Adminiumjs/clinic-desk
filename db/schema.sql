@@ -5,6 +5,7 @@
 -- by hand: change the manifest and regenerate. src/data/sample-drift.test.ts
 -- fails when this file and the manifest disagree.
 
+DROP TABLE IF EXISTS clinic_text_answers CASCADE;
 DROP TABLE IF EXISTS clinic_day_closes CASCADE;
 DROP TABLE IF EXISTS clinic_messages CASCADE;
 DROP TABLE IF EXISTS clinic_waiting_list CASCADE;
@@ -54,7 +55,9 @@ CREATE TABLE clinic_settings (
   pay_ahead BOOLEAN NOT NULL DEFAULT TRUE,
   pay_hold_minutes INTEGER NOT NULL DEFAULT 15,
   auto_refund BOOLEAN NOT NULL DEFAULT TRUE,
-  supplies_place_id INTEGER
+  supplies_place_id INTEGER,
+  texts_on BOOLEAN NOT NULL DEFAULT FALSE,
+  text_name VARCHAR(40)
 );
 
 CREATE TABLE clinic_opening_hours (
@@ -294,7 +297,7 @@ CREATE TABLE clinic_waiting_list (
 
 CREATE TABLE clinic_messages (
   id SERIAL PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled', 'receipt', 'paid_ahead', 'balance')),
+  kind TEXT NOT NULL CHECK (kind IN ('confirmation', 'reminder', 'missed', 'recall', 'cancelled', 'receipt', 'paid_ahead', 'balance', 'reminder_text', 'missed_text')),
   patient_id INTEGER REFERENCES clinic_patients (id),
   appointment_id INTEGER REFERENCES clinic_appointments (id),
   recall_id INTEGER REFERENCES clinic_recalls (id),
@@ -320,6 +323,18 @@ CREATE TABLE clinic_day_closes (
   note VARCHAR(500),
   closed_by VARCHAR(120),
   closed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE clinic_text_answers (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER REFERENCES clinic_patients (id),
+  name VARCHAR(120),
+  mobile VARCHAR(32) NOT NULL,
+  texts_ok BOOLEAN NOT NULL DEFAULT FALSE,
+  texts_off BOOLEAN NOT NULL DEFAULT FALSE,
+  source TEXT NOT NULL CHECK (source IN ('booking', 'register', 'prefs')),
+  about_ref VARCHAR(12),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE INDEX idx_clinician_visit_types_clinician_id ON clinic_clinician_visit_types (clinician_id);
@@ -352,3 +367,4 @@ CREATE INDEX idx_messages_appointment_id ON clinic_messages (appointment_id);
 CREATE INDEX idx_messages_recall_id ON clinic_messages (recall_id);
 CREATE INDEX idx_messages_closure_id ON clinic_messages (closure_id);
 CREATE INDEX idx_messages_payment_id ON clinic_messages (payment_id);
+CREATE INDEX idx_text_answers_patient_id ON clinic_text_answers (patient_id);

@@ -487,6 +487,10 @@ export function buildSample(): SampleBundle {
       reminders_on: true,
       default_lead_hours: 24,
       kiosk_on: true,
+      // Texts stay off until the practice has a provider and turns them on: a sample turned on with none would
+      // fill the outbox with texts that cannot go. The name is ready for that day.
+      texts_on: false,
+      text_name: "Rowan Health",
     },
   ];
   const WEEK = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
