@@ -286,7 +286,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(installed.outbox.defined).toBe(true);
           expect(installed.addOns?.installed.map((a) => a.key).sort()).toEqual(["holiday-calendars", "invoices"]);
           await tablesOf(at);
-          expect(Object.keys(at.tableIds).length).toBe(20);
+          expect(Object.keys(at.tableIds).length).toBe(19);
           await letterhead(at);
         }, 180_000);
 

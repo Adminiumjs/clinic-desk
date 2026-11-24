@@ -240,15 +240,18 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
         ).map((slot) => ({ ...slot, state: slot.state === "free" ? "free" : "full" })),
       ),
 
+    // What the page reads of a day, and only that: a newer server says more of each day (its last bookable one).
     days: (query) =>
       guard(async (): Promise<DayState[]> =>
-        client.bookingDays(refs.availability, {
-          kind: String(query.kind),
-          ...(query.resource === undefined ? {} : { resource: String(query.resource) }),
-          ...(query.exclude === undefined ? {} : { exclude: String(query.exclude) }),
-          from: query.from,
-          days: query.days,
-        }),
+        (
+          await client.bookingDays(refs.availability, {
+            kind: String(query.kind),
+            ...(query.resource === undefined ? {} : { resource: String(query.resource) }),
+            ...(query.exclude === undefined ? {} : { exclude: String(query.exclude) }),
+            from: query.from,
+            days: query.days,
+          })
+        ).map((day) => ({ date: day.date, open: day.open, state: day.state })),
       ),
 
     find: (mobile, bornOn) =>
