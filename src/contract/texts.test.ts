@@ -176,7 +176,9 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
         const text = await until(async () => sent().find((m) => m.to === e164), "the reminder text at the provider");
         expect(text.from).toBe(NUMBER);
         expect(text.text.startsWith("RH Desk: your visit is on ")).toBe(true);
-        expect(text.text).toContain("Reply STOP to opt out.");
+        // The way to stop that works for this sender now: until a signed reply has reached the server, the desk's phone
+        // (Adminium cannot yet promise a STOP reply would be heard); "Reply STOP to opt out." once one has.
+        expect(text.text.endsWith("To stop these texts, contact 0117 496 0142.") || text.text.endsWith("Reply STOP to opt out.")).toBe(true);
         for (const never of ["Rowan Health", String(clinician?.["name"] ?? "—"), String(clinician?.["short_name"] ?? "—"), String(visit["reason"] ?? "—")]) expect(text.text).not.toContain(never);
         // The row says how it went, as Adminium's code.
         const row = await until(async () => (await rows("messages")).find((m) => m["client_key"] === `texts-${engine}-reminder` && m["status"] === "sent"), "the reminder row sent");
