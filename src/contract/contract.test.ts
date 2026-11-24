@@ -646,25 +646,29 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
             reason: null,
             desk_note: null,
             language: "en-US",
-            newPatient: { name: `Ada Tick ${engine}`, born_on: "1990-04-13", mobile: "07700 900611", email: null, textsOk: true },
+            newPatient: { name: `Ada Tick ${engine}`, born_on: "1990-04-13", mobile: "07400 123461", email: null, textsOk: true },
           });
           const visit = (await rows(at, "appointments")).find((a) => a["ref"] === made.ref)!;
-          expect([visit["texts_ok"], visit["new_mobile"]]).toEqual([true, "07700 900611"]);
+          expect([visit["texts_ok"], visit["new_mobile"]]).toEqual([true, "07400 123461"]);
           const onVisit = await standingOn("appointments", visit.id, "new_mobile");
           expect([onVisit.service.state, onVisit.service.answer?.source, onVisit.service.answer?.wordingVersion]).toEqual(["yes", "form", "v1 en-US"]);
           // And a registration's, on the registration.
-          const registered = await anon.register({ name: `Bo Tick ${engine}`, born_on: "1985-09-29", mobile: "07700 900612", email: null, address: null, emergency_contact: null, language: "en-US", texts_ok: true });
+          const registered = await anon.register({ name: `Bo Tick ${engine}`, born_on: "1985-09-29", mobile: "07400 123462", email: null, address: null, emergency_contact: null, language: "en-US", texts_ok: true });
           const reg = (await rows(at, "registrations")).find((r) => r["ref"] === registered.ref)!;
           expect([reg["texts_ok"], reg["patient_id"]]).toEqual([true, null]);
           expect((await standingOn("registrations", reg.id, "mobile")).service.state).toBe("yes");
           // A box left empty writes nothing.
-          const quiet = await anon.register({ name: `Cy Tick ${engine}`, born_on: "1985-09-28", mobile: "07700 900613", email: null, address: null, emergency_contact: null, language: "en-US" });
+          const quiet = await anon.register({ name: `Cy Tick ${engine}`, born_on: "1985-09-28", mobile: "07400 123463", email: null, address: null, emergency_contact: null, language: "en-US" });
           const plain = (await rows(at, "registrations")).find((r) => r["ref"] === quiet.ref)!;
           expect([plain["texts_ok"], (await standingOn("registrations", plain.id, "mobile")).service.state]).toEqual([false, "not-asked"]);
           expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
         }, 120_000);
 
         it("turns the verified patient's texts off and on again from Prefs: their own fresh yes replaces their own no", async () => {
+          // The sample's numbers are Ofcom's drama range, which no text can reach: Prefs say so.
+          expect((await own.myTextStanding()).service.state).toBe("no-phone");
+          // The desk gives them a number a text can reach (the number is the desk's to change, and the session stays).
+          ok(await at.staff.patch(`${data(at, "patients")}/${String(patient.id)}`, { values: { mobile: "07400 123464" } }));
           expect((await own.myTextStanding()).service.state).toBe("not-asked");
           await own.setTexts(false);
           expect((await own.myTextStanding()).service.state).toBe("no");
@@ -675,13 +679,14 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect((await standingOn("patients", patient.id, "mobile")).service.state).toBe("yes");
           // Found is not proved: Prefs' doors need the emailed code.
           const stranger = await patientPort();
-          await stranger.find(String(patient["mobile"]), String(patient["born_on"]));
+          await stranger.find("07400 123464", String(patient["born_on"]));
           expect((await refusal(() => stranger.setTexts(false))).code).toBe("PUBLIC_CLAIM_LEVEL");
           expect((await refusal(() => stranger.myTextStanding())).code).toBe("PUBLIC_CLAIM_LEVEL");
         }, 120_000);
 
         it("records a yes the desk heard in person, with the box's words, named; and a no", async () => {
           const someone = (await rows(at, "patients")).find((p) => p.id !== patient.id && typeof p["mobile"] === "string")!;
+          ok(await at.staff.patch(`${data(at, "patients")}/${String(someone.id)}`, { values: { mobile: "07400 123465" } }));
           const body = { connection: at.connectionId, table: at.tableIds["patients"]!, row: String(someone.id), column: "mobile" };
           // A yes needs the words they were given.
           expect((await at.staff.post("/api/v1/texts/consent", { ...body, state: "yes", how: "in-person" })).status).toBe(422);
@@ -689,9 +694,10 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect([yes.service.state, yes.service.answer.source, yes.service.answer.how, yes.service.answer.wordingVersion, yes.service.answer.by !== null]).toEqual(["yes", "staff", "in-person", "v1 en-US", true]);
           const no = ok(await at.staff.post<{ data: { service: { state: string } } }>("/api/v1/texts/consent", { ...body, state: "no", how: "phone" })).data;
           expect(no.service.state).toBe("no");
-          // Back as the sample was: no text is queued by the rest of the run.
+          // Back as the sample was: no text is queued by the rest of the run, and the patient's number is theirs again.
           const settings = (await rows(at, "settings"))[0]!;
           ok(await at.staff.patch(`${data(at, "settings")}/${String(settings.id)}`, { values: { texts_on: false } }));
+          ok(await at.staff.patch(`${data(at, "patients")}/${String(patient.id)}`, { values: { mobile: patient["mobile"] } }));
         }, 120_000);
 
         it("books, moves and cancels as the found patient, within the rules: two at most, too late to move, a late cancel flagged", async () => {
