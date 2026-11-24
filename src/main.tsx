@@ -304,6 +304,9 @@ async function bootDemo(): Promise<void> {
   const db = createDemoDb(resolve("en-US") as never, clock.now, DEMO_ZONE);
   const { relabeller } = await import("./demo/relabel.ts");
   const relabel = relabeller(db, resolve, "en-US");
+  // The demo's practice sends visit texts, to the patients who said yes to them (nothing leaves the browser).
+  const { demoTexts } = await import("./demo/texts.ts");
+  demoTexts(db);
   // The reminders already due on the pinned morning have gone, as they would have on a real install.
   scanReminders(db);
 

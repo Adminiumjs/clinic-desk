@@ -286,7 +286,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(installed.outbox.defined).toBe(true);
           expect(installed.addOns?.installed.map((a) => a.key).sort()).toEqual(["holiday-calendars", "invoices"]);
           await tablesOf(at);
-          expect(Object.keys(at.tableIds).length).toBe(19);
+          expect(Object.keys(at.tableIds).length).toBe(20);
           await letterhead(at);
         }, 180_000);
 
@@ -625,6 +625,41 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
           expect(Object.keys(mine[0]!).sort()).toEqual(["balance", "clinician_id", "id", "late_cancel", "minutes", "paid", "reason", "ref", "refunded", "starts_at", "status", "visit_type_id"]);
           expect(await own.myDetails()).toMatchObject({ name: patient["name"], email: CLAIM_INBOX, mobile: patient["mobile"] });
         }, 180_000);
+
+        it("takes a yes from the box for texts only while the practice sends them, after the booking it was ticked on, and keeps it as nobody's yet", async () => {
+          const yes = { mobile: "07700 900601", source: "booking" as const, name: `Ada Quill ${engine}`, aboutRef: booked.ref };
+          // The practice sends no texts yet: the door is shut, and the booking it was ticked on stands.
+          expect((await refusal(() => anon.textYes(yes))).code).toBe("PUBLIC_SWITCHED_OFF");
+          const settings = (await rows(at, "settings"))[0]!;
+          ok(await at.staff.patch(`${data(at, "settings")}/${String(settings.id)}`, { values: { texts_on: true } }));
+          await anon.textYes(yes);
+          const answers = await rows(at, "text_answers");
+          expect(answers.map((a) => [a["patient_id"], a["mobile"], Boolean(a["texts_ok"]), Boolean(a["texts_off"]), a["source"], a["about_ref"]])).toEqual([[null, "07700 900601", true, false, "booking", booked.ref]]);
+          // Nobody's page reads the answers but their own: a stranger's port has no door to them.
+          expect((await refusal(() => anon.myTextAnswers())).code).toMatch(/^PUBLIC_CLAIM_/);
+          expect(heard.filter((code) => !(PUBLIC_ERROR_CODES as readonly string[]).includes(code))).toEqual([]);
+        }, 120_000);
+
+        it("keeps the verified patient's own yes and no from their Reminders page, for the number on file", async () => {
+          const mobile = String(patient["mobile"]);
+          expect(await own.myTextAnswers()).toEqual([]);
+          await own.textYes({ mobile, source: "prefs" });
+          await own.textNo(mobile);
+          const said = await own.myTextAnswers();
+          expect(said.map((a) => [a.texts_ok, a.texts_off, a.source])).toEqual([
+            [true, false, "prefs"],
+            [false, true, "prefs"],
+          ]);
+          const theirs = (await rows(at, "text_answers")).filter((a) => a["patient_id"] === patient.id);
+          expect(theirs.map((a) => a["mobile"])).toEqual([mobile, mobile]);
+          // Found is not proved: a no for a number needs the emailed code, as a yes from Prefs does.
+          const stranger = await patientPort();
+          await stranger.find(mobile, String(patient["born_on"]));
+          expect((await refusal(() => stranger.textNo(mobile))).code).toBe("PUBLIC_CLAIM_LEVEL");
+          // Back as the sample was: no text is queued by the rest of the run.
+          const settings = (await rows(at, "settings"))[0]!;
+          ok(await at.staff.patch(`${data(at, "settings")}/${String(settings.id)}`, { values: { texts_on: false } }));
+        }, 120_000);
 
         it("books, moves and cancels as the found patient, within the rules: two at most, too late to move, a late cancel flagged", async () => {
           const time = firstFree(await own.times({ kind: 1, resource: 2, date: later }), "09:00");

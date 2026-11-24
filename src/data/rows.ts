@@ -35,6 +35,7 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     pay_hold_minutes: "int",
     auto_refund: "bool",
     supplies_place_id: "int",
+    texts_on: "bool",
   },
   opening_hours: { id: "int", open: "bool" },
   clinicians: { id: "int", bookable_online: "bool", active: "bool", position: "int" },
@@ -96,6 +97,7 @@ export const COLUMN_KINDS: Readonly<Record<TableRef, Readonly<Record<string, Kin
     created_at: "instant",
   },
   day_closes: { id: "int", day: "day", no_shows_marked: "int", cash_expected: "money", cash_counted: "money", closed_at: "instant" },
+  text_answers: { id: "int", patient_id: "int", texts_ok: "bool", texts_off: "bool", created_at: "instant" },
 };
 
 /** Totals a row always has, even before the server has settled them. */

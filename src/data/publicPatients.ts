@@ -24,6 +24,7 @@ import {
   type CodeResult,
   type DayState,
   type OwnDetails,
+  type OwnTextAnswer,
   type OwnVisit,
   type PatientsPort,
   type SlotTime,
@@ -51,6 +52,12 @@ interface Refs {
   register: string;
   /** The earlier-time list; null on a key that has none (the page then says it cannot join). */
   waitlist: string | null;
+  /** A yes from the box with nobody on file; null on a key that has none (an older install). */
+  textNew: string | null;
+  /** The verified patient's answers about texts, and their yes. */
+  textMine: string | null;
+  /** The verified patient's no. */
+  textStop: string | null;
 }
 
 /** Which ref is which, by what each one does. Throws naming what is missing. */
@@ -86,6 +93,11 @@ export function refsOf(config: PublicConfig, tables: Record<string, string>): Re
     visits: pick("own visits", of("appointments").filter(([, r]) => r.actions.includes("update") && r.expose.includes("late_cancel"))),
     register: pick("registration", of("registrations").filter(([, r]) => r.actions.includes("create"))),
     waitlist: of("waiting_list").find(([, r]) => r.actions.includes("create"))?.[0] ?? null,
+    // Three doors write an answer about texts: a yes with nobody on file (it takes the name typed), the patient's own
+    // yes (it also reads their answers), and their no.
+    textNew: of("text_answers").find(([, r]) => r.actions.includes("create") && r.writable.includes("name"))?.[0] ?? null,
+    textMine: of("text_answers").find(([, r]) => r.actions.includes("read") && r.writable.includes("texts_ok"))?.[0] ?? null,
+    textStop: of("text_answers").find(([, r]) => r.actions.includes("create") && r.writable.includes("texts_off"))?.[0] ?? null,
   };
 }
 
@@ -278,6 +290,34 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
       }),
 
     signOut: () => guard(() => client.signOut()),
+
+    // ── visit texts ──
+    myTextAnswers: () =>
+      guard(async (): Promise<OwnTextAnswer[]> => {
+        if (refs.textMine === null) return [];
+        const rows = normaliseAll("text_answers", (await client.list<Record<string, unknown>>(refs.textMine, { limit: 200 })).data);
+        return rows
+          .map((row) => ({ id: row.id, texts_ok: row.texts_ok === true, texts_off: row.texts_off === true, source: row.source, created_at: row.created_at ?? null }))
+          .sort((a, b) => (a.created_at ?? "").localeCompare(b.created_at ?? "") || a.id - b.id);
+      }),
+
+    textYes: (answer) =>
+      guard(async () => {
+        const ref = answer.source === "prefs" ? refs.textMine : refs.textNew;
+        if (ref === null) throw new PortError("PUBLIC_SETUP", "this page's key takes no answer about texts");
+        const values: Record<string, unknown> = { mobile: answer.mobile, texts_ok: true, source: answer.source };
+        if (answer.source !== "prefs") {
+          values["name"] = answer.name ?? null;
+          values["about_ref"] = answer.aboutRef ?? null;
+        }
+        await client.create(ref, values);
+      }),
+
+    textNo: (mobile) =>
+      guard(async () => {
+        if (refs.textStop === null) throw new PortError("PUBLIC_SETUP", "this page's key takes no answer about texts");
+        await client.create(refs.textStop, { mobile, texts_off: true, source: "prefs" });
+      }),
 
     // ── paying online ──
     // Only ever asked, never decided here: "Pay now" shows while the server says the practice takes payments online.

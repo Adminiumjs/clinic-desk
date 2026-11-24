@@ -43,6 +43,7 @@ export const REQUIRED: Record<TableRef, string[]> = {
   waiting_list: ["id", "patient_id", "visit_type_id", "status"],
   messages: ["id", "kind", "status", "to_address", "sent_at", "client_key"],
   day_closes: ["id", "day", "cash_expected", "closed_at"],
+  text_answers: ["id", "patient_id", "mobile", "texts_ok", "texts_off", "source", "about_ref"],
 };
 
 /** The route's largest page. */
@@ -274,11 +275,19 @@ export function sessionDeskReads(
         count: true,
       });
       const visits = normaliseAll("appointments", visitsPage.data);
-      const [recalls, payments] = await Promise.all([
+      const [recalls, payments, ownAnswers, typedAnswers, texts] = await Promise.all([
         all("recalls", { column: "patient_id", op: "eq", value: id }, "due_on.asc"),
         byIds("payments", "appointment_id", visits.map((v) => v.id)),
+        // Their answers about texts: their own, and one given on the box for their number before anyone linked it.
+        all("text_answers", { column: "patient_id", op: "eq", value: id }, "created_at.asc", 50),
+        all("text_answers", and({ column: "patient_id", op: "is_null" }, { column: "mobile", op: "eq", value: patient.mobile }), "created_at.asc", 20),
+        all("messages", and({ column: "patient_id", op: "eq", value: id }, { column: "kind", op: "in", value: ["reminder_text", "missed_text"] }), "created_at.desc", 20),
       ]);
-      return { patient, visits, visitsTotal: visitsPage.total ?? visits.length, recalls, payments };
+      return { patient, visits, visitsTotal: visitsPage.total ?? visits.length, recalls, payments, textAnswers: [...ownAnswers, ...typedAnswers], texts };
+    },
+
+    async textAnswersAbout(ref) {
+      return all("text_answers", and({ column: "about_ref", op: "eq", value: ref }, { column: "patient_id", op: "is_null" }), "created_at.asc", 10);
     },
 
     async matches(person) {

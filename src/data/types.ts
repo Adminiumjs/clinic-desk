@@ -65,6 +65,10 @@ export interface Settings {
   auto_refund: boolean;
   /** The place in Inventory a visit's supplies come off; null for Inventory's own default place. */
   supplies_place_id: Id | null;
+  /** Whether the practice sends visit texts (to patients who ticked the box). */
+  texts_on: boolean;
+  /** What a text calls the practice: its own name, or a plain one for a practice whose name says what it treats. */
+  text_name: string | null;
 }
 
 export interface OpeningHours {
@@ -360,7 +364,10 @@ export interface WaitingEntry {
   created_at: Instant | null;
 }
 
-export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled" | "receipt" | "paid_ahead" | "balance";
+export type MessageKind = "confirmation" | "reminder" | "missed" | "recall" | "cancelled" | "receipt" | "paid_ahead" | "balance" | "reminder_text" | "missed_text";
+/** The kinds that go as a text to the patient's mobile; every other kind is an email. */
+export const TEXT_KINDS: readonly MessageKind[] = ["reminder_text", "missed_text"];
+export const isTextKind = (kind: MessageKind): boolean => TEXT_KINDS.includes(kind);
 export type MessageStatus = "queued" | "sent" | "failed" | "skipped";
 
 export interface Message {
@@ -394,6 +401,26 @@ export interface DayClose {
   closed_at: Instant;
 }
 
+/** Where a patient answered about texts. */
+export type TextSource = "booking" | "register" | "prefs";
+
+/**
+ * A patient's answer about texts: a yes (the box ticked) or a no (switched
+ * off in their Prefs). Adminium keeps the consent itself, in its text consent
+ * log; this is the practice's copy, for the desk and the Prefs page.
+ */
+export interface TextAnswer {
+  id: Id;
+  patient_id: Id | null;
+  name: string | null;
+  mobile: string;
+  texts_ok: boolean;
+  texts_off: boolean;
+  source: TextSource;
+  about_ref: string | null;
+  created_at: Instant | null;
+}
+
 /** Every table, by its short name, with the row it holds. */
 export interface Tables {
   settings: Settings;
@@ -415,6 +442,7 @@ export interface Tables {
   waiting_list: WaitingEntry;
   messages: Message;
   day_closes: DayClose;
+  text_answers: TextAnswer;
 }
 export type TableRef = keyof Tables;
 

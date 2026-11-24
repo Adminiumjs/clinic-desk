@@ -30,6 +30,7 @@ const REFS: readonly TableRef[] = [
   "waiting_list",
   "messages",
   "day_closes",
+  "text_answers",
 ];
 
 export const TABLE_OF_REF: Readonly<Record<TableRef, string>> = Object.fromEntries(REFS.map((ref) => [ref, `clinic_${ref}`])) as Record<TableRef, string>;

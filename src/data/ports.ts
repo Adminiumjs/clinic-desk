@@ -40,6 +40,8 @@ import type {
   Settings,
   TableRef,
   Tables,
+  TextAnswer,
+  TextSource,
   VisitType,
   WaitingEntry,
   WriteOff,
@@ -125,6 +127,10 @@ export interface PatientPage {
   visitsTotal: number;
   recalls: Recall[];
   payments: Payment[];
+  /** Their answers about texts: their own, and any given on the box for the number on file before they were. */
+  textAnswers: TextAnswer[];
+  /** The texts the outbox logged for them, newest first. */
+  texts: Message[];
 }
 
 export type PatientFilter = "all" | "owing" | "allergies" | "recall";
@@ -168,6 +174,8 @@ export interface DeskReads {
   matches(person: { name: string; born_on: Day; mobile: string }): Promise<{ both: Patient[]; name: Patient[]; mobile: Patient[] }>;
   times(query: SlotQuery & { date: Day }): Promise<SlotTime[]>;
   days(query: SlotQuery & { from: Day; days: number }): Promise<DayState[]>;
+  /** The answers about texts given on the box of a booking or a registration (its reference), with nobody linked yet. */
+  textAnswersAbout(ref: string): Promise<TextAnswer[]>;
   /** A patient's code lock: ten wrong codes in a day. */
   codeLock(patientId: Id): Promise<{ locked: boolean; failures: number }>;
   clearCodeLock(patientId: Id): Promise<void>;
@@ -266,6 +274,19 @@ export interface NewVisit {
   newPatient?: { name: string; born_on: Day; mobile: string; email: string | null };
 }
 
+/** A patient's own answer about texts, as their Prefs page reads it. */
+export type OwnTextAnswer = Pick<TextAnswer, "id" | "texts_ok" | "texts_off" | "source" | "created_at">;
+
+/** A yes from the box: with nobody on file (a first booking, a registration), or the verified patient's own (Prefs). */
+export interface TextYes {
+  mobile: string;
+  source: TextSource;
+  /** The name typed beside it, when nobody is on file. */
+  name?: string | null;
+  /** The booking's or registration's reference, so the desk can link it when it accepts that. */
+  aboutRef?: string | null;
+}
+
 export interface NewRegistration {
   name: string;
   born_on: Day;
@@ -334,6 +355,18 @@ export interface PatientsPort {
    */
   joinWaitlist(wish: Wish): Promise<{ rank: number | null }>;
   signOut(): Promise<void>;
+
+  // ── visit texts ──
+  /** The verified patient's answers about texts, oldest first. */
+  myTextAnswers(): Promise<OwnTextAnswer[]>;
+  /**
+   * A yes from the unticked box, ticked. Sent after the booking or the
+   * registration is made, never as a condition of it: a refusal here costs
+   * the yes, and nothing else.
+   */
+  textYes(answer: TextYes): Promise<void>;
+  /** The verified patient's no, for the number on file: texts stop. */
+  textNo(mobile: string): Promise<void>;
 
   // ── paying online ──
   /** Whether "Pay now" may be offered: false on a practice that takes no payments, and the pages read as ever. */
