@@ -47,6 +47,7 @@ import type {
 import { addDays, venueDay } from "../data/venueTime.ts";
 import { now, practiceZone } from "../lib/clock.ts";
 import { stepKey } from "../lib/keys.ts";
+import { samePhone } from "../lib/texts.ts";
 import { deskReads, drop, ensurePatients, upsert, useDesk } from "./desk.ts";
 import { useDeskPay } from "./deskPay.ts";
 import { forgetAddOn } from "./features.ts";
@@ -497,8 +498,29 @@ export function acceptNewPatient(item: ToCheck, key: string): Promise<Outcome<Pa
     if (item.kind === "registration") await update("registrations", item.row.id, { patient_id: patient.id, status: "accepted" });
     // The first visit's confirmation email goes now, to the address just accepted.
     else await update("appointments", item.row.id, { patient_id: patient.id, check_status: "accepted" });
+    await linkTextAnswers(item, patient.id, patient.mobile);
     return patient;
   });
+}
+
+/**
+ * The box for texts ticked on what was just accepted or linked: its answer is
+ * now this patient's too, so their Reminders page says texts are on. Nothing
+ * of the answer changes but whose it is, and only one given for the number on
+ * the booking or the registration, and only while that is the number on their
+ * file (a yes is for one number: a patient on file under another needs their
+ * own). A link that cannot be written leaves the yes standing in Adminium all
+ * the same: it is for the number, not the row.
+ */
+async function linkTextAnswers(item: ToCheck, patientId: Id, onFile: string | null): Promise<void> {
+  const typed = item.kind === "registration" ? item.row.mobile : item.row.new_mobile;
+  if (!samePhone(typed, onFile)) return;
+  try {
+    const answers = await deskReads().textAnswersAbout(item.row.ref);
+    for (const answer of answers) if (samePhone(answer.mobile, typed)) await update("text_answers", answer.id, { patient_id: patientId });
+  } catch {
+    // Not this person's to see, or not there: their own Prefs links the next answer.
+  }
 }
 
 /** Same person as a patient already on file: linked, and NOTHING typed is copied onto their record. */
@@ -506,6 +528,7 @@ export function linkToPatient(item: ToCheck, patientId: Id): Promise<Outcome<voi
   return attempt(async () => {
     if (item.kind === "registration") await update("registrations", item.row.id, { patient_id: patientId, status: "duplicate" });
     else await update("appointments", item.row.id, { patient_id: patientId, check_status: "linked" });
+    await linkTextAnswers(item, patientId, useDesk.getState().patients[patientId]?.mobile ?? null);
   });
 }
 

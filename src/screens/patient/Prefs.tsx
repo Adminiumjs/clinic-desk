@@ -13,12 +13,14 @@
 import { useEffect, useState } from "react";
 import { Check, KeyRound, Mail, RotateCw } from "lucide-react";
 
-import type { CodeSent, OwnDetails } from "../../data/ports.ts";
+import type { CodeSent, OwnDetails, OwnTextAnswer } from "../../data/ports.ts";
 import { PortError } from "../../data/ports.ts";
 import { useI18n } from "../../i18n/index.tsx";
 import { Btn, Chip, Switch, cardStyle, mono } from "../../components/ui.tsx";
 import { ageOn, num } from "../../lib/format.ts";
-import { checkCode, loadMyDetails, savePrefs, sendCode, usePatients } from "../../state/patients.ts";
+import { checkCode, loadMyDetails, patientsPort, savePrefs, sendCode, usePatients } from "../../state/patients.ts";
+import { chinaMainland, ltr, ownTextState } from "../../lib/texts.ts";
+import { TextBox } from "./TextBox.tsx";
 import { toast } from "../../state/ui.ts";
 import { CodeBoxes, CodeStep, EMPTY_CODE, codeMessage, countdownLabel, useCountdown } from "./CodeStep.tsx";
 import { forgetSession } from "./flow.ts";
@@ -85,14 +87,36 @@ function Found() {
       ) : details === null ? (
         <div className="rh-skel" style={{ height: 320, borderRadius: 16 }} />
       ) : (
-        <Form details={details} phone={cat.settings?.phone ?? ""} />
+        <Form details={details} phone={cat.settings?.phone ?? ""} textsOn={cat.settings?.texts_on === true} />
       )}
     </div>
   );
 }
 
-function Form({ details, phone }: { details: OwnDetails; phone: string }) {
+function Form({ details, phone, textsOn }: { details: OwnDetails; phone: string; textsOn: boolean }) {
   const { t } = useI18n();
+  // Their own last word on texts (read once): on, off because they asked us to stop, or never asked. Null while it loads.
+  const [answers, setAnswers] = useState<OwnTextAnswer[] | null>(null);
+  const textState = answers === null ? null : ownTextState(answers);
+  const [byText, setByText] = useState(false);
+  const [boxTicked, setBoxTicked] = useState(false);
+  useEffect(() => {
+    let live = true;
+    patientsPort()
+      .myTextAnswers()
+      .then((found) => {
+        if (!live) return;
+        setAnswers(found);
+        setByText(ownTextState(found) === "on");
+      })
+      .catch(() => live && setAnswers([]));
+    return () => {
+      live = false;
+    };
+  }, []);
+  // Shown while the practice sends texts, or while theirs are on (so they can always switch them off).
+  const showTexts = textState !== null && (textsOn || textState === "on");
+  const china = chinaMainland(details.mobile);
   const [email, setEmail] = useState(details.email ?? "");
   const [remind, setRemind] = useState(details.remind_email);
   const [lead, setLead] = useState(details.remind_lead_hours);
@@ -123,6 +147,37 @@ function Form({ details, phone }: { details: OwnDetails; phone: string }) {
     setProblem(kind);
   };
 
+  /**
+   * "Remind me by text", saved with the rest. On, with the box ticked: their
+   * yes, for the number on file. Off, when it was on: their no, and texts stop.
+   * On with the box left empty changes nothing: the switch goes back, with no
+   * question asked.
+   */
+  const saveTexts = async () => {
+    if (textState === null) return;
+    const wasOn = textState === "on";
+    try {
+      if (byText && !wasOn && boxTicked && !china) {
+        await patientsPort().textYes({ mobile: details.mobile, source: "prefs" });
+        toast(t("texts.prefs.savedOn"), { icon: "message-square", tone: "pos" });
+      } else if (!byText && wasOn) {
+        await patientsPort().textNo(details.mobile);
+        toast(t("texts.prefs.savedOff"), { icon: "message-square-off", tone: "pos" });
+      } else {
+        setByText(wasOn);
+        setBoxTicked(false);
+        return;
+      }
+      const found = await patientsPort().myTextAnswers();
+      setAnswers(found);
+      setByText(ownTextState(found) === "on");
+      setBoxTicked(false);
+    } catch (error) {
+      if (error instanceof PortError && sessionEnded(error.code)) throw error;
+      toast(t("texts.prefs.notSaved", { phone }), { icon: "triangle-alert", tone: "danger" });
+    }
+  };
+
   const save = async () => {
     const next = email.trim();
     const changed = next !== (details.email ?? "");
@@ -136,6 +191,7 @@ function Form({ details, phone }: { details: OwnDetails; phone: string }) {
       if (remind !== details.remind_email || lead !== details.remind_lead_hours || !changed) {
         await savePrefs({ remind_email: remind, remind_lead_hours: lead });
       }
+      await saveTexts();
       if (changed) {
         const sent = await sendCode({ purpose: "email-change", email: next });
         setPanel({ to: next, sent, sentAt: performance.now() });
@@ -222,6 +278,37 @@ function Form({ details, phone }: { details: OwnDetails; phone: string }) {
         </span>
         <Switch on={remind} onChange={setRemind} label={t("prefs.remind")} />
       </div>
+      {showTexts && (
+        <div data-part="prefs-texts" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
+            <span style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 }}>
+              <span id="pr-texts" style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.022em" }}>
+                {t("texts.prefs.remind")}
+              </span>
+              <span id="pr-texts-body" style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>
+                {t("texts.prefs.remindBody", { mobile: ltr(details.mobile) })}
+              </span>
+              {textState === "stopped" && !byText && (
+                <span role="status" style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>
+                  {t("texts.prefs.stopped")}
+                </span>
+              )}
+            </span>
+            <Switch
+              on={byText}
+              onChange={(next) => {
+                setByText(next);
+                // Turned on again: the box, unticked, and its words, every time.
+                setBoxTicked(false);
+              }}
+              label={t("texts.prefs.remind")}
+              describedBy="pr-texts-body"
+              disabled={china && textState !== "on"}
+            />
+          </div>
+          {(byText && textState !== "on") || china ? <TextBox id="pr-texts-box" phone={details.mobile} checked={boxTicked} onChange={setBoxTicked} /> : null}
+        </div>
+      )}
       <div role="group" aria-labelledby="pr-when">
         <span id="pr-when" style={labelStyle}>
           {t("prefs.when")}

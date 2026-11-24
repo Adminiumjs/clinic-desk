@@ -12,6 +12,7 @@
  */
 import type { Message, MessageKind } from "../../data/types.ts";
 import type { Upcoming } from "../../lib/outbox.ts";
+import { quietText } from "../../lib/texts.ts";
 
 export { MAX_LEAD_HOURS, remindsThisStart, upcomingReminders, type Upcoming } from "../../lib/outbox.ts";
 
@@ -39,8 +40,10 @@ export function outboxRows(messages: readonly Message[], upcoming: readonly Upco
   const rows: OutboxRow[] = [];
   for (const m of messages) {
     const when = m.sent_at ?? m.created_at ?? m.due_at;
-    if ((m.status === "sent" || m.status === "skipped") && (when === null || dayOf(when) !== today)) continue;
-    rows.push({ key: `m${String(m.id)}`, state: m.status, kind: m.kind, message: m, upcoming: null, at: when === null ? 0 : Date.parse(when) });
+    // A text that will never go and needs nobody (no yes, a STOP, no mobile, no provider) reads as not sent, never as a failure.
+    const state: RowState = quietText(m) ? "skipped" : m.status;
+    if ((state === "sent" || state === "skipped") && (when === null || dayOf(when) !== today)) continue;
+    rows.push({ key: `m${String(m.id)}`, state, kind: m.kind, message: m, upcoming: null, at: when === null ? 0 : Date.parse(when) });
   }
   for (const u of upcoming) rows.push({ key: `v${String(u.visit.id)}`, state: "upcoming", kind: "reminder", message: null, upcoming: u, at: u.goesAt });
   return rows.sort((a, b) => ORDER[a.state] - ORDER[b.state] || (a.state === "sent" || a.state === "skipped" ? b.at - a.at : a.at - b.at) || a.key.localeCompare(b.key));

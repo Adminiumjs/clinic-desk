@@ -14,15 +14,17 @@
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, Receipt, Send, UserRoundX, Wallet } from "lucide-react";
+import { Bell, BellOff, BellRing, CalendarCheck, Check, Clock, DoorClosed, MailX, MessageSquare, MessageSquareOff, Receipt, Send, UserRoundX, Wallet } from "lucide-react";
 
-import type { Appointment, Id, MessageKind } from "../data/types.ts";
+import { isTextKind, type Appointment, type Id, type MessageKind } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
+import type { MessageKey } from "../i18n/messages/index.ts";
 import { now as clockNow, today } from "../lib/clock.ts";
 import { dayOf, daysBetween, dayShort, time } from "../lib/format.ts";
 import { actionKey } from "../lib/keys.ts";
 import { clinicianOf, visitName } from "../lib/desk.ts";
 import { useNow } from "../lib/useNow.ts";
+import { ltr, textReason, type TextReason } from "../lib/texts.ts";
 import { sendAgain, sendReminderNow } from "../state/actions.ts";
 import { deskReads, ensureDays, ensurePatients, upsert, useCan, useDesk, type DeskState } from "../state/desk.ts";
 import { toast } from "../state/ui.ts";
@@ -41,6 +43,22 @@ const KINDS: Record<MessageKind, { bg: string; fg: string; icon: LucideIcon; key
   receipt: { bg: "var(--surface-3)", fg: "var(--fg-muted)", icon: Receipt, key: "outbox.kind.receipt" },
   paid_ahead: { bg: "var(--pos-soft)", fg: "var(--pos)", icon: CalendarCheck, key: "outbox.kind.paid_ahead" },
   balance: { bg: "var(--warn-soft)", fg: "var(--warn)", icon: Wallet, key: "outbox.kind.balance" },
+  reminder_text: { bg: "var(--info-soft)", fg: "var(--info)", icon: MessageSquare, key: "outbox.kind.reminder_text" },
+  missed_text: { bg: "var(--warn-soft)", fg: "var(--warn)", icon: MessageSquare, key: "outbox.kind.missed_text" },
+};
+
+/** A text row's reason, in the desk's words. */
+const TEXT_WHY: Record<TextReason, MessageKey> = {
+  noConsent: "outbox.why.textNoConsent",
+  stopped: "outbox.why.textStopped",
+  noProvider: "outbox.why.textNoProvider",
+  noMobile: "outbox.why.textNoMobile",
+  number: "outbox.why.textNumber",
+  country: "outbox.why.textCountry",
+  empty: "outbox.why.textEmpty",
+  waiting: "outbox.why.textWaiting",
+  limit: "outbox.why.textLimit",
+  off: "outbox.why.textOff",
 };
 
 /** A visit the desk may still remind: booked, and not started. */
@@ -225,8 +243,12 @@ function Row({
   const visit = row.upcoming?.visit ?? (m?.appointment_id == null ? undefined : desk.visits[m.appointment_id]);
   const name = m?.patient_id != null ? (desk.patients[m.patient_id]?.name ?? (visit ? visitName(desk, visit) : "")) : visit ? visitName(desk, visit) : "";
   const kind = KINDS[row.kind];
+  const text = isTextKind(row.kind);
   const to = row.upcoming !== null ? row.upcoming.to : (m?.to_address ?? null);
   const why = m === null ? null : reasonKey(m.error);
+  // A text's reason is Adminium's fixed sentence; it holds no number and no word of the text.
+  const textWhy = !text || m === null ? null : textReason(m.error);
+  const textWords = textWhy === null ? "" : t(TEXT_WHY[textWhy]);
   const noAddress = to === null || to.trim() === "";
   const line = lineFor(row, visit, desk, t);
 
@@ -255,14 +277,17 @@ function Row({
         {t("outbox.failed")}
       </span>
     );
-    // A reminder for a visit no longer happening is not sent again.
-    if (canResend && (row.kind !== "reminder" || remindable(visit, now))) {
+    // A reminder for a visit no longer happening is not sent again. Nor is a text from here: one whose provider
+    // did not answer may have gone, and is checked and sent again in Adminium (Studio → Texts), never twice from the desk.
+    if (canResend && !text && (row.kind !== "reminder" || remindable(visit, now))) {
       action = (
         <Btn kind="ghostSm" icon={Send} busy={busy} onClick={onRetry} style={{ height: 36 }} label={t("outbox.sendAgainTo", { name })}>
           {t("outbox.sendAgain")}
         </Btn>
       );
     }
+  } else if (row.state === "skipped" && text) {
+    state = quietPill(MessageSquareOff, t("outbox.noText"));
   } else if (row.state === "skipped") {
     state = quietPill(MailX, why === "outbox.why.example" ? t("outbox.example") : t("outbox.noEmail"));
   } else if (row.state === "queued") {
@@ -282,7 +307,8 @@ function Row({
     }
   }
 
-  const reason = row.state === "failed" && m !== null ? (why !== null ? t(why) : (m.error ?? "").trim()) : "";
+  const reason = text ? textWords : row.state === "failed" && m !== null ? (why !== null ? t(why) : (m.error ?? "").trim()) : "";
+  const reasonQuiet = text && row.state !== "failed";
   return (
     <div className="rh-row" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", padding: "13px 15px", borderRadius: 14, border: "1px solid var(--border)", background: "var(--surface)" }}>
       <Tile name={name} color={tint} size={34} />
@@ -295,8 +321,8 @@ function Row({
           </span>
         </span>
         {line !== "" && <span style={{ fontSize: 12.5, fontWeight: 600, lineHeight: 1.5, color: row.state === "upcoming" ? "var(--fg-subtle)" : "var(--fg-muted)", textWrap: "pretty" }}>{line}</span>}
-        {!noAddress && <span style={{ ...mono(11.5, 600, "var(--fg-subtle)"), whiteSpace: "normal" }}>{t("outbox.byEmail", { address: to })}</span>}
-        {reason !== "" && <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: "var(--danger)" }}>{reason}</span>}
+        {!noAddress && <span style={{ ...mono(11.5, 600, "var(--fg-subtle)"), whiteSpace: "normal" }}>{text ? t("outbox.byText", { mobile: ltr(to) }) : t("outbox.byEmail", { address: to })}</span>}
+        {reason !== "" && <span style={{ fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: reasonQuiet ? "var(--fg-subtle)" : "var(--danger)" }}>{reason}</span>}
       </span>
       {state}
       {action}
@@ -310,7 +336,7 @@ type T = ReturnType<typeof useI18n>["t"];
 function lineFor(row: OutboxRow, visit: Appointment | undefined, desk: DeskState, t: T): string {
   const m = row.message;
   const day = today();
-  const start = visit?.starts_at ?? (row.kind === "reminder" ? (m?.due_at ?? null) : null);
+  const start = visit?.starts_at ?? (row.kind === "reminder" || row.kind === "reminder_text" ? (m?.due_at ?? null) : null);
   const at = (iso: string) => {
     const d = dayOf(iso);
     const n = daysBetween(day, d);
@@ -353,5 +379,13 @@ function lineFor(row: OutboxRow, visit: Appointment | undefined, desk: DeskState
     }
     case "balance":
       return visit === undefined || visit.balance <= 0 ? "" : t("outbox.line.balance", { amount: amountText(visit.balance) });
+    // A text says only the practice's name, the date and the time: so does its line here.
+    case "reminder_text":
+      return start === null ? "" : at(start);
+    case "missed_text": {
+      if (start === null) return "";
+      const d = dayOf(start);
+      return d === day ? t("outbox.line.missedToday", { time: time(start) }) : t("outbox.line.missedOn", { time: time(start), day: dayShort(d) });
+    }
   }
 }

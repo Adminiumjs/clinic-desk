@@ -41,6 +41,9 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
   in the building, visits by clinician and hour, money taken and owed, what is
   waiting on the desk, and the week — drawn by Adminium's own dashboard widgets
   from your tables.
+- **Texts**, for patients who ask: a visit reminder and a missed-visit note
+  by text message, through the practice's own Twilio or Telnyx account set up
+  in Adminium. Each says only the practice's name, the date and the time.
 - **Emails**: a confirmation, a reminder at each patient's own lead time, a
   missed-visit note, a recall, a closure's cancellation and — with Invoices &
   Receipts — a receipt for an insurer, each in the patient's language (eight
@@ -52,7 +55,7 @@ neighbourhood practice, so the day reads like a real Tuesday morning.
 
 ## Install
 
-Clinic Desk needs **Adminium 0.3.62 or later** and a database Adminium is
+Clinic Desk needs **Adminium 0.3.76 or later** and a database Adminium is
 connected to (Postgres, MySQL or SQLite).
 
 1. In Adminium, open **Studio → Hosted apps** and install **Clinic Desk**
@@ -136,6 +139,33 @@ write-offs are kept for tax: an erasure leaves those as they are and says so,
 and blanks the name, email address and mobile copied onto a registration (the
 postal address, date of birth and person to ring typed on it stay: Adminium
 0.3.38 blanks only an address, a name or a phone copied there).
+
+## Texts
+
+With a text provider set up in Adminium (**Studio → Texts**, from Adminium
+0.3.76), the practice can send two texts: a reminder before a visit, at the
+same lead as the email reminder, and a note after a missed one. Turn
+**Visit texts** on in the desk settings. Until then nothing is sent, and the
+patients' pages show no box.
+
+- **Only the practice's name, the date and the time.** A text shows on a
+  locked phone and passes through the provider's logs, so it never names a
+  clinician, a visit type, a reason or anything a stranger could read as
+  medical. Adminium adds the way to stop: "Reply STOP" from a number, the
+  desk's phone from a sender name.
+- **A plain name for a sensitive practice.** *Name in texts* is what the texts
+  call the practice. If the practice's name says what it treats, write a
+  plain one there, and give the texts the same plain sender name in Adminium.
+- **Only to patients who asked.** A first booking, the register form and the
+  Reminders page each have a box of their own, unticked, never required:
+  *Text me reminders for my visits*. *Remind me by email* never turns texts on
+  or off. Adminium keeps each yes in its text consent log for that exact
+  number, with the words shown and their version; the practice keeps its own
+  copy of each answer (`text_answers`), which the desk shows on the patient's
+  page. A patient switches texts off on the Reminders page, or by replying
+  STOP. No text goes to a number in mainland China (+86).
+- **Replies are not read.** A patient who answers a text gets one answer: the
+  number is not read, with the desk's phone. Nothing they write is kept.
 
 ## Paying online
 

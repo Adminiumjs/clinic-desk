@@ -8,7 +8,7 @@
  * or another desk's change shows here as it lands.
  */
 import { useEffect, useMemo, useState } from "react";
-import { ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, History, Receipt, ShieldAlert } from "lucide-react";
+import { ArrowUpRight, CalendarPlus, ChevronLeft, ChevronRight, History, MessageSquare, MessageSquareOff, Receipt, ShieldAlert } from "lucide-react";
 
 import type { PatientPage as Page } from "../../data/ports.ts";
 import type { Appointment, Id, Recall } from "../../data/types.ts";
@@ -19,6 +19,7 @@ import { today } from "../../lib/clock.ts";
 import { ageOn, dayOf, daysBetween, dayShort, time, num } from "../../lib/format.ts";
 import { clinicianOf, typeOf } from "../../lib/desk.ts";
 import { useNow } from "../../lib/useNow.ts";
+import { textStanding, type TextStandingKind } from "../../lib/texts.ts";
 import { HOSTED } from "../../surface.ts";
 import { isEmbedded } from "../../embed.ts";
 import { deskReads, deskVisits, upsert, useCan, useDesk } from "../../state/desk.ts";
@@ -274,6 +275,7 @@ function Loaded({ id, page, shown, onMore }: { id: Id; page: Page; shown: number
             <div style={{ marginBlockStart: 9, fontSize: 13.5, fontWeight: 800, letterSpacing: "-.02em" }}>{recall === undefined ? t("patients.nothingScheduled") : dayShort(recall.due_on)}</div>
             <RecallLine recall={recall} day={day} />
           </section>
+          <TextsCard page={page} />
         </aside>
       </div>
     </>
@@ -371,4 +373,58 @@ function nextRecall(id: Id, read: readonly Recall[], held: Record<Id, Recall>): 
   const byId = new Map<Id, Recall>(read.map((r) => [r.id, r]));
   for (const r of Object.values(held)) if (r.patient_id === id) byId.set(r.id, r);
   return [...byId.values()].filter((r) => r.status === "due" || r.status === "noted").sort((a, b) => a.due_on.localeCompare(b.due_on))[0];
+}
+
+const STANDING_WORDS: Record<Exclude<TextStandingKind, "yes" | "no">, "texts.standing.off" | "texts.standing.none" | "texts.standing.other" | "texts.standing.stopped"> = {
+  off: "texts.standing.off",
+  none: "texts.standing.none",
+  other: "texts.standing.other",
+  stopped: "texts.standing.stopped",
+};
+
+/**
+ * Where the patient stands on visit texts, for the desk: their last answer
+ * for the number on file (the box in a first booking or a registration, or
+ * their Reminders page), a STOP the outbox has heard of since, and the last
+ * text logged for them. The desk reads it and changes none of it: a yes or a
+ * no is the patient's to give, on the box. Not shown to whoever may not read
+ * the answers (a clinician).
+ */
+function TextsCard({ page }: { page: Page }) {
+  const { t } = useI18n();
+  const readable = useCan("text_answers", "read");
+  const settings = useDesk((s) => s.settings);
+  const patient = useDesk((s) => s.patients[page.patient.id]) ?? page.patient;
+  if (!readable) return null;
+  const standing = textStanding({ patient, answers: page.textAnswers, messages: page.texts, textsOn: settings?.texts_on === true });
+  const answerDay = standing.answer?.created_at == null ? "" : dayShort(dayOf(standing.answer.created_at));
+  const line =
+    standing.kind === "yes"
+      ? t("texts.standing.yes", { day: answerDay, source: t(`texts.source.${standing.answer?.source ?? "booking"}`) })
+      : standing.kind === "no"
+        ? t("texts.standing.no", { day: answerDay })
+        : t(STANDING_WORDS[standing.kind]);
+  const last = standing.last;
+  const lastWhen = last === null ? null : (last.sent_at ?? last.created_at);
+  const lastState = last === null ? null : last.status === "sent" ? t("texts.state.sent") : last.status === "queued" ? t("texts.state.queued") : t("texts.state.failed");
+  const on = standing.kind === "yes";
+  const Icon = on ? MessageSquare : MessageSquareOff;
+  return (
+    <section aria-labelledby="pd-texts" data-part="patient-texts" style={asideCard}>
+      <h2 id="pd-texts" style={{ ...kickerStyle, margin: 0 }}>
+        {t("texts.standing.title")}
+      </h2>
+      <div style={{ display: "flex", alignItems: "flex-start", gap: 9, marginBlockStart: 9 }}>
+        <span aria-hidden="true" style={{ width: 28, height: 28, flexShrink: 0, borderRadius: 9, display: "flex", alignItems: "center", justifyContent: "center", background: on ? "var(--pos-soft)" : "var(--surface-3)", color: on ? "var(--pos)" : "var(--fg-muted)" }}>
+          <Icon size={14} />
+        </span>
+        <span style={{ fontSize: 12.5, fontWeight: 700, lineHeight: 1.5, color: "var(--fg)", textWrap: "pretty" }}>{line}</span>
+      </div>
+      {last !== null && lastWhen !== null && lastState !== null && (
+        <div style={{ marginBlockStart: 7, fontSize: 11.5, fontWeight: 600, lineHeight: 1.5, color: "var(--fg-subtle)", textWrap: "pretty" }}>
+          {t("texts.standing.last", { kind: t(`outbox.kind.${last.kind}`), state: lastState, day: dayShort(dayOf(lastWhen)) })}
+        </div>
+      )}
+    </section>
+  );
 }

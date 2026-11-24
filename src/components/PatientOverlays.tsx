@@ -10,7 +10,7 @@
  */
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
-import { CalendarCheck, CalendarSync, CalendarX, Check, CircleCheck, ListOrdered, Mail, MailCheck, TriangleAlert, UserPlus } from "lucide-react";
+import { CalendarCheck, CalendarSync, CalendarX, Check, CircleCheck, ListOrdered, Mail, MailCheck, MessageSquare, MessageSquareOff, TriangleAlert, UserPlus } from "lucide-react";
 
 import { PortError } from "../data/ports.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -38,6 +38,8 @@ const ICONS: Record<string, LucideIcon> = {
   "calendar-x": CalendarX,
   "user-plus": UserPlus,
   "list-ordered": ListOrdered,
+  "message-square": MessageSquare,
+  "message-square-off": MessageSquareOff,
 };
 const iconFor = (name: string): LucideIcon => ICONS[name] ?? Check;
 

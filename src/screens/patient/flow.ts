@@ -47,6 +47,8 @@ export interface Booking {
   email: string;
   reason: string;
   deskNote: string;
+  /** The box for visit texts: unticked until the person ticks it. */
+  textsOk: boolean;
   /** "That time has just gone": the nearest free times instead. */
   gone: Hhmm[] | null;
 }
@@ -58,6 +60,8 @@ export interface Registering {
   email: string;
   address: string;
   contact: string;
+  /** The box for visit texts: unticked until the person ticks it. */
+  textsOk: boolean;
   /** The reference once the desk has it. */
   done: string | null;
 }
@@ -75,9 +79,10 @@ const emptyBooking = (): Booking => ({
   email: "",
   reason: "",
   deskNote: "",
+  textsOk: false,
   gone: null,
 });
-const emptyRegistering = (): Registering => ({ name: "", bornOn: "", mobile: "", email: "", address: "", contact: "", done: null });
+const emptyRegistering = (): Registering => ({ name: "", bornOn: "", mobile: "", email: "", address: "", contact: "", textsOk: false, done: null });
 
 export interface Flow {
   booking: Booking;

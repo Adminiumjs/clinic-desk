@@ -13,7 +13,9 @@ import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
 import { Btn, cardStyle, monoPill } from "../../components/ui.tsx";
 import { num } from "../../lib/format.ts";
-import { loadCatalogue, register, usePatients } from "../../state/patients.ts";
+import { agreeToTexts, loadCatalogue, register, usePatients } from "../../state/patients.ts";
+import { chinaMainland } from "../../lib/texts.ts";
+import { TextBox } from "./TextBox.tsx";
 import { useDemoSignal } from "../../state/demoSignal.ts";
 import { go, toast } from "../../state/ui.ts";
 import { resetRegistering, setBooking, setRegistering, useFlow } from "./flow.ts";
@@ -39,6 +41,8 @@ export default function Register() {
   if (cat === null || settings === null) return null;
   // The first-visit type by position; without one, the page leaves its length out.
   const firstType = cat.visitTypes.filter((x) => x.new_patients_only && x.active && x.bookable_online).sort((a, b) => a.position - b.position)[0] ?? null;
+  // The box for visit texts shows only while the practice sends them.
+  const texts = settings.texts_on === true;
   const emailOk = r.email.trim() === "" || isEmail(r.email);
   const ok = personReady({ name: r.name, bornOn: r.bornOn, mobile: r.mobile }, today) && emailOk;
 
@@ -56,6 +60,8 @@ export default function Register() {
         emergency_contact: r.contact.trim() === "" ? null : r.contact.trim(),
         language: locale(),
       });
+      // The box for texts, ticked: its yes goes once the registration is made, and the registration never waits on it.
+      if (texts && r.textsOk && !chinaMainland(r.mobile)) void agreeToTexts({ mobile: r.mobile.trim(), source: "register", name: r.name.trim(), aboutRef: done.ref });
       setRegistering({ done: done.ref });
       toast(t("register.toast", { ref: done.ref }), { icon: "user-plus", tone: "pos" });
     } catch (error) {
@@ -97,6 +103,7 @@ export default function Register() {
             <TextInput id="rg-email" label={t("details.email")} value={r.email} onChange={(v) => setRegistering({ email: v })} placeholder="you@example.com" type="email" autoComplete="email" invalid={!emailOk} />
             <TextInput id="rg-address" label={t("register.address")} value={r.address} onChange={(v) => setRegistering({ address: v })} placeholder={t("register.addressPh")} autoComplete="street-address" wide />
             <TextInput id="rg-contact" label={t("register.contact")} value={r.contact} onChange={(v) => setRegistering({ contact: v })} placeholder={t("register.contactPh")} wide />
+            {texts && <TextBox id="rg-texts" phone={r.mobile} checked={r.textsOk} onChange={(next) => setRegistering({ textsOk: next })} style={{ gridColumn: "1/-1" }} />}
             <div style={{ gridColumn: "1/-1" }}>
               <Btn type="submit" icon={UserPlus} busy={busy} disabled={!ok} style={{ width: "100%", ...(ok ? {} : { background: "var(--surface-3)", color: "var(--fg-subtle)", opacity: 1 }) }}>
                 {t("register.send")}

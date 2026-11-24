@@ -8,7 +8,7 @@
  * change them. A control shows its new value once the server has saved it.
  */
 import { useEffect, useId, useState, type ReactNode } from "react";
-import { Clock } from "lucide-react";
+import { Check, Clock } from "lucide-react";
 
 import type { Settings as Row } from "../data/types.ts";
 import { useI18n } from "../i18n/index.tsx";
@@ -23,7 +23,7 @@ import { SUPPLIES } from "../lib/features.ts";
 import { forgetAddOn, useFeature } from "../state/features.ts";
 import { suppliesPort } from "../state/supplies.ts";
 import { go, toast } from "../state/ui.ts";
-import { Chip, Skeleton, Switch, btnGhostSm } from "../components/ui.tsx";
+import { Btn, Chip, Skeleton, Switch, btnGhostSm, fieldStyle } from "../components/ui.tsx";
 import { counted } from "./deskwork/dates.ts";
 import { Screen, ScreenHead, cardStyle } from "./deskwork/parts.tsx";
 
@@ -183,6 +183,7 @@ export default function Settings() {
             />
           )}
         </div>
+        <TextsPart settings={settings} manager={manager} saving={saving} save={save} />
         {payOn && settings.pay_ahead && (
           <Part id="st-hold" title={t("settings.hold")} body={t("settings.holdBody")}>
             <div role="group" aria-labelledby="st-hold" style={{ display: "flex", gap: 7, flexWrap: "wrap", marginBlockStart: 11 }}>
@@ -228,6 +229,75 @@ function Toggle({ label, body, on, busy, disabled, onChange }: { label: string; 
         <span id={bodyId} style={{ fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>{body}</span>
       </span>
       <Switch on={on} onChange={onChange} label={label} disabled={disabled} describedBy={bodyId} />
+    </div>
+  );
+}
+
+/**
+ * Visit texts: whether the practice sends them, and the name they use. The
+ * texts go through the provider set up in Adminium (Studio → Texts), to
+ * patients who ticked the box for them; replies are not read.
+ *
+ * The name is the practice's own unless it says what the practice treats:
+ * then a plain one, with the same plain sender name in Adminium. Without a
+ * name, no text goes, so the switch cannot be turned on with none.
+ */
+function TextsPart({ settings, manager, saving, save }: { settings: Row; manager: boolean; saving: string | null; save: (id: string, patch: Patch) => Promise<void> }) {
+  const { t } = useI18n();
+  const nameId = useId();
+  const helpId = useId();
+  const [name, setName] = useState(settings.text_name ?? settings.practice_name);
+  useEffect(() => setName(settings.text_name ?? settings.practice_name), [settings.text_name, settings.practice_name]);
+  const typed = name.trim();
+  const saved = (settings.text_name ?? "").trim();
+  const dirty = typed !== saved;
+  return (
+    <div data-part="settings-texts" style={{ display: "flex", flexDirection: "column", gap: 14, paddingBlockStart: 18, borderBlockStart: "1px solid var(--border)" }}>
+      <Toggle
+        label={t("texts.settings.title")}
+        body={t("texts.settings.body")}
+        on={settings.texts_on}
+        busy={saving === "tx"}
+        // A name first: with none, no text could go.
+        disabled={!manager || saving !== null || (!settings.texts_on && saved === "")}
+        onChange={(next) => void save("tx", { texts_on: next })}
+      />
+      <div>
+        <label htmlFor={nameId} style={{ fontSize: 13.5, fontWeight: 800, letterSpacing: "-.022em" }}>
+          {t("texts.settings.name")}
+        </label>
+        <p id={helpId} style={{ margin: "5px 0 0", fontSize: 12.5, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-muted)", textWrap: "pretty" }}>
+          {t("texts.settings.nameBody")}
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!manager || !dirty || typed === "") return;
+            void save("txn", { text_name: typed }).then(() => {
+              if ((useDesk.getState().settings?.text_name ?? "") === typed) toast(t("texts.settings.saved", { name: typed }), { icon: "circle-check" });
+            });
+          }}
+          style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBlockStart: 11 }}
+        >
+          <input
+            id={nameId}
+            className="rh-fld"
+            value={name}
+            maxLength={40}
+            readOnly={!manager}
+            aria-describedby={helpId}
+            onChange={(e) => setName(e.target.value)}
+            style={{ ...fieldStyle(), flex: "1 1 220px", minWidth: 0 }}
+          />
+          {manager && (
+            <Btn kind="ghostSm" type="submit" icon={Check} busy={saving === "txn"} disabled={!dirty || typed === "" || saving !== null} style={{ height: 40 }}>
+              {t("texts.settings.save")}
+            </Btn>
+          )}
+        </form>
+        {saved === "" && <p style={{ margin: "8px 0 0", fontSize: 12, fontWeight: 700, lineHeight: 1.5, color: "var(--warn)" }}>{t("texts.settings.empty")}</p>}
+      </div>
+      <p style={{ margin: 0, fontSize: 12, fontWeight: 600, lineHeight: 1.55, color: "var(--fg-subtle)", textWrap: "pretty" }}>{t("texts.settings.replies")}</p>
     </div>
   );
 }

@@ -16,7 +16,8 @@ import { useI18n } from "../../i18n/index.tsx";
 import { locale } from "../../i18n/ambient.ts";
 import { Btn, cardStyle, mono, pill, segWide } from "../../components/ui.tsx";
 import { dayShort, money, num } from "../../lib/format.ts";
-import { bookVisit, findMe, loadCatalogue, patientsPort, signOutPatient, usePatients } from "../../state/patients.ts";
+import { agreeToTexts, bookVisit, findMe, loadCatalogue, patientsPort, signOutPatient, usePatients } from "../../state/patients.ts";
+import { chinaMainland } from "../../lib/texts.ts";
 import { useDemoSignal } from "../../state/demoSignal.ts";
 import { go } from "../../state/ui.ts";
 import { findMessage } from "./VerifyFlow.tsx";
@@ -26,6 +27,7 @@ import { nearestFor } from "./nearest.ts";
 import { bookAndPay, loadPayments, payAgain, payingOnline, usePaying, type BookingShown } from "./paying.ts";
 import { CheckingBox, FailedBox, PayChoices, TakingBox, type PayChoice } from "./payParts.tsx";
 import { ClinicianTile, GoneBox, Notice, TextInput, clinicianNamed, labelStyle, sectionLabel, useCatalogue, useNarrow } from "./parts.tsx";
+import { TextBox } from "./TextBox.tsx";
 import { useTodayDay } from "./useToday.ts";
 import { atInstant, clockLabel, rangeLabel } from "./when.ts";
 
@@ -79,6 +81,8 @@ export default function Details() {
   const shownFound = returning && b.foundName !== null && found !== null ? b.foundName : null;
   const picked = type !== null && day !== null && time !== null;
 
+  // The box for visit texts shows only while the practice sends them.
+  const texts = settings.texts_on === true;
   const fee = type?.fee ?? 0;
   // Only someone already on file pays as they book (a first visit waits for the desk's check), and only a visit with a fee.
   const payAhead = paying.online === true && settings.pay_ahead === true && returning && fee > 0 && moving === null;
@@ -193,7 +197,11 @@ export default function Details() {
         if ((await bookAndPay(made, shown)) === "desk") confirmBooked({ ...shown.booked, status: "booked" }, { payNotOpen: true });
         return;
       }
-      await bookVisit(visit, { firstName: firstName(returning ? (found?.name ?? "") : b.name), email: returning ? null : visit.newPatient?.email ?? null });
+      const made = await bookVisit(visit, { firstName: firstName(returning ? (found?.name ?? "") : b.name), email: returning ? null : visit.newPatient?.email ?? null });
+      // The box for texts, ticked: its yes goes once the visit is booked, and the booking never waits on it.
+      if (!returning && texts && b.textsOk && visit.newPatient !== undefined && !chinaMainland(visit.newPatient.mobile)) {
+        void agreeToTexts({ mobile: visit.newPatient.mobile, source: "booking", name: visit.newPatient.name, aboutRef: made.ref });
+      }
       resetBooking();
       usePatients.setState({ time: null });
       go("confirm");
@@ -300,6 +308,7 @@ export default function Details() {
                   <PhoneCall size={13} aria-hidden="true" style={{ flexShrink: 0, marginBlockStart: 2 }} />
                   {t("details.mayRing")}
                 </p>
+                {texts && <TextBox id="fv-texts" phone={b.mobile} checked={b.textsOk} onChange={(next) => setBooking({ textsOk: next })} style={{ gridColumn: "1/-1" }} />}
               </div>
             )}
           </section>
