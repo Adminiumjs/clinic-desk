@@ -83,15 +83,15 @@ const PREFIX = "clinic_";
 const released = why === null ? releasedBundle() : null;
 const FROM = released?.version ?? "0.3.1";
 const TO = why === null ? appBundle().version : "0.3.2";
-/** Whether the release updated from is older than paying online (0.3.3 has it; 0.3.1 has not). */
-const BEFORE_PAYING = FROM === "0.3.1" || FROM === "0.3.2";
+/** Whether the release updated from is older than paying online: every release so far (0.3.1 to 0.3.3 changed no table). */
+const BEFORE_PAYING = ["0.3.1", "0.3.2", "0.3.3"].includes(FROM);
 
 /**
  * What this build adds to the released tables. No table. Visit texts: the
  * practice's switch and name for texts, the box on a patient, a first visit
  * and a registration (and the patient's box that means no), a text row's
- * outcome code, and two message kinds. From a release before paying online,
- * also what paying online needs — the practice's three paying settings, what a
+ * outcome code, and two message kinds. From a release before paying online
+ * (every one so far: it is on main, not released), also what paying online needs — the practice's three paying settings, what a
  * visit was paid online and given back and where its receipts go, and a
  * payment's online reference, service, currency, what went back of it and what
  * it keeps — and its values (a visit `paying` or `lapsed`, a payment `online`,
