@@ -80,25 +80,47 @@ const PORTS_PER_RUN = 3;
 const ADMIN = { email: process.env["E2E_ADMIN_EMAIL"] ?? "e2e@adminium.local", password: process.env["E2E_ADMIN_PASSWORD"] ?? "adminium-e2e-password" };
 const PREFIX = "clinic_";
 
+const released = why === null ? releasedBundle() : null;
+const FROM = released?.version ?? "0.3.1";
+const TO = why === null ? appBundle().version : "0.3.2";
+/** Whether the release updated from is older than paying online (0.3.3 has it; 0.3.1 has not). */
+const BEFORE_PAYING = FROM === "0.3.1" || FROM === "0.3.2";
+
 /**
- * What this build adds to 0.3.1's tables: no table; the columns paying online
- * needs — the practice's three paying settings, what a visit was paid online
- * and given back and where its receipts go, and a payment's online reference,
- * service, currency, what went back of it and what it keeps — and the values
- * that go with them (a visit `paying` or `lapsed`, a payment `online`, a
- * message `paid_ahead` or `balance`). The update's plan must be exactly this.
+ * What this build adds to the released tables. No table. Visit texts: the
+ * practice's switch and name for texts, the box on a patient, a first visit
+ * and a registration (and the patient's box that means no), a text row's
+ * outcome code, and two message kinds. From a release before paying online,
+ * also what paying online needs — the practice's three paying settings, what a
+ * visit was paid online and given back and where its receipts go, and a
+ * payment's online reference, service, currency, what went back of it and what
+ * it keeps — and its values (a visit `paying` or `lapsed`, a payment `online`,
+ * a message `paid_ahead` or `balance`). The update's plan must be exactly this.
  */
 const NEW_TABLES: string[] = [];
-const NEW_COLUMNS: Record<string, string[]> = {
+const merged = (...parts: Record<string, string[]>[]): Record<string, string[]> => {
+  const out: Record<string, string[]> = {};
+  for (const part of parts) for (const [ref, list] of Object.entries(part)) out[ref] = [...(out[ref] ?? []), ...list].sort();
+  return out;
+};
+const TEXT_COLUMNS: Record<string, string[]> = {
+  settings: ["text_name", "texts_on"],
+  patients: ["remind_text", "texts_off"],
+  registrations: ["texts_ok"],
+  appointments: ["texts_ok"],
+  messages: ["text_reason"],
+};
+const PAYING_COLUMNS: Record<string, string[]> = {
   settings: ["auto_refund", "pay_ahead", "pay_hold_minutes"],
   appointments: ["paid_online", "receipt_email", "refunded"],
   payments: ["currency", "kept", "payment_ref", "provider", "refunded"],
 };
+const NEW_COLUMNS = merged(BEFORE_PAYING ? PAYING_COLUMNS : {}, TEXT_COLUMNS);
 /** The enums this build widens, and only these: each keeps every value it had. */
-const WIDER_ENUMS: Record<string, string[]> = { appointments: ["status"], payments: ["method"], messages: ["kind"] };
+const WIDER_ENUMS: Record<string, string[]> = BEFORE_PAYING ? { appointments: ["status"], payments: ["method"], messages: ["kind"] } : { messages: ["kind"] };
 
 /** The new columns that are unique, and only these: each engine's index (and Postgres's constraint) on it comes. */
-const NEW_UNIQUE: Record<string, string[]> = { payments: ["payment_ref"] };
+const NEW_UNIQUE: Record<string, string[]> = BEFORE_PAYING ? { payments: ["payment_ref"] } : {};
 
 /** A check as any engine spells it: SQLite writes the checks of a table it rebuilt in capitals. */
 const spelled = (constraint: string): string => constraint.replace(/^check \(/i, "CHECK (").replace(/" in \(/g, '" IN (');
@@ -134,15 +156,15 @@ function changedConstraints(ref: string, was: string[], now: string[]): [string[
 
 /**
  * The new columns an update fills on the rows already there: a setting's
- * literal default, and what Adminium works out (a payment's refunded total
- * and what it keeps, a visit's totals over them, the patient's address). The
- * rest of the new columns hold nothing on a row that was there.
+ * literal default (a box's unticked `false`), and what Adminium works out (a
+ * payment's refunded total and what it keeps, a visit's totals over them, the
+ * patient's address). The rest of the new columns hold nothing on a row that
+ * was there.
  */
-const FILLED: Record<string, string[]> = {
-  settings: ["auto_refund", "pay_ahead", "pay_hold_minutes"],
-  payments: ["kept", "refunded"],
-  appointments: ["paid_online", "receipt_email", "refunded"],
-};
+const FILLED: Record<string, string[]> = merged(
+  BEFORE_PAYING ? { settings: ["auto_refund", "pay_ahead", "pay_hold_minutes"], payments: ["kept", "refunded"], appointments: ["paid_online", "receipt_email", "refunded"] } : {},
+  { settings: ["texts_on"], patients: ["remind_text", "texts_off"], registrations: ["texts_ok"], appointments: ["texts_ok"] },
+);
 
 /** The yes/no columns of a table, as the manifest being installed declares them. */
 const yesNoColumns = (ref: string): string[] => (TABLES.find((t) => t.ref === ref)?.columns ?? []).filter((c) => c.type === "bool").map((c) => c.ref);
@@ -150,9 +172,6 @@ const yesNoColumns = (ref: string): string[] => (TABLES.find((t) => t.ref === re
 /** The real clock, whatever the server's is made to say. */
 const realNow = () => performance.timeOrigin + performance.now();
 
-const released = why === null ? releasedBundle() : null;
-const FROM = released?.version ?? "0.3.1";
-const TO = why === null ? appBundle().version : "0.3.2";
 
 const RUNS = [
   { id: "plain", inventory: false, title: "" },
@@ -389,7 +408,7 @@ describe.skipIf(why !== null)(`the update of a live ${FROM} practice to ${TO}${w
           addOns?: { key: string; need: string; action: string | null }[];
         };
 
-        it(`plans the update to ${TO}: the columns and enum values paying online needs, nothing dropped, renamed or rewritten, and the add-on the practice has kept as it is`, async () => {
+        it(`plans the update to ${TO}: the columns and enum values this build needs, nothing dropped, renamed or rewritten, and the add-on the practice has kept as it is`, async () => {
           const app = appBundle();
           await upload("apps", app);
           plan = ok(await staff.post<{ plan: typeof plan }>("/api/v1/apps/plan", { key: app.key, version: app.version, connectionId })).plan;
