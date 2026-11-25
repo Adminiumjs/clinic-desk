@@ -293,22 +293,41 @@ Adminium's add-ons.
   the desk is the desk it was. Clinic Desk 0.3.0 needs Inventory 1.0.8 or
   later for this.
 
-## Moving from 0.2.x
+## Updating to 0.3.4
 
-The release after 0.3.3 adds paying online. Update Adminium to 0.3.62 first,
-then the app. It adds columns and keeps every row: a visit gets what was paid
-online of it and what went back, and the address its receipts go to (the
-patient's, kept in step); a payment gets its online reference, the service,
-its currency, what went back of it and what it keeps; the practice's settings
-get the three paying switches; and a visit, a payment and a message each take
-new values (`paying` and `lapsed`, `online`, `paid_ahead` and `balance`). A
-visit's paid and balance are worked out again over what each payment keeps —
-the same figures, since nothing has gone back yet. A visit's steps are now
-kept by Adminium (booked → in → room → with the clinician → ready → seen, a
-no-show or a cancellation, and a seen visit back to ready to put its supplies
-right), so a write that skips them is refused. The patients' pages are allowed
-to show what each visit was paid and given back, and the update asks someone
-who may manage the app's keys to allow that.
+0.3.4 adds paying online and visit texts. **Update Adminium to 0.3.76 first,**
+then the app; an older Adminium refuses the update and names what it cannot
+read. It adds columns and keeps every row: the update is checked against a
+0.3.3 practice with its data, on SQLite, Postgres and MySQL, row by row, with
+Adminium itself updated in place from 0.3.70 to 0.3.76 first.
+
+- **Paying online.** A visit gets what was paid online of it and what went
+  back, and the address its receipts go to (the patient's, kept in step); a
+  payment gets its online reference, the service, its currency, what went back
+  of it and what it keeps; the practice's settings get the three paying
+  switches; and a visit, a payment and a message each take new values
+  (`paying` and `lapsed`, `online`, `paid_ahead` and `balance`). A visit's paid
+  and balance are worked out again over what each payment keeps — the same
+  figures, since nothing has gone back yet. A visit's steps are now kept by
+  Adminium (booked → in → room → with the clinician → ready → seen, a no-show
+  or a cancellation, and a seen visit back to ready to put its supplies right),
+  so a write that skips them is refused. Nothing changes until the practice
+  takes payments online.
+- **Visit texts.** The practice's settings get *Send texts* (off) and *Name in
+  texts* (empty); a patient, a first visit and a registration each get their
+  box for texts (unticked, so no row says yes); a message gets the outcome
+  Adminium writes for a text, and two new kinds (`reminder_text`,
+  `missed_text`). No text goes, and the patients' pages show no box, until a
+  provider is set up in Adminium (**Studio → Texts**), a name is saved, and
+  *Visit texts* is switched on in the desk settings. Replies start off. See
+  [Texts](#texts).
+- **The patients' pages read a little more.** They may show what each visit was
+  paid and given back, and whether the practice sends texts; the update asks
+  someone who may manage the app's keys to allow that.
+- **Add-ons need no change.** Holiday calendars 1.0.8 or later works with 0.3.4
+  as it is, and so do Invoices & Receipts and Inventory.
+
+## Moving from 0.2.x
 
 0.3.3 changes no table: it updates in place whatever 0.3.2 did. Update
 Adminium to 0.3.49 first, then the app. A practice may then install the desk
