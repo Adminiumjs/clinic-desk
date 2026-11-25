@@ -457,7 +457,7 @@ describe.skipIf(why !== null)(`the contract with a built Adminium${why === null 
             return res;
           };
           const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asBrowser });
-          return publicPatientsPort(client!, config.tables ?? {}, { baseUrl: config.baseUrl, publishableKey: config.publishableKey, fetch: asBrowser });
+          return publicPatientsPort(client!, config.tables ?? {});
         };
         /**
          * The patients' pages opened by a payments manager rehearsing the

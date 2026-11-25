@@ -96,7 +96,7 @@ describe.skipIf(why !== null)("visit texts with a built Adminium and a provider 
         if (config === null) throw new Error("the patients' pages were served no key");
         const asBrowser: typeof fetch = (input, init) => fetch(input, { ...init, headers: { ...(init?.headers as Record<string, string>), origin: server.base } });
         const client = createPublicClient({ baseUrl: config.baseUrl, publishableKey: config.publishableKey, humanCheck: true, fetch: asBrowser });
-        return publicPatientsPort(client!, config.tables ?? {}, { baseUrl: config.baseUrl, publishableKey: config.publishableKey, fetch: asBrowser });
+        return publicPatientsPort(client!, config.tables ?? {});
       };
 
       /** A message the provider hands the practice's Adminium, signed as Telnyx signs it. */

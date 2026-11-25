@@ -121,49 +121,12 @@ const ownDetails = (raw: Record<string, unknown>): OwnDetails => {
   return { name: row.name, email: row.email ?? null, mobile: row.mobile, remind_email: row.remind_email, remind_lead_hours: row.remind_lead_hours };
 };
 
-/**
- * Adminium's texts reads for the patients' pages (`client.texts`, from the
- * public client that ships with Adminium 0.3.76). An older client in hand
- * lacks them, so the same two routes are asked directly, with the page's key
- * and its session, as the client would.
- */
-interface TextsReads {
-  ready(): Promise<boolean>;
-  standing(): Promise<TextStanding>;
-}
-
-export interface DirectTexts {
-  baseUrl: string;
-  publishableKey: string;
-  fetch?: typeof fetch;
-}
-
-function textsReads(client: PublicClient, direct: DirectTexts | undefined): TextsReads | null {
-  const own = (client as unknown as { texts?: { ready(): Promise<boolean>; standing(): Promise<TextStanding & { marketing?: unknown }> } }).texts;
-  if (own !== undefined) return { ready: () => own.ready(), standing: async () => standingOf(await own.standing()) };
-  if (direct === undefined) return null;
-  const ask = async <T,>(path: string): Promise<T> => {
-    const token = client.session()?.token;
-    const res = await (direct.fetch ?? fetch)(`${direct.baseUrl}${path}`, {
-      headers: { authorization: `Bearer ${direct.publishableKey}`, ...(token === undefined ? {} : { "x-adminium-public-session": token }) },
-    });
-    const body = (await res.json().catch(() => null)) as { data?: T; error?: { code?: string; message?: string } } | null;
-    if (!res.ok || body?.data === undefined) throw new PortError(body?.error?.code ?? "PUBLIC_NETWORK_UNAVAILABLE", body?.error?.message ?? `HTTP ${String(res.status)}`);
-    return body.data;
-  };
-  return {
-    ready: async () => (await ask<{ ready: boolean }>("/api/v1/public/texts")).ready === true,
-    standing: async () => standingOf(await ask<TextStanding>("/api/v1/public/texts/standing")),
-  };
-}
-
-/** The service purpose and the stop, as the page reads them: the practice sends no offers. */
+/** Where a person stands, as the page reads it: the service purpose and the stop (the practice sends no offers). */
 const standingOf = (raw: TextStanding): TextStanding => ({ ready: raw.ready === true, masked: raw.masked ?? null, service: raw.service, stopped: raw.stopped ?? null });
 
-export async function publicPatientsPort(client: PublicClient, tables: Record<string, string>, direct?: DirectTexts): Promise<PatientsPort> {
+export async function publicPatientsPort(client: PublicClient, tables: Record<string, string>): Promise<PatientsPort> {
   const config = await guard(() => client.config());
   const refs = refsOf(config, tables);
-  const texts = textsReads(client, direct);
   const zone = config.timezone;
   /** The catalogue is read once a visit to the page. */
   let catalogue: Promise<Catalogue> | null = null;
@@ -208,7 +171,7 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
             return out as T;
           });
         // Whether a text can go at all: asked only of a practice that sends them, and a failed ask draws no box.
-        const textsReady = settings[0]?.texts_on === true && texts !== null ? await texts.ready().catch(() => false) : false;
+        const textsReady = settings[0]?.texts_on === true ? await client.texts.ready().catch(() => false) : false;
         return {
           textsReady,
           settings: settings[0] ?? null,
@@ -337,11 +300,7 @@ export async function publicPatientsPort(client: PublicClient, tables: Record<st
     signOut: () => guard(() => client.signOut()),
 
     // ── visit texts ──
-    myTextStanding: () =>
-      guard(async () => {
-        if (texts === null) throw new PortError("PUBLIC_SETUP", "this page cannot ask where a patient stands on texts");
-        return texts.standing();
-      }),
+    myTextStanding: () => guard(async () => standingOf(await client.texts.standing())),
 
     setTexts: (on) =>
       guard(async () => {

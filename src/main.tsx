@@ -75,7 +75,7 @@ async function bootPatients(): Promise<void> {
   }
   const [{ publicPatientsPort }, { setPatientsPort, loadCatalogue }] = await Promise.all([import("./data/publicPatients.ts"), import("./state/patients.ts")]);
   try {
-    const port = await publicPatientsPort(client, config.tables ?? {}, { baseUrl: config.baseUrl, publishableKey: config.publishableKey });
+    const port = await publicPatientsPort(client, config.tables ?? {});
     setPatientsPort(port);
     setZone(port.timeZone());
     setTimezoneClaim(port.timeZone(), "operator");
